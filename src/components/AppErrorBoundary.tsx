@@ -8,7 +8,7 @@
 
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { ErrorBoundaryScreen } from '@/screens/ErrorBoundaryScreen';
-import { reportError } from '@/services/errorReporting';
+import { captureAppError } from '@/services/errorReporting';
 
 interface Props {
   children: ReactNode;
@@ -35,8 +35,11 @@ export class AppErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
-    const eventId = reportError(error, {
-      componentStack: errorInfo.componentStack ?? 'unknown',
+    const eventId = captureAppError(error, {
+      kind: 'error_boundary',
+      extraContext: {
+        componentStack: errorInfo.componentStack ?? 'unknown',
+      },
     });
 
     this.setState({ errorId: eventId });

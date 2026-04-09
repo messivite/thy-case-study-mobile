@@ -45,6 +45,7 @@ import { clearSession } from '@/services/authService';
 import { mmkvStorage, STORAGE_KEYS } from '@/lib/mmkv';
 import { authEventEmitter, AUTH_EVENTS } from '@/services/api';
 import { authMutex } from '@/lib/authMutex';
+import { setErrorReportingUser } from '@/services/errorReporting';
 import { toast } from 'sonner-native';
 
 // Token'ı kaç saniye kala yenile (60s buffer)
@@ -76,6 +77,11 @@ export const useSupabaseAuth = () => {
           expiresAt: session.expiresAt,
         }),
       );
+      setErrorReportingUser({
+        id: session.user.id,
+        email: session.user.email,
+        username: session.user.name,
+      });
     },
     [dispatch],
   );
@@ -140,6 +146,7 @@ export const useSupabaseAuth = () => {
       stopRefreshInterval();
       authMutex.reset();
       dispatch(logoutAction());
+      setErrorReportingUser(null);
       toast.error('Oturumunuzun süresi doldu, tekrar giriş yapın.');
       router.replace('/(auth)/welcome');
     });
@@ -195,6 +202,7 @@ export const useSupabaseAuth = () => {
             stopRefreshInterval();
             await clearSession();
             dispatch(logoutAction());
+            setErrorReportingUser(null);
             break;
 
           case 'PASSWORD_RECOVERY':
@@ -283,6 +291,7 @@ export const useSupabaseAuth = () => {
     stopRefreshInterval();
     await signOut();
     dispatch(logoutAction());
+    setErrorReportingUser(null);
   }, [dispatch, stopRefreshInterval]);
 
   const forgotPassword = useCallback(async (email: string) => {
@@ -309,6 +318,7 @@ export const useSupabaseAuth = () => {
 
   const continueAsGuest = useCallback(() => {
     dispatch(setGuest());
+    setErrorReportingUser(null);
   }, [dispatch]);
 
   return {
