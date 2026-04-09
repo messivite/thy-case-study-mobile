@@ -14,20 +14,27 @@ import { queryClient } from '@/services/queryClient';
 import i18n from '@/i18n';
 import '@/i18n'; // init side effect
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
+import { AppErrorBoundary } from '@/components/AppErrorBoundary';
+import { initErrorReporting } from '@/services/errorReporting';
+
+// Sentry'yi app yuklenirken baslat
+initErrorReporting();
 
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={styles.root}>
-      <SafeAreaProvider>
-        <Provider store={store}>
-          <QueryClientProvider client={queryClient}>
-            <I18nextProvider i18n={i18n}>
-              {/* AuthProvider: Supabase listener + token refresh burada başlar */}
-              <AuthProvider />
-            </I18nextProvider>
-          </QueryClientProvider>
-        </Provider>
-      </SafeAreaProvider>
+      <AppErrorBoundary>
+        <SafeAreaProvider>
+          <Provider store={store}>
+            <QueryClientProvider client={queryClient}>
+              <I18nextProvider i18n={i18n}>
+                {/* AuthProvider: Supabase listener + token refresh burada başlar */}
+                <AuthProvider />
+              </I18nextProvider>
+            </QueryClientProvider>
+          </Provider>
+        </SafeAreaProvider>
+      </AppErrorBoundary>
     </GestureHandlerRootView>
   );
 }

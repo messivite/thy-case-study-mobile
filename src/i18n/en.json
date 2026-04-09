@@ -32,11 +32,11 @@
     "v2Slide1Title": "Your Flight's AI",
     "v2Slide1Desc": "Instantly access flight info, reservations and more with THY Assistant.",
     "v2Slide2Title": "Dual Engine Intelligence",
-    "v2Slide2Desc": "Gemini precision or ChatGPT creativity — choose the model that fits your needs.",
+    "v2Slide2Desc": "Gemini or ChatGPT — switch models with one tap.",
     "v2Slide3Title": "Always With You",
     "v2Slide3Desc": "Offline mode, flight mode support. Accessible wherever you are.",
     "v2Slide4Title": "Unleash Your Imagination",
-    "v2Slide4Desc": "Push the limits. Your AI assistant is ready for creative questions and deep analysis.",
+    "v2Slide4Desc": "Your AI assistant is ready for creative questions and deep analysis.",
     "v2Label1": "FLIGHT INFO",
     "v2Label2": "CHOOSE MODEL",
     "v2Label3": "OFFLINE MODE",
@@ -113,6 +113,12 @@
     "custom": "Custom Model",
     "selectModel": "Select Model",
     "currentModel": "Active Model"
+  },
+  "errorBoundary": {
+    "title": "Something Went Wrong",
+    "message": "An unexpected error occurred in our application. Our technical team has been notified and will work on a fix as soon as possible.",
+    "retry": "Try Again",
+    "errorId": "Error Code"
   },
   "toast": {
     "loginSuccess": "Signed in successfully",

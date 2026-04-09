@@ -5,7 +5,7 @@
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=000)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Router](https://img.shields.io/badge/Expo%20Router-v6-black)](https://docs.expo.dev/router/introduction/)
-[![Codecov](https://codecov.io/gh/messivite/thy-case-study-mobile/graph/badge.svg)](https://codecov.io/gh/messivite/thy-case-study-mobile)
+[![Codecov coverage](https://img.shields.io/codecov/c/github/messivite/thy-case-study-mobile?logo=codecov&logoColor=white)](https://codecov.io/gh/messivite/thy-case-study-mobile)
 [![Status](https://img.shields.io/badge/Status-Active-success)](#roadmap)
 
 THY Asistan, **Expo + React Native + TypeScript** ile geliştirilen çok platformlu (iOS/Android/Web) bir uygulamadır.  

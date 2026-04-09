@@ -82,7 +82,7 @@ export const ModelPickerCard: React.FC<Props> = ({
       <RNText style={styles.title}>{title}</RNText>
 
       {/* Açıklama */}
-      <RNText style={styles.description}>{description}</RNText>
+      <RNText style={styles.description} numberOfLines={2}>{description}</RNText>
 
       {/* Separator */}
       <View style={styles.separator} />
@@ -111,11 +111,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[6],
     paddingTop: spacing[6],
     paddingBottom: 0,
+    minHeight: 280,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 18 },
-    shadowOpacity: 0.18,
-    shadowRadius: 32,
-    elevation: 16,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
   },
 
   // Icons
@@ -132,9 +133,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius: 0,
     elevation: 4,
   },
   overlapRow: {
