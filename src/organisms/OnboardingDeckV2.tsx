@@ -26,6 +26,7 @@ import Animated, {
   withRepeat,
   withSequence,
   withTiming,
+  withSpring,
   Easing,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
@@ -114,18 +115,30 @@ const V2_SLIDES: V2Slide[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// Slide card — ilk mount'ta animasyon, sonraki gecislerde animasyon yok
+// Slide card — Reanimated bubble spring animasyonu, re-render yok
 // ---------------------------------------------------------------------------
 
-const SlideCard = memo<{ slide: V2Slide }>(({ slide }) => {
+const SPRING_CONFIG = { damping: 19, stiffness: 185, mass: 0.8 };
+
+const SlideCard = memo<{ slide: V2Slide; isActive: boolean }>(({ slide, isActive }) => {
   const { t } = useI18n();
 
+  const animStyle = useAnimatedStyle(() => {
+    const toScale = isActive ? 1 : 0.88;
+    const toTx = isActive ? 0 : scale(30);
+    const toOpacity = isActive ? 1 : 0.3;
+
+    return {
+      transform: [
+        { translateX: withSpring(toTx, SPRING_CONFIG) },
+        { scale: withSpring(toScale, SPRING_CONFIG) },
+      ],
+      opacity: withSpring(toOpacity, SPRING_CONFIG),
+    };
+  }, [isActive]);
+
   return (
-    <MotiView
-      from={{ translateX: scale(50), scale: 0.88, opacity: 0 }}
-      animate={{ translateX: 0, scale: 1, opacity: 1 }}
-      transition={{ type: 'spring', damping: 19, stiffness: 185, mass: 0.8 }}
-    >
+    <Animated.View style={animStyle}>
       <ModelPickerCard
         title={t(slide.titleKey)}
         description={t(slide.descKey)}
@@ -134,7 +147,7 @@ const SlideCard = memo<{ slide: V2Slide }>(({ slide }) => {
         selectorLabel={t(slide.selectorLabelKey)}
         selectorDotColor={slide.selectorDotColor}
       />
-    </MotiView>
+    </Animated.View>
   );
 });
 
@@ -193,11 +206,11 @@ const circleStyles = StyleSheet.create({
   base: {
     position: 'absolute',
     borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.14)',
+    backgroundColor: 'rgba(255,255,255,0.25)',
   },
-  c1: { width: scale(260), height: scale(260), top: -scale(50), right: -scale(50), opacity: 0.18 },
-  c2: { width: scale(160), height: scale(160), top: scale(30), left: -scale(60), opacity: 0.12 },
-  c3: { width: scale(100), height: scale(100), top: scale(120), right: scale(20), opacity: 0.08 },
+  c1: { width: scale(260), height: scale(260), top: -scale(50), right: -scale(50), opacity: 0.35 },
+  c2: { width: scale(160), height: scale(160), top: scale(30), left: -scale(60), opacity: 0.28 },
+  c3: { width: scale(100), height: scale(100), top: scale(120), right: scale(20), opacity: 0.22 },
 });
 
 // ---------------------------------------------------------------------------
@@ -208,7 +221,7 @@ const PaginationDot = memo<{ isActive: boolean }>(({ isActive }) => (
   <MotiView
     animate={{
       width: isActive ? scale(40) : scale(10),
-      backgroundColor: isActive ? palette.onboardingActiveDot : palette.onboardingDotBorder,
+      backgroundColor: isActive ? palette.onboardingActiveDot : palette.onboardingDotInactive,
     }}
     transition={{ type: 'timing', duration: 220 }}
     style={paginStyles.dot}
@@ -423,7 +436,7 @@ export const OnboardingDeckV2: React.FC<OnboardingDeckV2Props> = ({
           >
             {V2_SLIDES.map((slide, i) => (
               <View key={i} style={mainStyles.slideWrapper}>
-                <SlideCard slide={slide} />
+                <SlideCard slide={slide} isActive={i === activeIndex} />
               </View>
             ))}
           </ScrollView>

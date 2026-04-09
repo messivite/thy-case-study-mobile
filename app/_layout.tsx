@@ -15,12 +15,12 @@ import i18n from '@/i18n';
 import '@/i18n'; // init side effect
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { AppErrorBoundary } from '@/components/AppErrorBoundary';
-import { initErrorReporting } from '@/services/errorReporting';
+import { initErrorReporting, Sentry } from '@/services/errorReporting';
 
 // Sentry'yi app yuklenirken baslat
 initErrorReporting();
 
-export default function RootLayout() {
+function RootLayout() {
   return (
     <GestureHandlerRootView style={styles.root}>
       <AppErrorBoundary>
@@ -38,6 +38,8 @@ export default function RootLayout() {
     </GestureHandlerRootView>
   );
 }
+
+export default Sentry.wrap(RootLayout);
 
 /**
  * Store'a erişmek için Provider'ın içine alınmış ayrı component.

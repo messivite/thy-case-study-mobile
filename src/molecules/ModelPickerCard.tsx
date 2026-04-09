@@ -10,6 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { radius, spacing } from '@/constants/spacing';
 import { fontFamily, fontSize } from '@/constants/typography';
 import { palette } from '@/constants/colors';
+import { scale } from '@/lib/responsive';
 
 type IconDef = {
   name: React.ComponentProps<typeof Ionicons>['name'];
@@ -79,7 +80,7 @@ export const ModelPickerCard: React.FC<Props> = ({
       </View>
 
       {/* Başlık */}
-      <RNText style={styles.title}>{title}</RNText>
+      <RNText style={styles.title} numberOfLines={1}>{title}</RNText>
 
       {/* Açıklama */}
       <RNText style={styles.description} numberOfLines={2}>{description}</RNText>
@@ -111,7 +112,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[6],
     paddingTop: spacing[6],
     paddingBottom: 0,
-    minHeight: 280,
+    height: scale(280),
+    overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0,

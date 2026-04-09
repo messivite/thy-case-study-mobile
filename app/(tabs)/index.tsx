@@ -9,7 +9,7 @@ import { ChatInput } from '@/organisms/ChatInput';
 import { ModelSelector } from '@/molecules/ModelSelector';
 import { ModelBadge } from '@/atoms/Badge';
 import { Text } from '@/atoms/Text';
-import { useChat } from '@/hooks/useChat';
+import { useChatSession } from '@/hooks/useChatSession';
 import { useTheme } from '@/hooks/useTheme';
 import { useHaptics } from '@/hooks/useHaptics';
 import { useI18n } from '@/hooks/useI18n';
@@ -17,7 +17,7 @@ import { spacing } from '@/constants/spacing';
 import { palette } from '@/constants/colors';
 import { fontFamily } from '@/constants/typography';
 
-export default function AssistantScreen() {
+export default function HomeScreen() {
   const { colors } = useTheme();
   const haptics = useHaptics();
   const { t } = useI18n();
@@ -29,7 +29,10 @@ export default function AssistantScreen() {
     changeModel,
     startNewChat,
     likeMessage,
-  } = useChat();
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useChatSession();
 
   const [modelSelectorVisible, setModelSelectorVisible] = useState(false);
 
@@ -45,6 +48,10 @@ export default function AssistantScreen() {
     startNewChat();
   };
 
+  const handleLoadMore = useCallback(() => {
+    fetchNextPage();
+  }, [fetchNextPage]);
+
   const header = (
     <View style={[styles.header, { backgroundColor: colors.headerBg, borderBottomColor: 'rgba(255,255,255,0.1)' }]}>
       <TouchableOpacity
@@ -56,7 +63,7 @@ export default function AssistantScreen() {
       </TouchableOpacity>
 
       <Text variant="h4" color={palette.white} style={{ fontFamily: fontFamily.semiBold }}>
-        {t('assistant.title')}
+        {t('home.headerTitle')}
       </Text>
 
       <TouchableOpacity onPress={handleNewChat} style={styles.newChatBtn}>
@@ -83,6 +90,9 @@ export default function AssistantScreen() {
           messages={messages}
           isTyping={isTyping}
           onLike={likeMessage}
+          onLoadMore={handleLoadMore}
+          hasMore={hasNextPage}
+          isLoadingMore={isFetchingNextPage}
         />
       </ChatLayout>
 

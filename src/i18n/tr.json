@@ -72,6 +72,10 @@
       "passwordsNoMatch": "Şifreler eşleşmiyor"
     }
   },
+  "home": {
+    "title": "AI Chat",
+    "headerTitle": "THY Case Study"
+  },
   "assistant": {
     "title": "Asistan",
     "placeholder": "Mesajınızı yazın...",
@@ -83,7 +87,8 @@
     "regenerate": "Yeniden Üret",
     "emptyTitle": "Nasıl yardımcı olabilirim?",
     "emptySubtitle": "Bir soru yazın, AI asistanınız yanıtlasın.",
-    "typing": "Yazıyor..."
+    "typing": "Yazıyor...",
+    "loadingMore": "Eski mesajlar yükleniyor..."
   },
   "settings": {
     "title": "Ayarlar",

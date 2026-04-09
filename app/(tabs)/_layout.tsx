@@ -27,11 +27,11 @@ export default function TabLayout() {
             ]}
           >
             <TabBarItem
-              label={t('assistant.title')}
-              icon="chatbubble-ellipses-outline"
-              iconFocused="chatbubble-ellipses"
+              label={t('home.title')}
+              icon="sparkles-outline"
+              iconFocused="sparkles"
               isFocused={state.index === 0}
-              onPress={() => navigation.navigate('assistant')}
+              onPress={() => navigation.navigate('index')}
             />
             <TabBarItem
               label={t('settings.title')}
@@ -44,7 +44,7 @@ export default function TabLayout() {
         );
       }}
     >
-      <Tabs.Screen name="assistant" />
+      <Tabs.Screen name="index" />
       <Tabs.Screen name="settings" />
     </Tabs>
   );

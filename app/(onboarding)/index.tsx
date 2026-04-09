@@ -106,7 +106,7 @@ export default function OnboardingScreen() {
 
   const handleSkip = useCallback(async () => {
     await skipWithAnonymousLogin();
-    router.replace('/(tabs)/assistant');
+    router.replace('/(tabs)');
   }, [skipWithAnonymousLogin]);
 
   if (devConfig.onboardingV2Enabled) {

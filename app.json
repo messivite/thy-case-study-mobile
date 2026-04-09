@@ -61,7 +61,13 @@
       ],
       "expo-secure-store",
       "expo-localization",
-      "@sentry/react-native"
+      [
+        "@sentry/react-native",
+        {
+          "organization": "messivite",
+          "project": "thy-case-study-assistant"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

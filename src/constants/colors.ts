@@ -62,7 +62,7 @@ export const palette = {
   onboardingGradientLocations: [0, 0.18, 0.42, 0.63, 0.78, 0.90, 1] as readonly [number, number, number, number, number, number, number],
   onboardingGradientHeight: '92%' as const,
   onboardingBg: '#FFFFFF',
-  onboardingDotBorder: '#D1D5DB',
+  onboardingDotInactive: '#9CA3AF',
 } as const;
 
 export type ThemeColors = {

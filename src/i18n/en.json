@@ -72,6 +72,10 @@
       "passwordsNoMatch": "Passwords do not match"
     }
   },
+  "home": {
+    "title": "AI Chat",
+    "headerTitle": "THY Case Study"
+  },
   "assistant": {
     "title": "Assistant",
     "placeholder": "Type your message...",
@@ -83,7 +87,8 @@
     "regenerate": "Regenerate",
     "emptyTitle": "How can I help you?",
     "emptySubtitle": "Write a question and your AI assistant will respond.",
-    "typing": "Typing..."
+    "typing": "Typing...",
+    "loadingMore": "Loading older messages..."
   },
   "settings": {
     "title": "Settings",
