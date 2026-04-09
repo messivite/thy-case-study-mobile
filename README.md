@@ -5,6 +5,7 @@
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=000)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Router](https://img.shields.io/badge/Expo%20Router-v6-black)](https://docs.expo.dev/router/introduction/)
+[![Codecov](https://codecov.io/gh/messivite/thy-case-study-mobile/graph/badge.svg)](https://codecov.io/gh/messivite/thy-case-study-mobile)
 [![Status](https://img.shields.io/badge/Status-Active-success)](#roadmap)
 
 THY Asistan, **Expo + React Native + TypeScript** ile geliştirilen çok platformlu (iOS/Android/Web) bir uygulamadır.  
@@ -23,6 +24,7 @@ Proje; onboarding, kimlik doğrulama, asistan sohbet akışı, ayarlar, çoklu d
 - [Environment Değişkenleri](#environment-değişkenleri)
 - [Geliştirme Komutları](#geliştirme-komutları)
 - [Çalışma Akışları](#çalışma-akışları)
+- [CI/CD, Codecov ve Release](#cicd-codecov-ve-release)
 - [Web Dağıtımı](#web-dağıtımı)
 - [iOS Dağıtımı (Xcode)](#ios-dağıtımı-xcode)
 - [Roadmap](#roadmap)
@@ -147,9 +149,7 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=
 EXPO_PUBLIC_API_URL=
 ```
 
-Not:
-- `EXPO_PUBLIC_` ile başlayan değişkenler istemci tarafında erişilebilir.
-- Gizli anahtarları (`service_role` vb.) burada tutma.
+Not: `EXPO_PUBLIC_` ile başlayan değişkenler istemci tarafında erişilebilir.
 
 ---
 
@@ -164,6 +164,27 @@ Not:
 ---
 
 ## Çalışma Akışları
+
+### CI/CD, Codecov ve Release
+
+**CI (her push / PR, `main` ve `master`):** `.github/workflows/ci.yml` — `npm run typecheck`, `npm run test:ci` (coverage → `coverage/lcov.info`).
+
+**Codecov:** Üstteki badge, repoyu [Codecov](https://codecov.io/gh/messivite/thy-case-study-mobile) ile eşledikten sonra yeşil/oran gösterir; eşleme yoksa önce boş veya hata görünebilir. İsteğe bağlı GitHub secret: `CODECOV_TOKEN`. Ayarlar: `codecov.yml`.
+
+**Release + Android debug APK:** `.github/workflows/release.yml`
+
+| Yöntem | Ne yaparsın |
+|--------|-------------|
+| Tag ile | `git tag v1.0.1 && git push origin v1.0.1` |
+| Elle | GitHub → **Actions** → **Release** → **Run workflow** → branch seç → **tag** alanına örn. `v1.0.1` yaz → Run |
+
+Release workflow’u önce test + typecheck koşar; kırmızıysa APK üretilmez. Başarılı olursa GitHub Releases üzerinde `thy-assistant-<tag>-debug.apk` eklenir.
+
+**APK nerede üretilir ve nasıl imzalanır?**
+
+- **CI’da:** `expo prebuild` ile oluşan `android/` içinde `./gradlew assembleDebug` çalışır. Çıktı dosyası Gradle’ın varsayılan yolu: **`android/app/build/outputs/apk/debug/app-debug.apk`** (runner’da; repoda `android/` yok, her seferinde sıfırdan üretilir).
+- **Yerel:** Aynı komutla `android/app/build/outputs/apk/debug/app-debug.apk` oluşur (projede `android/` varsa).
+- **İmza (bu pipeline):** `assembleDebug`, Android’in **debug imza** yapılandırmasını kullanır: genelde otomatik bir **debug keystore** (`keytool` ile oluşturulan, Gradle/Android Studio’nun bilinen `debug.keystore` ayarı). Bu **mağaza dağıtımı veya güven “production” modeli değildir**; dahili test ve demo içindir. Play Store / yayın APK veya AAB için `assembleRelease` (veya EAS) ve kendi **upload keystore** / Play App Signing sürecine geçilir.
 
 ### Splash + başlangıç yönlendirmesi
 
@@ -223,10 +244,10 @@ Not: Dev test için `npm run ios` + `npm start` akışı yeterli olur.
 - [x] Dev Client geçişi
 - [x] App icon/splash/adaptive icon seti
 - [x] MMKV web fallback kurgusu
+- [x] CI/CD, test, Codecov entegrasyonu ve release (tag veya elle tetikleme + debug APK)
 
 ### Sıradakiler
 
-- [ ] CI/CD ve otomatik kalite kontrolleri
 - [ ] E2E test kapsamı
 - [ ] Gelişmiş hata izleme (Sentry vb.)
 - [ ] Performans ölçüm ve optimizasyon turu
