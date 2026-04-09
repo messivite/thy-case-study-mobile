@@ -1,6 +1,36 @@
 import { AIMessage, AIProviderInfo, AIUsage } from './api.types';
 
 // ---------------------------------------------------------------------------
+// POST /api/chats — Yeni chat oluşturma
+// ---------------------------------------------------------------------------
+
+/** Yeni chat oluşturma isteğinin body'si */
+export type CreateChatRequest = AIProviderInfo & {
+  title: string;
+};
+
+/** Yeni chat oluşturma response modeli */
+export type CreateChatResponse = AIProviderInfo & {
+  id: string;
+};
+
+// ---------------------------------------------------------------------------
+// GET /api/chats — Tüm chat listesi
+// ---------------------------------------------------------------------------
+
+/** Chat listesi response'undaki tek bir chat özeti */
+export type ChatListItem = AIProviderInfo & {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  lastMessagePreview: string;
+};
+
+/** GET /api/chats response tipi */
+export type GetChatsResponse = ChatListItem[];
+
+// ---------------------------------------------------------------------------
 // GET /api/chats/:chatId — Chat detayı + tüm mesajlar
 // ---------------------------------------------------------------------------
 

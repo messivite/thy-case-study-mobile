@@ -143,7 +143,9 @@ export const useSupabaseAuth = () => {
       toast.error('Oturumunuzun süresi doldu, tekrar giriş yapın.');
       router.replace('/(auth)/welcome');
     });
-    return unsub;
+    return () => {
+      unsub();
+    };
   }, [dispatch, stopRefreshInterval]);
 
   // -------------------------------------------------------------------------

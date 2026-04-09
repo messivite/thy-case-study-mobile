@@ -1,6 +1,9 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { getChat, sendMessage, streamChat, syncChat } from '@/api/chat.api';
+import { getChats, getChat, createChat, sendMessage, streamChat, syncChat } from '@/api/chat.api';
 import {
+  CreateChatRequest,
+  CreateChatResponse,
+  GetChatsResponse,
   GetChatResponse,
   NonStreamChatRequest,
   NonStreamChatResponse,
@@ -11,8 +14,36 @@ import {
 } from '@/types/chat.api.types';
 
 export const CHAT_QUERY_KEYS = {
+  chats: ['chats'] as const,
   chat: (chatId: string) => ['chats', chatId] as const,
 };
+
+/**
+ * GET /api/chats
+ * Kullanıcıya ait tüm chat listesini çeker.
+ *
+ * Kullanım:
+ *   const { data, isLoading } = useGetChatsQuery();
+ *   data?.map(chat => chat.title)
+ */
+export const useGetChatsQuery = () =>
+  useQuery<GetChatsResponse, Error>({
+    queryKey: CHAT_QUERY_KEYS.chats,
+    queryFn: () => getChats(),
+  });
+
+/**
+ * POST /api/chats
+ * Yeni bir chat oluşturur.
+ *
+ * Kullanım:
+ *   const { mutate, isPending } = useCreateChatMutation();
+ *   mutate({ title: 'Yeni sohbet', provider: 'gemini', model: 'gemini-2.5-flash' });
+ */
+export const useCreateChatMutation = () =>
+  useMutation<CreateChatResponse, Error, CreateChatRequest>({
+    mutationFn: (payload) => createChat(payload),
+  });
 
 /**
  * GET /api/chats/:chatId

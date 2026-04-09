@@ -1,5 +1,5 @@
 import React, { useRef, useState, useCallback, useEffect } from 'react';
-import { View, StyleSheet, FlatList } from 'react-native';
+import { View, StyleSheet, FlatList, type ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import Animated, {
@@ -69,7 +69,7 @@ const BgCircle: React.FC<BgCircleProps> = ({
       pointerEvents="none"
       style={[
         styles.bgCircle,
-        { width: size, height: size, borderRadius: size / 2, top, bottom, left, right },
+        { width: size, height: size, borderRadius: size / 2, top, bottom, left, right } as ViewStyle,
         animStyle,
       ]}
     />
