@@ -148,3 +148,14 @@ export type SyncChatResponse = {
   assistantMessage: AssistantMessage;
   usage: AIUsage;
 };
+
+// ---------------------------------------------------------------------------
+// GET /api/chats/:chatId/messages — Paginated Messages
+// ---------------------------------------------------------------------------
+
+/** Paginated mesaj listesi response modeli */
+export type PaginatedMessagesResponse = {
+  messages: ChatMessage[];
+  nextCursor: string | null;
+  hasMore: boolean;
+};

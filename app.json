@@ -9,7 +9,7 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/svg/compact-logo.png",
       "resizeMode": "contain",
       "backgroundColor": "#FFFFFF"
     },
@@ -48,7 +48,7 @@
         "expo-splash-screen",
         {
           "backgroundColor": "#FFFFFF",
-          "image": "./assets/splash-icon.png",
+          "image": "./assets/svg/compact-logo.png",
           "imageWidth": 200
         }
       ],
@@ -60,7 +60,14 @@
         }
       ],
       "expo-secure-store",
-      "expo-localization"
+      "expo-localization",
+      [
+        "@sentry/react-native",
+        {
+          "organization": "messivite",
+          "project": "thy-case-study-assistant"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

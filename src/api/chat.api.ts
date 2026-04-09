@@ -7,6 +7,7 @@ import {
   GetChatResponse,
   NonStreamChatRequest,
   NonStreamChatResponse,
+  PaginatedMessagesResponse,
   StreamChatCallbacks,
   StreamChatRequest,
   StreamEvent,
@@ -163,6 +164,25 @@ export const syncChat = async (
   const { data } = await privateApi.post<SyncChatResponse>(
     `/api/chats/${chatId}/sync`,
     payload,
+  );
+  return data;
+};
+
+/**
+ * GET /api/chats/:chatId/messages?cursor=xxx&limit=20
+ * Chat mesajlarını paginated olarak döner (infinite scroll).
+ */
+export const getChatMessages = async (
+  chatId: string,
+  cursor?: string,
+  limit: number = 20,
+): Promise<PaginatedMessagesResponse> => {
+  const params: Record<string, string | number> = { limit };
+  if (cursor) params.cursor = cursor;
+
+  const { data } = await privateApi.get<PaginatedMessagesResponse>(
+    `/api/chats/${chatId}/messages`,
+    { params },
   );
   return data;
 };

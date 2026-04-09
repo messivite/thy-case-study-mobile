@@ -47,7 +47,7 @@ export default function RegisterScreen() {
     if (result.ok) {
       if (result.data) {
         toast.success(t('toast.registerSuccess'));
-        router.replace('/(tabs)/assistant');
+        router.push('/(tabs)');
       } else {
         // E-posta doğrulama gönderildi
         toast.info('Lütfen e-posta kutunuzu kontrol edin ve hesabınızı doğrulayın.');

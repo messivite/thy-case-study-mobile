@@ -13,48 +13,76 @@ import { store } from '@/store';
 import { queryClient } from '@/services/queryClient';
 import i18n from '@/i18n';
 import '@/i18n'; // init side effect
-import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
+import { SupabaseAuthProvider } from '@/hooks/useSupabaseAuth';
+import { AppErrorBoundary } from '@/components/AppErrorBoundary';
+import { initErrorReporting } from '@/services/errorReporting';
 
-export default function RootLayout() {
+// Sentry native köprüsü her build'de bir kez init (DSN yok / dev'de enabled:false)
+initErrorReporting();
+
+function RootLayout() {
   return (
     <GestureHandlerRootView style={styles.root}>
-      <SafeAreaProvider>
-        <Provider store={store}>
-          <QueryClientProvider client={queryClient}>
-            <I18nextProvider i18n={i18n}>
-              {/* AuthProvider: Supabase listener + token refresh burada başlar */}
-              <AuthProvider />
-            </I18nextProvider>
-          </QueryClientProvider>
-        </Provider>
-      </SafeAreaProvider>
+      <AppErrorBoundary>
+        <SafeAreaProvider>
+          <Provider store={store}>
+            <QueryClientProvider client={queryClient}>
+              <I18nextProvider i18n={i18n}>
+                {/* AuthProvider: Supabase listener + token refresh burada başlar */}
+                <AuthProvider />
+              </I18nextProvider>
+            </QueryClientProvider>
+          </Provider>
+        </SafeAreaProvider>
+      </AppErrorBoundary>
     </GestureHandlerRootView>
   );
 }
 
+// Kökte Sentry.wrap kullanmıyoruz: Expo Router ile giriş çökmesi / AppRegistry uyarısı riski.
+// Hatalar AppErrorBoundary + captureAppError ile gider.
+export default RootLayout;
+
 /**
  * Store'a erişmek için Provider'ın içine alınmış ayrı component.
- * useSupabaseAuth bir kez mount edilir, tüm uygulama boyunca yaşar.
+ * SupabaseAuthProvider: listener'lar tek kez; ekranlar useSupabaseAuth() ile context okur.
  */
 function AuthProvider() {
-  // Auth state listener + token refresh — side effects burada
-  useSupabaseAuth();
-
   return (
-    <>
+    <SupabaseAuthProvider>
       <StatusBar style="auto" />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="(onboarding)" />
         <Stack.Screen name="(auth)" />
-        <Stack.Screen name="(tabs)" />
+        <Stack.Screen
+          name="(tabs)"
+          options={{
+            presentation: 'formSheet',
+            contentStyle: { backgroundColor: 'transparent' },
+            sheetAllowedDetents: [1],
+            sheetGrabberVisible: false,
+            gestureEnabled: false,
+          }}
+        />
+        <Stack.Screen
+          name="webview-modal"
+          options={{
+            presentation: 'formSheet',
+            sheetAllowedDetents: [0.92],
+            sheetGrabberVisible: true,
+            sheetCornerRadius: 20,
+            gestureEnabled: true,
+            contentStyle: { backgroundColor: 'transparent' },
+          }}
+        />
       </Stack>
       <Toaster
         position="top-center"
         offset={60}
         visibleToasts={3}
       />
-    </>
+    </SupabaseAuthProvider>
   );
 }
 

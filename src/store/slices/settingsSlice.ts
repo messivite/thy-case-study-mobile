@@ -8,15 +8,18 @@ type SettingsState = {
   theme: ThemeMode;
   language: 'tr' | 'en';
   notificationsEnabled: boolean;
+  streamingEnabled: boolean;
 };
 
 const savedTheme = (mmkvStorage.getString(STORAGE_KEYS.THEME) as ThemeMode | undefined) ?? 'system';
 const savedLanguage = (mmkvStorage.getString(STORAGE_KEYS.LANGUAGE) as 'tr' | 'en' | undefined) ?? 'tr';
+const savedStreaming = mmkvStorage.getString(STORAGE_KEYS.STREAMING);
 
 const initialState: SettingsState = {
   theme: savedTheme,
   language: savedLanguage,
   notificationsEnabled: true,
+  streamingEnabled: savedStreaming === undefined ? true : savedStreaming === '1',
 };
 
 const settingsSlice = createSlice({
@@ -34,10 +37,14 @@ const settingsSlice = createSlice({
     setNotifications(state, action: PayloadAction<boolean>) {
       state.notificationsEnabled = action.payload;
     },
+    setStreaming(state, action: PayloadAction<boolean>) {
+      state.streamingEnabled = action.payload;
+      mmkvStorage.setString(STORAGE_KEYS.STREAMING, action.payload ? '1' : '0');
+    },
   },
 });
 
-export const { setTheme, setLanguage, setNotifications } = settingsSlice.actions;
+export const { setTheme, setLanguage, setNotifications, setStreaming } = settingsSlice.actions;
 export default settingsSlice.reducer;
 
 export type { ThemeMode };

@@ -20,6 +20,7 @@ import axios, {
 } from 'axios';
 import { supabase } from './supabase';
 import { authMutex } from '@/lib/authMutex';
+import { captureApiError } from '@/services/errorReporting';
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'https://api.example.com';
 
@@ -98,8 +99,9 @@ api.interceptors.response.use(
   async (error: AxiosError) => {
     const originalConfig = error.config as RetryableConfig | undefined;
 
-    // 401 değilse veya zaten retry edilmişse direkt reddet
+    // 401 değilse veya zaten retry edilmişse → raporla + reddet
     if (error.response?.status !== 401 || !originalConfig || originalConfig._retry) {
+      captureApiError(error);
       return Promise.reject(error);
     }
 
@@ -110,7 +112,6 @@ api.interceptors.response.use(
     const result = await authMutex.refresh();
 
     if (!result.ok) {
-      // Refresh token da geçersiz → oturumu sonlandır, login ekranına yönlendir
       authEventEmitter.emit(AUTH_EVENTS.SESSION_EXPIRED);
       return Promise.reject(error);
     }

@@ -1,28 +1,35 @@
-import React from 'react';
-import { ScrollView, View, StyleSheet, Alert } from 'react-native';
+import React, { useState } from 'react';
+import { ScrollView, View, StyleSheet, Alert, Platform, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { MotiView } from 'moti';
+import { Ionicons } from '@expo/vector-icons';
 import { toast } from 'sonner-native';
-import { SettingsSection } from '@/organisms/SettingsSection';
+import Constants from 'expo-constants';
 import { Avatar } from '@/atoms/Avatar';
 import { Text } from '@/atoms/Text';
+import { SettingsSection } from '@/organisms/SettingsSection';
 import { useTheme } from '@/hooks/useTheme';
 import { useAuth } from '@/hooks/useAuth';
 import { useI18n } from '@/hooks/useI18n';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { setTheme } from '@/store/slices/settingsSlice';
-import { setNotifications } from '@/store/slices/settingsSlice';
-import { spacing } from '@/constants/spacing';
+import { setTheme, setNotifications, setStreaming } from '@/store/slices/settingsSlice';
+import { spacing, radius } from '@/constants/spacing';
 import { palette } from '@/constants/colors';
-import Constants from 'expo-constants';
+import { fontFamily } from '@/constants/typography';
 
 export default function SettingsScreen() {
   const { colors, isDark } = useTheme();
   const { user, isGuest, logout } = useAuth();
   const { t, changeLanguage, currentLanguage } = useI18n();
   const dispatch = useAppDispatch();
-  const { theme, notificationsEnabled } = useAppSelector((s) => s.settings);
+  const { theme, notificationsEnabled, streamingEnabled } = useAppSelector((s) => s.settings);
+
+  const [shouldCrash, setShouldCrash] = useState(false);
+  if (shouldCrash) {
+    throw new Error('[SentryTest] Bilinçli test çöküşü — error boundary / Sentry akışını doğrular.');
+  }
 
   const handleLogout = () => {
     Alert.alert(t('settings.logout'), t('settings.logoutConfirm'), [
@@ -41,108 +48,286 @@ export default function SettingsScreen() {
 
   const displayName = isGuest ? t('settings.guest') : (user?.name ?? '');
   const displayEmail = isGuest ? t('settings.loginToSync') : (user?.email ?? '');
+  const appVersion = Constants.expoConfig?.version ?? '1.0.0';
+  const buildNumber =
+    Platform.OS === 'ios'
+      ? (Constants.expoConfig?.ios?.buildNumber ?? '—')
+      : String(Constants.expoConfig?.android?.versionCode ?? '—');
+
+  const themeSubtitle =
+    theme === 'light'
+      ? t('settings.themeLight')
+      : theme === 'dark'
+      ? t('settings.themeDark')
+      : t('settings.themeSystem');
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]} edges={['top']}>
-      <View style={[styles.header, { backgroundColor: colors.headerBg }]}>
-        <Text variant="h4" color={palette.white}>
-          {t('settings.title')}
-        </Text>
-      </View>
+      {/* Header */}
+      <LinearGradient
+        colors={[palette.navy, palette.navyMid, palette.primaryDark]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.header}
+      >
+        <View style={styles.headerContent}>
+          <View style={styles.headerIconWrap}>
+            <Ionicons name="settings" size={20} color="rgba(255,255,255,0.9)" />
+          </View>
+          <Text variant="h4" color={palette.white} style={{ fontFamily: fontFamily.semiBold }}>
+            {t('settings.title')}
+          </Text>
+        </View>
+      </LinearGradient>
 
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={[styles.scroll, { paddingBottom: spacing[10] }]}
         showsVerticalScrollIndicator={false}
       >
         {/* Profile Card */}
         <MotiView
-          from={{ opacity: 0, translateY: 12 }}
+          from={{ opacity: 0, translateY: 16 }}
           animate={{ opacity: 1, translateY: 0 }}
-          transition={{ type: 'timing', duration: 300 }}
-          style={[styles.profileCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+          transition={{ type: 'timing', duration: 350, delay: 0 }}
         >
-          <Avatar name={displayName || 'G'} uri={user?.avatarUrl} size="lg" />
-          <View style={styles.profileInfo}>
-            <Text variant="h4">{displayName}</Text>
-            <Text variant="caption" color={colors.textSecondary}>{displayEmail}</Text>
-          </View>
+          <LinearGradient
+            colors={isDark ? ['#1E1E38', '#1A1A2E'] : ['#FFFFFF', '#F5F5F5']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[styles.profileCard, { borderColor: colors.border }]}
+          >
+            <View style={styles.profileAvatarWrap}>
+              <Avatar name={displayName || 'G'} uri={user?.avatarUrl} size="lg" />
+              {!isGuest && (
+                <View style={[styles.onlineDot, { backgroundColor: palette.success }]} />
+              )}
+            </View>
+            <View style={styles.profileInfo}>
+              <Text variant="h4" style={{ fontFamily: fontFamily.semiBold }}>
+                {displayName}
+              </Text>
+              <Text variant="caption" color={colors.textSecondary} style={styles.emailText}>
+                {displayEmail}
+              </Text>
+            </View>
+            <View style={[styles.profileBadge, { backgroundColor: isGuest ? colors.border : palette.primary + '18' }]}>
+              <Ionicons
+                name={isGuest ? 'person-outline' : 'shield-checkmark-outline'}
+                size={14}
+                color={isGuest ? colors.textSecondary : palette.primary}
+              />
+            </View>
+          </LinearGradient>
         </MotiView>
 
         {/* Preferences */}
-        <SettingsSection
-          title={t('settings.preferences')}
-          items={[
-            {
-              id: 'language',
-              label: t('settings.language'),
-              subtitle: currentLanguage === 'tr' ? t('settings.languageTR') : t('settings.languageEN'),
-              icon: 'language-outline',
-              iconColor: palette.geminiBlue,
-              onPress: () => {
-                const next = currentLanguage === 'tr' ? 'en' : 'tr';
-                changeLanguage(next);
-                toast.info(t('toast.settingsSaved'));
+        <MotiView
+          from={{ opacity: 0, translateY: 16 }}
+          animate={{ opacity: 1, translateY: 0 }}
+          transition={{ type: 'timing', duration: 350, delay: 80 }}
+        >
+          <SettingsSection
+            title={t('settings.preferences')}
+            items={[
+              {
+                id: 'language',
+                label: t('settings.language'),
+                subtitle: currentLanguage === 'tr' ? t('settings.languageTR') : t('settings.languageEN'),
+                icon: 'language-outline',
+                iconColor: palette.geminiBlue,
+                onPress: () => {
+                  const next = currentLanguage === 'tr' ? 'en' : 'tr';
+                  changeLanguage(next);
+                  toast.info(t('toast.settingsSaved'));
+                },
               },
-            },
-            {
-              id: 'theme',
-              label: t('settings.theme'),
-              subtitle: theme === 'light' ? t('settings.themeLight') : theme === 'dark' ? t('settings.themeDark') : t('settings.themeSystem'),
-              icon: isDark ? 'moon-outline' : 'sunny-outline',
-              iconColor: palette.claudeOrange,
-              onPress: () => {
-                const next = theme === 'system' ? 'light' : theme === 'light' ? 'dark' : 'system';
-                dispatch(setTheme(next));
+              {
+                id: 'theme',
+                label: t('settings.theme'),
+                subtitle: themeSubtitle,
+                icon: isDark ? 'moon-outline' : 'sunny-outline',
+                iconColor: palette.claudeOrange,
+                onPress: () => {
+                  const next = theme === 'system' ? 'light' : theme === 'light' ? 'dark' : 'system';
+                  dispatch(setTheme(next));
+                },
               },
-            },
-            {
-              id: 'notifications',
-              label: t('settings.notifications'),
-              subtitle: t('settings.notificationsDesc'),
-              icon: 'notifications-outline',
-              iconColor: palette.gptGreen,
-              toggle: true,
-              toggleValue: notificationsEnabled,
-              onToggle: (v) => dispatch(setNotifications(v)),
-            },
-          ]}
-        />
+              {
+                id: 'notifications',
+                label: t('settings.notifications'),
+                subtitle: t('settings.notificationsDesc'),
+                icon: 'notifications-outline',
+                iconColor: palette.gptGreen,
+                toggle: true,
+                toggleValue: notificationsEnabled,
+                onToggle: (v) => dispatch(setNotifications(v)),
+              },
+            ]}
+          />
+        </MotiView>
+
+        {/* Chat Settings */}
+        <MotiView
+          from={{ opacity: 0, translateY: 16 }}
+          animate={{ opacity: 1, translateY: 0 }}
+          transition={{ type: 'timing', duration: 350, delay: 160 }}
+        >
+          <SettingsSection
+            title={t('settings.chat')}
+            items={[
+              {
+                id: 'streaming',
+                label: t('settings.streaming'),
+                subtitle: t('settings.streamingDesc'),
+                icon: 'flash-outline',
+                iconColor: palette.customPurple,
+                toggle: true,
+                toggleValue: streamingEnabled,
+                onToggle: (v) => {
+                  dispatch(setStreaming(v));
+                  toast.info(t('toast.settingsSaved'));
+                },
+              },
+            ]}
+          />
+        </MotiView>
 
         {/* About */}
-        <SettingsSection
-          title={t('settings.about')}
-          items={[
-            {
-              id: 'version',
-              label: t('settings.version'),
-              subtitle: Constants.expoConfig?.version ?? '1.0.0',
-              icon: 'information-circle-outline',
-              iconColor: palette.customPurple,
-            },
-            {
-              id: 'support',
-              label: t('settings.support'),
-              icon: 'help-circle-outline',
-              iconColor: palette.navyMid,
-              onPress: () => {},
-            },
-          ]}
-        />
+        <MotiView
+          from={{ opacity: 0, translateY: 16 }}
+          animate={{ opacity: 1, translateY: 0 }}
+          transition={{ type: 'timing', duration: 350, delay: 240 }}
+        >
+          <SettingsSection
+            title={t('settings.about')}
+            items={[
+              {
+                id: 'version',
+                label: t('settings.version'),
+                subtitle: appVersion,
+                icon: 'information-circle-outline',
+                iconColor: palette.navyMid,
+              },
+              {
+                id: 'build',
+                label: t('settings.buildNumber'),
+                subtitle: buildNumber,
+                icon: 'construct-outline',
+                iconColor: palette.gray400,
+              },
+              {
+                id: 'support',
+                label: t('settings.support'),
+                icon: 'help-circle-outline',
+                iconColor: palette.geminiBlue,
+                onPress: () => router.push({
+                  pathname: '/webview-modal',
+                  params: { url: 'https://www.turkishairlines.com', title: 'Destek' },
+                }),
+              },
+            ]}
+          />
+        </MotiView>
+
+        {/* App Version Badge */}
+        <MotiView
+          from={{ opacity: 0, translateY: 16 }}
+          animate={{ opacity: 1, translateY: 0 }}
+          transition={{ type: 'timing', duration: 350, delay: 300 }}
+          style={styles.versionBadgeWrap}
+        >
+          <LinearGradient
+            colors={[palette.navy, palette.navyMid]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.versionBadge}
+          >
+            <Ionicons name="airplane" size={14} color="rgba(255,255,255,0.7)" />
+            <Text variant="caption" color="rgba(255,255,255,0.85)" style={{ fontFamily: fontFamily.medium }}>
+              THY Asistan
+            </Text>
+            <View style={styles.versionPill}>
+              <Text variant="caption" color={palette.white} style={{ fontFamily: fontFamily.semiBold, fontSize: 10 }}>
+                v{appVersion}
+              </Text>
+            </View>
+          </LinearGradient>
+        </MotiView>
 
         {/* Logout */}
-        <SettingsSection
-          items={[
-            {
-              id: 'logout',
-              label: t('settings.logout'),
-              icon: 'log-out-outline',
-              iconColor: palette.error,
-              destructive: true,
-              onPress: handleLogout,
-            },
-          ]}
-        />
+        <MotiView
+          from={{ opacity: 0, translateY: 16 }}
+          animate={{ opacity: 1, translateY: 0 }}
+          transition={{ type: 'timing', duration: 350, delay: 360 }}
+        >
+          <SettingsSection
+            items={[
+              {
+                id: 'logout',
+                label: t('settings.logout'),
+                icon: 'log-out-outline',
+                iconColor: palette.error,
+                destructive: true,
+                onPress: handleLogout,
+              },
+            ]}
+          />
+        </MotiView>
+
+        {/* Sentry / Error Boundary Test */}
+        <MotiView
+          from={{ opacity: 0, translateY: 16 }}
+          animate={{ opacity: 1, translateY: 0 }}
+          transition={{ type: 'timing', duration: 350, delay: 440 }}
+        >
+          <View style={[styles.sentryCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={styles.sentryHeader}>
+              <View style={[styles.sentryIconWrap, { backgroundColor: palette.warning + '20' }]}>
+                <Text style={styles.sentryEmoji}>😄</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text variant="bodyMedium" style={{ fontFamily: fontFamily.semiBold }}>
+                  Sentry Entegrasyonu
+                </Text>
+                <Text variant="caption" color={colors.textSecondary}>
+                  Error boundary akışını test et
+                </Text>
+              </View>
+              <View style={[styles.sentryBadge, { backgroundColor: palette.success + '20' }]}>
+                <View style={[styles.sentryDot, { backgroundColor: palette.success }]} />
+                <Text variant="caption" color={palette.success} style={{ fontFamily: fontFamily.semiBold }}>
+                  Aktif
+                </Text>
+              </View>
+            </View>
+
+            <Text variant="caption" color={colors.textSecondary} style={styles.sentryDesc}>
+              Butona basınca uygulama kasıtlı crash atar, Sentry hatayı yakalar ve Error Boundary devreye girer. Case study değerlendiricileri için 🚀
+            </Text>
+
+            <Pressable
+              onPress={() => setShouldCrash(true)}
+              style={({ pressed }) => [styles.sentryButtonWrap, { opacity: pressed ? 0.85 : 1 }]}
+            >
+              <LinearGradient
+                colors={[palette.warning, '#F97316']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.sentryButton}
+              >
+                <Ionicons name="bug-outline" size={16} color={palette.white} />
+                <Text
+                  variant="bodyMedium"
+                  color={palette.white}
+                  style={{ fontFamily: fontFamily.semiBold }}
+                >
+                  Crash Test Başlat 💥
+                </Text>
+              </LinearGradient>
+            </Pressable>
+          </View>
+        </MotiView>
       </ScrollView>
     </SafeAreaView>
   );
@@ -154,22 +339,134 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: spacing[4],
-    paddingVertical: spacing[3],
+    paddingVertical: spacing[4],
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+  },
+  headerIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.md,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   scroll: {
     padding: spacing[4],
+    gap: 0,
   },
   profileCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[4],
     padding: spacing[4],
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
     marginBottom: spacing[5],
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  profileAvatarWrap: {
+    position: 'relative',
+  },
+  onlineDot: {
+    position: 'absolute',
+    bottom: 1,
+    right: 1,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 2,
+    borderColor: '#fff',
   },
   profileInfo: {
     flex: 1,
+    gap: 3,
+  },
+  emailText: {
+    marginTop: 1,
+  },
+  profileBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  versionBadgeWrap: {
+    alignItems: 'center',
+    marginBottom: spacing[4],
+    marginTop: -spacing[2],
+  },
+  versionBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[2],
+    borderRadius: 999,
+  },
+  versionPill: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: spacing[2],
+    paddingVertical: 2,
+    borderRadius: 999,
+  },
+  sentryCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: spacing[4],
+    gap: spacing[3],
+    marginBottom: spacing[5],
+  },
+  sentryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+  },
+  sentryIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sentryEmoji: {
+    fontSize: 20,
+  },
+  sentryBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 4,
+    paddingHorizontal: spacing[2],
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  sentryDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  sentryDesc: {
+    lineHeight: 18,
+  },
+  sentryButtonWrap: {
+    borderRadius: radius.lg,
+    overflow: 'hidden',
+  },
+  sentryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing[2],
+    paddingVertical: spacing[3],
+    paddingHorizontal: spacing[4],
+    borderRadius: radius.lg,
   },
 });

@@ -48,6 +48,21 @@ export const palette = {
   onboardingInactiveDot: 'rgba(255,255,255,0.75)',
   onboardingCardBg: '#F7F3EA',
   onboardingCardBorder: '#EAE6DA',
+
+  // Onboarding V2 — Gradient
+  onboardingGradient: [
+    '#CC0E22',  // ust — THY kirmizi
+    '#C20D20',  // kirmizi devam
+    '#B8091A',  // koyu kirmizi (orta ust)
+    '#D4546A',  // soft pembe-kirmizi gecis
+    '#E8A0A8',  // pastel pembe
+    '#F2D4D6',  // cok acik pembe
+    '#FFFFFF',  // beyaz alt
+  ] as readonly [string, string, string, string, string, string, string],
+  onboardingGradientLocations: [0, 0.18, 0.42, 0.63, 0.78, 0.90, 1] as readonly [number, number, number, number, number, number, number],
+  onboardingGradientHeight: '92%' as const,
+  onboardingBg: '#FFFFFF',
+  onboardingDotInactive: '#9CA3AF',
 } as const;
 
 export type ThemeColors = {
