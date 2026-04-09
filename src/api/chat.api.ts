@@ -1,6 +1,9 @@
 import { privateApi } from '@/services/api';
 import { supabase } from '@/services/supabase';
 import {
+  CreateChatRequest,
+  CreateChatResponse,
+  GetChatsResponse,
   GetChatResponse,
   NonStreamChatRequest,
   NonStreamChatResponse,
@@ -105,6 +108,24 @@ export const streamChat = async (
       // yoksay
     }
   }
+};
+
+/**
+ * POST /api/chats
+ * Yeni bir chat oluşturur.
+ */
+export const createChat = async (payload: CreateChatRequest): Promise<CreateChatResponse> => {
+  const { data } = await privateApi.post<CreateChatResponse>('/api/chats', payload);
+  return data;
+};
+
+/**
+ * GET /api/chats
+ * Kullanıcıya ait tüm chat'lerin listesini döner.
+ */
+export const getChats = async (): Promise<GetChatsResponse> => {
+  const { data } = await privateApi.get<GetChatsResponse>('/api/chats');
+  return data;
 };
 
 /**

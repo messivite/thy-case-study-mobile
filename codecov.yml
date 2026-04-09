@@ -1,0 +1,16 @@
+# Codecov: https://app.codecov.io — repo için CODECOV_TOKEN (opsiyonel, public’te de çalışır).
+# Coverage düşük başlangıçta; PR’ları kırmadan bilgi amaçlı.
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 5%
+        informational: true
+    patch:
+      default:
+        informational: true
+
+comment:
+  layout: reach,diff,flags,files
+  behavior: default

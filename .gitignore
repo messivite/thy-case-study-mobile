@@ -40,9 +40,14 @@ yarn-error.*
 .env
 .env.local
 .env*.local
+.env.development
+.env.production
 
 # typescript
 *.tsbuildinfo
+
+# tests
+coverage/
 
 # generated native folders
 /ios

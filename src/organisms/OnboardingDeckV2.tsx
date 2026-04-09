@@ -20,6 +20,9 @@ import Animated, {
   withRepeat,
   withSequence,
   withTiming,
+  withSpring,
+  interpolate,
+  Extrapolation,
   runOnJS,
   Easing,
 } from 'react-native-reanimated';
@@ -42,7 +45,7 @@ import { scale } from '@/lib/responsive';
 const { width: W } = Dimensions.get('window');
 
 // Kırmızı koyu tonlar — 6 stop ile smooth geçiş, üst %60 kırmızı yoğun, alta krem
-const BG_GRADIENTS: readonly [string, string, string, string, string, string][] = [
+const BG_GRADIENTS = [
   ['#CC0E22', '#C20D20', '#A8091A', '#7A061280', '#C8906840', '#EDE8E0'],
   ['#A80818', '#9C0716', '#870512', '#62040E88', '#B8846040', '#E8E2D8'],
   ['#D4101F', '#C80E1C', '#B00B18', '#830A1478', '#CC8E6840', '#EAE5DC'],
@@ -142,14 +145,14 @@ const AnimatedBg: React.FC<{ activeIndex: number }> = ({ activeIndex }) => {
     <View style={StyleSheet.absoluteFill}>
       <Animated.View style={[StyleSheet.absoluteFill, prevStyle]}>
         <LinearGradient
-          colors={prevGrad as unknown as string[]}
+          colors={prevGrad}
           locations={[0, 0.18, 0.36, 0.54, 0.72, 1]}
           style={StyleSheet.absoluteFill}
         />
       </Animated.View>
       <Animated.View style={[StyleSheet.absoluteFill, nextStyle]}>
         <LinearGradient
-          colors={nextGrad as unknown as string[]}
+          colors={nextGrad}
           locations={[0, 0.18, 0.36, 0.54, 0.72, 1]}
           style={StyleSheet.absoluteFill}
         />
@@ -279,30 +282,30 @@ const backBtnStyles = StyleSheet.create({
 });
 
 // ---------------------------------------------------------------------------
-// Slide Card
+// Slide Card — statik, animasyon üst katmanda yönetilir
 // ---------------------------------------------------------------------------
 
-const SlideCard: React.FC<{ slide: V2Slide; index: number }> = ({ slide, index }) => {
+const SlideCardContent: React.FC<{ slide: V2Slide }> = ({ slide }) => {
   const { t } = useI18n();
 
   return (
-    <MotiView
-      key={`card-${index}`}
-      from={{ translateX: W * 0.72, scale: 0.84, opacity: 0 }}
-      animate={{ translateX: 0, scale: 1, opacity: 1 }}
-      transition={{ type: 'spring', damping: 19, stiffness: 185, mass: 0.8 }}
-    >
-      <ModelPickerCard
-        title={t(slide.titleKey)}
-        description={t(slide.descKey)}
-        mainIcon={slide.mainIcon}
-        overlayIcons={slide.overlayIcons}
-        selectorLabel={t(slide.selectorLabelKey)}
-        selectorDotColor={slide.selectorDotColor}
-      />
-    </MotiView>
+    <ModelPickerCard
+      title={t(slide.titleKey)}
+      description={t(slide.descKey)}
+      mainIcon={slide.mainIcon}
+      overlayIcons={slide.overlayIcons}
+      selectorLabel={t(slide.selectorLabelKey)}
+      selectorDotColor={slide.selectorDotColor}
+    />
   );
 };
+
+// ---------------------------------------------------------------------------
+// Swipe threshold
+// ---------------------------------------------------------------------------
+
+const SWIPE_THRESHOLD = W * 0.25;
+const SWIPE_VELOCITY_THRESHOLD = 500;
 
 // ---------------------------------------------------------------------------
 // Props & Main
@@ -322,31 +325,121 @@ export const OnboardingDeckV2: React.FC<OnboardingDeckV2Props> = ({
   const [activeIndex, setActiveIndex] = useState(0);
   const isLast = activeIndex === V2_SLIDES.length - 1;
   const isFirst = activeIndex === 0;
-  const slide = V2_SLIDES[activeIndex];
+
+  // Shared value that tracks horizontal pan offset
+  const translateX = useSharedValue(0);
+
+  const goTo = useCallback((index: number) => {
+    setActiveIndex(index);
+    translateX.value = 0;
+  }, []);
 
   const handleNext = useCallback(() => {
     if (isLast) onComplete();
-    else setActiveIndex((i) => i + 1);
-  }, [isLast, onComplete]);
+    else goTo(activeIndex + 1);
+  }, [isLast, activeIndex, onComplete, goTo]);
 
   const handleBack = useCallback(() => {
-    if (!isFirst) setActiveIndex((i) => i - 1);
-  }, [isFirst]);
+    if (!isFirst) goTo(activeIndex - 1);
+  }, [isFirst, activeIndex, goTo]);
 
-  // Swipe gesture — pan yatay threshold 60px
+  // Snap back animation
+  const snapBack = useCallback(() => {
+    translateX.value = withSpring(0, { damping: 20, stiffness: 200 });
+  }, []);
+
+  // Swipe gesture — parmak takipli
   const swipeGesture = Gesture.Pan()
     .activeOffsetX([-12, 12])
     .failOffsetY([-20, 20])
+    .onUpdate((e) => {
+      'worklet';
+      // Sınırlama: ilk slide'da sağa, son slide'da sola fazla gitmesin
+      const isFirstSlide = activeIndex === 0;
+      const isLastSlide = activeIndex === V2_SLIDES.length - 1;
+
+      if (isFirstSlide && e.translationX > 0) {
+        // İlk slide'da sağa sürüklemeyi sınırla (rubber band efekti)
+        translateX.value = e.translationX * 0.3;
+      } else if (isLastSlide && e.translationX < 0) {
+        // Son slide'da sola sürüklemeyi sınırla
+        translateX.value = e.translationX * 0.3;
+      } else {
+        translateX.value = e.translationX;
+      }
+    })
     .onEnd((e) => {
       'worklet';
-      if (e.translationX < -60 && e.velocityX < 0) {
-        // sola swipe → next
-        runOnJS(handleNext)();
-      } else if (e.translationX > 60 && e.velocityX > 0) {
-        // sağa swipe → back
-        runOnJS(handleBack)();
+      const shouldGoNext =
+        (e.translationX < -SWIPE_THRESHOLD || e.velocityX < -SWIPE_VELOCITY_THRESHOLD) &&
+        activeIndex < V2_SLIDES.length - 1;
+      const shouldGoBack =
+        (e.translationX > SWIPE_THRESHOLD || e.velocityX > SWIPE_VELOCITY_THRESHOLD) &&
+        activeIndex > 0;
+
+      if (shouldGoNext) {
+        // Slide out animasyonu sonra index değiş
+        translateX.value = withTiming(-W, { duration: 250, easing: Easing.out(Easing.cubic) }, () => {
+          runOnJS(handleNext)();
+        });
+      } else if (shouldGoBack) {
+        translateX.value = withTiming(W, { duration: 250, easing: Easing.out(Easing.cubic) }, () => {
+          runOnJS(handleBack)();
+        });
+      } else {
+        // Snap back
+        runOnJS(snapBack)();
       }
     });
+
+  // Kart: mevcut slide parmağı takip eder
+  const currentCardStyle = useAnimatedStyle(() => {
+    const opacity = interpolate(
+      Math.abs(translateX.value),
+      [0, W * 0.5, W],
+      [1, 0.5, 0],
+      Extrapolation.CLAMP,
+    );
+    const scaleVal = interpolate(
+      Math.abs(translateX.value),
+      [0, W],
+      [1, 0.85],
+      Extrapolation.CLAMP,
+    );
+    return {
+      transform: [{ translateX: translateX.value }, { scale: scaleVal }],
+      opacity,
+    };
+  });
+
+  // Sonraki slide: sağdan gelen (sola swipe ederken)
+  const nextCardStyle = useAnimatedStyle(() => {
+    if (translateX.value >= 0) return { opacity: 0, transform: [{ translateX: W }] };
+    const progress = Math.abs(translateX.value) / W;
+    const tx = interpolate(progress, [0, 1], [W * 0.5, 0], Extrapolation.CLAMP);
+    const opacity = interpolate(progress, [0, 0.3, 1], [0, 0.5, 1], Extrapolation.CLAMP);
+    const scaleVal = interpolate(progress, [0, 1], [0.85, 1], Extrapolation.CLAMP);
+    return {
+      opacity,
+      transform: [{ translateX: tx }, { scale: scaleVal }],
+    };
+  });
+
+  // Önceki slide: soldan gelen (sağa swipe ederken)
+  const prevCardStyle = useAnimatedStyle(() => {
+    if (translateX.value <= 0) return { opacity: 0, transform: [{ translateX: -W }] };
+    const progress = translateX.value / W;
+    const tx = interpolate(progress, [0, 1], [-W * 0.5, 0], Extrapolation.CLAMP);
+    const opacity = interpolate(progress, [0, 0.3, 1], [0, 0.5, 1], Extrapolation.CLAMP);
+    const scaleVal = interpolate(progress, [0, 1], [0.85, 1], Extrapolation.CLAMP);
+    return {
+      opacity,
+      transform: [{ translateX: tx }, { scale: scaleVal }],
+    };
+  });
+
+  const prevSlide = activeIndex > 0 ? V2_SLIDES[activeIndex - 1] : null;
+  const nextSlide = activeIndex < V2_SLIDES.length - 1 ? V2_SLIDES[activeIndex + 1] : null;
 
   return (
     <GestureDetector gesture={swipeGesture}>
@@ -406,9 +499,26 @@ export const OnboardingDeckV2: React.FC<OnboardingDeckV2Props> = ({
             </View>
           </View>
 
-          {/* Kart */}
+          {/* Kart — swipe ile kayan 3 katman */}
           <View style={mainStyles.cardArea}>
-            <SlideCard slide={slide} index={activeIndex} />
+            {/* Önceki slide (sağa swipe ederken soldan gelir) */}
+            {prevSlide && (
+              <Animated.View style={[mainStyles.cardLayer, prevCardStyle]}>
+                <SlideCardContent slide={prevSlide} />
+              </Animated.View>
+            )}
+
+            {/* Aktif slide — parmağı takip eder */}
+            <Animated.View style={[mainStyles.cardLayer, currentCardStyle]}>
+              <SlideCardContent slide={V2_SLIDES[activeIndex]} />
+            </Animated.View>
+
+            {/* Sonraki slide (sola swipe ederken sağdan gelir) */}
+            {nextSlide && (
+              <Animated.View style={[mainStyles.cardLayer, nextCardStyle]}>
+                <SlideCardContent slide={nextSlide} />
+              </Animated.View>
+            )}
           </View>
 
           {/* Alt: pagination + butonlar */}
@@ -464,6 +574,12 @@ const mainStyles = StyleSheet.create({
   },
   cardArea: {
     flex: 1,
+    justifyContent: 'flex-end',
+    paddingHorizontal: spacing[4],
+    paddingBottom: spacing[5],
+  },
+  cardLayer: {
+    ...StyleSheet.absoluteFillObject,
     justifyContent: 'flex-end',
     paddingHorizontal: spacing[4],
     paddingBottom: spacing[5],
