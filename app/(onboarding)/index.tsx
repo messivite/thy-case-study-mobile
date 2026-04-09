@@ -1,4 +1,4 @@
-import React, { useRef, useState, useCallback, useEffect } from 'react';
+import React, { useRef, useState, useCallback, useEffect, Suspense, lazy } from 'react';
 import { View, StyleSheet, FlatList, type ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -8,6 +8,7 @@ import Animated, {
   withRepeat,
   withSequence,
   withTiming,
+  cancelAnimation,
   Easing,
 } from 'react-native-reanimated';
 import { Button } from '@/atoms/Button';
@@ -15,7 +16,6 @@ import { TextButton } from '@/atoms/TextButton';
 import { Logo } from '@/atoms/Logo';
 import { OnboardingSlide, ONBOARDING_SLIDES } from '@/organisms/OnboardingSlide';
 import { OnboardingProgress } from '@/molecules/OnboardingDot';
-import { OnboardingDeckV2 } from '@/organisms/OnboardingDeckV2';
 import { devConfig } from '@/config/devConfig';
 import { mmkvStorage, STORAGE_KEYS } from '@/lib/mmkv';
 import { palette } from '@/constants/colors';
@@ -25,6 +25,11 @@ import { useI18n } from '@/hooks/useI18n';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { scale, verticalScale } from '@/lib/responsive';
 import { fontSize, fontFamily } from '@/constants/typography';
+
+/** V2 ayrı async chunk — kapalıyken Moti/Deck native bundle'a hiç girmez (SIGABRT riski). */
+const OnboardingDeckV2Lazy = lazy(() =>
+  import('@/organisms/OnboardingDeckV2').then((m) => ({ default: m.OnboardingDeckV2 })),
+);
 
 // ---------------------------------------------------------------------------
 // Animated background circle
@@ -47,7 +52,7 @@ const BgCircle: React.FC<BgCircleProps> = ({
   const pulse = useSharedValue(1);
 
   useEffect(() => {
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       pulse.value = withRepeat(
         withSequence(
           withTiming(1.18, { duration, easing: Easing.inOut(Easing.sin) }),
@@ -57,6 +62,10 @@ const BgCircle: React.FC<BgCircleProps> = ({
         false,
       );
     }, delay);
+    return () => {
+      clearTimeout(timer);
+      cancelAnimation(pulse);
+    };
   }, []);
 
   const animStyle = useAnimatedStyle(() => ({
@@ -111,10 +120,13 @@ export default function OnboardingScreen() {
 
   if (devConfig.onboardingV2Enabled) {
     return (
-      <OnboardingDeckV2
-        onComplete={handleComplete}
-        onSkip={handleSkip}
-      />
+      <Suspense
+        fallback={
+          <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]} />
+        }
+      >
+        <OnboardingDeckV2Lazy onComplete={handleComplete} onSkip={handleSkip} />
+      </Suspense>
     );
   }
 

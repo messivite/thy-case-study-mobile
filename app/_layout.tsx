@@ -13,11 +13,11 @@ import { store } from '@/store';
 import { queryClient } from '@/services/queryClient';
 import i18n from '@/i18n';
 import '@/i18n'; // init side effect
-import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
+import { SupabaseAuthProvider } from '@/hooks/useSupabaseAuth';
 import { AppErrorBoundary } from '@/components/AppErrorBoundary';
-import { initErrorReporting, Sentry } from '@/services/errorReporting';
+import { initErrorReporting } from '@/services/errorReporting';
 
-// Sentry'yi app yuklenirken baslat
+// Sentry native köprüsü her build'de bir kez init (DSN yok / dev'de enabled:false)
 initErrorReporting();
 
 function RootLayout() {
@@ -39,18 +39,17 @@ function RootLayout() {
   );
 }
 
-export default Sentry.wrap(RootLayout);
+// Kökte Sentry.wrap kullanmıyoruz: Expo Router ile giriş çökmesi / AppRegistry uyarısı riski.
+// Hatalar AppErrorBoundary + captureAppError ile gider.
+export default RootLayout;
 
 /**
  * Store'a erişmek için Provider'ın içine alınmış ayrı component.
- * useSupabaseAuth bir kez mount edilir, tüm uygulama boyunca yaşar.
+ * SupabaseAuthProvider: listener'lar tek kez; ekranlar useSupabaseAuth() ile context okur.
  */
 function AuthProvider() {
-  // Auth state listener + token refresh — side effects burada
-  useSupabaseAuth();
-
   return (
-    <>
+    <SupabaseAuthProvider>
       <StatusBar style="auto" />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
@@ -63,7 +62,7 @@ function AuthProvider() {
         offset={60}
         visibleToasts={3}
       />
-    </>
+    </SupabaseAuthProvider>
   );
 }
 

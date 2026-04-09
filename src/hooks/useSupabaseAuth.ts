@@ -11,11 +11,11 @@
  *  5. Login / register / logout / Google OAuth methodlarını dışa aç
  *
  * KULLANIM:
- *   Root layout'ta tek seferlik <AuthProvider> içinde çağrılır.
- *   Ekranlar useAuth() ile sadece state'i okur.
+ *   Root layout'ta <SupabaseAuthProvider> içinde useSupabaseAuthState bir kez çalışır.
+ *   Ekranlar useSupabaseAuth() ile context'ten aynı örneği okur (çift listener yok).
  */
 
-import { useEffect, useRef, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useCallback } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import { router } from 'expo-router';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
@@ -47,6 +47,8 @@ import { authEventEmitter, AUTH_EVENTS } from '@/services/api';
 import { authMutex } from '@/lib/authMutex';
 import { setErrorReportingUser } from '@/services/errorReporting';
 import { toast } from 'sonner-native';
+import type { AuthStatus } from '@/types/auth.types';
+import type { AuthResult } from '@/services/authService';
 
 // Token'ı kaç saniye kala yenile (60s buffer)
 const REFRESH_BUFFER_SECONDS = 60;
@@ -54,10 +56,48 @@ const REFRESH_BUFFER_SECONDS = 60;
 const REFRESH_CHECK_INTERVAL_MS = 4 * 60 * 1000;
 
 // ---------------------------------------------------------------------------
-// Hook
+// Context — tek onAuthStateChange / interval (ekran başına tekrar yok)
 // ---------------------------------------------------------------------------
 
-export const useSupabaseAuth = () => {
+type SupabaseAuthApi = {
+  status: AuthStatus;
+  login: (email: string, password: string) => Promise<AuthResult<AppSession>>;
+  register: (
+    email: string,
+    password: string,
+    fullName: string,
+  ) => Promise<AuthResult<AppSession | null>>;
+  loginWithGoogle: () => Promise<AuthResult<AppSession>>;
+  logout: () => Promise<void>;
+  forgotPassword: (email: string) => Promise<AuthResult<void>>;
+  changePassword: (newPassword: string) => Promise<AuthResult<void>>;
+  continueAsGuest: () => void;
+  skipWithAnonymousLogin: () => Promise<void>;
+};
+
+const SupabaseAuthContext = createContext<SupabaseAuthApi | null>(null);
+
+/**
+ * Tek seferlik listener'lar burada; children Redux Provider içinde olmalı.
+ */
+export function SupabaseAuthProvider({ children }: { children: React.ReactNode }) {
+  const value = useSupabaseAuthState();
+  return React.createElement(SupabaseAuthContext.Provider, { value }, children);
+}
+
+export const useSupabaseAuth = (): SupabaseAuthApi => {
+  const ctx = useContext(SupabaseAuthContext);
+  if (ctx == null) {
+    throw new Error('useSupabaseAuth must be used within SupabaseAuthProvider');
+  }
+  return ctx;
+};
+
+// ---------------------------------------------------------------------------
+// Internal — sadece SupabaseAuthProvider tarafından çağrılır
+// ---------------------------------------------------------------------------
+
+function useSupabaseAuthState(): SupabaseAuthApi {
   const dispatch = useAppDispatch();
   const { accessToken, refreshToken, expiresAt, status } = useAppSelector((s) => s.auth);
   const refreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -108,17 +148,25 @@ export const useSupabaseAuth = () => {
     if (!expiresAt || !isTokenExpired(expiresAt, REFRESH_BUFFER_SECONDS)) return;
 
     isRefreshingRef.current = true;
-    const result = await refreshSession();
-    isRefreshingRef.current = false;
-
-    if (result.ok) {
-      dispatchRefreshedTokens(result.data);
-    } else if (result.code === 'REFRESH_FAILED') {
-      // Refresh token da geçersiz → oturumu kapat
-      dispatch(logoutAction());
-      toast.error('Oturumunuzun süresi doldu, tekrar giriş yapın.');
+    try {
+      const result = await refreshSession();
+      if (result.ok) {
+        dispatchRefreshedTokens(result.data);
+      } else if (result.code === 'REFRESH_FAILED') {
+        // Refresh token da geçersiz → oturumu kapat
+        dispatch(logoutAction());
+        toast.error('Oturumunuzun süresi doldu, tekrar giriş yapın.');
+      }
+    } finally {
+      isRefreshingRef.current = false;
     }
   }, [expiresAt, dispatch, dispatchRefreshedTokens]);
+
+  // Stable ref — AppState listener'ın her token refresh'te yeniden kayıt olmasını önler
+  const tryRefreshTokenRef = useRef(tryRefreshToken);
+  useEffect(() => {
+    tryRefreshTokenRef.current = tryRefreshToken;
+  }, [tryRefreshToken]);
 
   // -------------------------------------------------------------------------
   // Background refresh interval — app açıkken periyodik kontrol
@@ -153,7 +201,7 @@ export const useSupabaseAuth = () => {
     return () => {
       unsub();
     };
-  }, [dispatch, stopRefreshInterval]);
+  }, []);
 
   // -------------------------------------------------------------------------
   // App state change → refresh when coming to foreground
@@ -162,11 +210,11 @@ export const useSupabaseAuth = () => {
   useEffect(() => {
     const sub = AppState.addEventListener('change', (nextState: AppStateStatus) => {
       if (nextState === 'active' && status === 'authenticated') {
-        tryRefreshToken();
+        tryRefreshTokenRef.current();
       }
     });
     return () => sub.remove();
-  }, [status, tryRefreshToken]);
+  }, [status]);
 
   // -------------------------------------------------------------------------
   // Supabase onAuthStateChange listener
@@ -175,43 +223,67 @@ export const useSupabaseAuth = () => {
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        switch (event) {
-          case 'SIGNED_IN':
-          case 'TOKEN_REFRESHED':
-          case 'USER_UPDATED':
-            if (session) {
-              dispatchSession({
-                user: {
-                  id: session.user.id,
-                  email: session.user.email ?? '',
-                  name:
-                    (session.user.user_metadata?.full_name as string) ??
-                    session.user.email?.split('@')[0] ??
-                    '',
-                  avatarUrl: session.user.user_metadata?.avatar_url as string | undefined,
-                },
-                accessToken: session.access_token,
-                refreshToken: session.refresh_token,
-                expiresAt: session.expires_at ?? Math.floor(Date.now() / 1000) + 3600,
-              });
-              startRefreshInterval();
-            }
-            break;
+        try {
+          switch (event) {
+            case 'SIGNED_IN':
+              if (session) {
+                dispatchSession({
+                  user: {
+                    id: session.user.id,
+                    email: session.user.email ?? '',
+                    name:
+                      (session.user.user_metadata?.full_name as string) ??
+                      session.user.email?.split('@')[0] ??
+                      '',
+                    avatarUrl: session.user.user_metadata?.avatar_url as string | undefined,
+                  },
+                  accessToken: session.access_token,
+                  refreshToken: session.refresh_token,
+                  expiresAt: session.expires_at ?? Math.floor(Date.now() / 1000) + 3600,
+                });
+                startRefreshInterval();
+              }
+              break;
 
-          case 'SIGNED_OUT':
-            stopRefreshInterval();
-            await clearSession();
-            dispatch(logoutAction());
-            setErrorReportingUser(null);
-            break;
+            case 'TOKEN_REFRESHED':
+            case 'USER_UPDATED':
+              if (session) {
+                dispatchSession({
+                  user: {
+                    id: session.user.id,
+                    email: session.user.email ?? '',
+                    name:
+                      (session.user.user_metadata?.full_name as string) ??
+                      session.user.email?.split('@')[0] ??
+                      '',
+                    avatarUrl: session.user.user_metadata?.avatar_url as string | undefined,
+                  },
+                  accessToken: session.access_token,
+                  refreshToken: session.refresh_token,
+                  expiresAt: session.expires_at ?? Math.floor(Date.now() / 1000) + 3600,
+                });
+                // startRefreshInterval burada çağrılmaz — SIGNED_IN'de bir kez başlatıldı
+              }
+              break;
 
-          case 'PASSWORD_RECOVERY':
-            // Deep link ile şifre sıfırlama sayfasına yönlendirme
-            // Navigation API entegrasyonunda handle edilecek
-            break;
+            case 'SIGNED_OUT':
+              stopRefreshInterval();
+              await clearSession();
+              dispatch(logoutAction());
+              setErrorReportingUser(null);
+              break;
 
-          default:
-            break;
+            case 'PASSWORD_RECOVERY':
+              // Deep link ile şifre sıfırlama sayfasına yönlendirme
+              // Navigation API entegrasyonunda handle edilecek
+              break;
+
+            default:
+              break;
+          }
+        } catch (error) {
+          console.error('[Auth] onAuthStateChange error:', event, error);
+          dispatch(setUnauthenticated());
         }
       },
     );
@@ -228,14 +300,16 @@ export const useSupabaseAuth = () => {
 
     dispatch(setLoading(true));
 
-    getCurrentSession().then((result) => {
-      if (result.ok && result.data) {
-        dispatchSession(result.data);
-        startRefreshInterval();
-      } else {
-        dispatch(setUnauthenticated());
-      }
-    });
+    getCurrentSession()
+      .then((result) => {
+        if (result.ok && result.data) {
+          dispatchSession(result.data);
+          startRefreshInterval();
+        } else {
+          dispatch(setUnauthenticated());
+        }
+      })
+      .catch(() => dispatch(setUnauthenticated()));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // intentionally only on mount
 
@@ -276,7 +350,7 @@ export const useSupabaseAuth = () => {
       }
       return result;
     },
-    [dispatch, dispatchSession, startRefreshInterval, setUnauthenticated],
+    [dispatch, dispatchSession, startRefreshInterval],
   );
 
   const loginWithGoogle = useCallback(async () => {
@@ -334,4 +408,4 @@ export const useSupabaseAuth = () => {
     continueAsGuest,
     skipWithAnonymousLogin,
   };
-};
+}

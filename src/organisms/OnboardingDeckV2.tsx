@@ -19,7 +19,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { MotiView } from 'moti';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -27,6 +26,9 @@ import Animated, {
   withSequence,
   withTiming,
   withSpring,
+  interpolate,
+  interpolateColor,
+  cancelAnimation,
   Easing,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
@@ -122,20 +124,25 @@ const SPRING_CONFIG = { damping: 19, stiffness: 185, mass: 0.8 };
 
 const SlideCard = memo<{ slide: V2Slide; isActive: boolean }>(({ slide, isActive }) => {
   const { t } = useI18n();
+  const tx = useSharedValue(isActive ? 0 : scale(30));
+  const sc = useSharedValue(isActive ? 1 : 0.88);
+  const op = useSharedValue(isActive ? 1 : 0.3);
 
-  const animStyle = useAnimatedStyle(() => {
-    const toScale = isActive ? 1 : 0.88;
-    const toTx = isActive ? 0 : scale(30);
-    const toOpacity = isActive ? 1 : 0.3;
-
-    return {
-      transform: [
-        { translateX: withSpring(toTx, SPRING_CONFIG) },
-        { scale: withSpring(toScale, SPRING_CONFIG) },
-      ],
-      opacity: withSpring(toOpacity, SPRING_CONFIG),
+  useEffect(() => {
+    tx.value = withSpring(isActive ? 0 : scale(30), SPRING_CONFIG);
+    sc.value = withSpring(isActive ? 1 : 0.88, SPRING_CONFIG);
+    op.value = withSpring(isActive ? 1 : 0.3, SPRING_CONFIG);
+    return () => {
+      cancelAnimation(tx);
+      cancelAnimation(sc);
+      cancelAnimation(op);
     };
   }, [isActive]);
+
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: tx.value }, { scale: sc.value }],
+    opacity: op.value,
+  }));
 
   return (
     <Animated.View style={animStyle}>
@@ -186,7 +193,13 @@ const BgCircles = memo(() => {
         -1, false,
       );
     }, 400);
-    return () => { clearTimeout(t2); clearTimeout(t3); };
+    return () => {
+      clearTimeout(t2);
+      clearTimeout(t3);
+      cancelAnimation(p1);
+      cancelAnimation(p2);
+      cancelAnimation(p3);
+    };
   }, []);
 
   const s1 = useAnimatedStyle(() => ({ transform: [{ scale: p1.value }] }));
@@ -217,16 +230,25 @@ const circleStyles = StyleSheet.create({
 // Pagination — memo, re-render sadece activeIndex degisince
 // ---------------------------------------------------------------------------
 
-const PaginationDot = memo<{ isActive: boolean }>(({ isActive }) => (
-  <MotiView
-    animate={{
-      width: isActive ? scale(40) : scale(10),
-      backgroundColor: isActive ? palette.onboardingActiveDot : palette.onboardingDotInactive,
-    }}
-    transition={{ type: 'timing', duration: 220 }}
-    style={paginStyles.dot}
-  />
-));
+const PaginationDot = memo<{ isActive: boolean }>(({ isActive }) => {
+  const progress = useSharedValue(isActive ? 1 : 0);
+
+  useEffect(() => {
+    progress.value = withTiming(isActive ? 1 : 0, { duration: 220 });
+    return () => { cancelAnimation(progress); };
+  }, [isActive]);
+
+  const dotAnim = useAnimatedStyle(() => ({
+    width: interpolate(progress.value, [0, 1], [scale(10), scale(40)]),
+    backgroundColor: interpolateColor(
+      progress.value,
+      [0, 1],
+      [palette.onboardingDotInactive, palette.onboardingActiveDot],
+    ),
+  }));
+
+  return <Animated.View style={[paginStyles.dot, dotAnim]} />;
+});
 
 const Pagination = memo<{ total: number; activeIndex: number }>(({ total, activeIndex }) => (
   <View style={paginStyles.row}>
@@ -292,6 +314,23 @@ const backBtnStyles = StyleSheet.create({
 // BottomSection — memo ile izole, re-render sadece activeIndex degisince
 // ---------------------------------------------------------------------------
 
+const BackButtonFade = memo<{ isFirst: boolean; onBack: () => void }>(({ isFirst, onBack }) => {
+  const opacity = useSharedValue(isFirst ? 0 : 1);
+
+  useEffect(() => {
+    opacity.value = withTiming(isFirst ? 0 : 1, { duration: 200 });
+    return () => { cancelAnimation(opacity); };
+  }, [isFirst]);
+
+  const fadeStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
+
+  return (
+    <Animated.View style={[fadeStyle, isFirst ? bottomStyles.backDisabled : undefined]}>
+      <BackCircleButton onPress={onBack} />
+    </Animated.View>
+  );
+});
+
 const BottomSection = memo<{
   activeIndex: number;
   total: number;
@@ -307,13 +346,7 @@ const BottomSection = memo<{
       <Pagination total={total} activeIndex={activeIndex} />
 
       <View style={bottomStyles.buttonRow}>
-        <MotiView
-          animate={{ opacity: isFirst ? 0 : 1 }}
-          transition={{ type: 'timing', duration: 200 }}
-          style={isFirst ? bottomStyles.backDisabled : undefined}
-        >
-          <BackCircleButton onPress={onBack} />
-        </MotiView>
+        <BackButtonFade isFirst={isFirst} onBack={onBack} />
         <GradientButton
           title={isLast ? t('onboarding.getStarted') : t('onboarding.nextDestination')}
           onPress={onNext}

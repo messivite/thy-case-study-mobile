@@ -14,35 +14,47 @@ import {
   type ErrorReportKind,
   type ErrorReportingConfig,
 } from '@/config/errorReporting.config';
-import { store } from '@/store';
+/** Döngüsel import riskini azaltmak için runtime'da yükle */
+function getReduxStore() {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return require('@/store').store as typeof import('@/store').store;
+}
 
-const SENTRY_DSN = process.env.EXPO_PUBLIC_SENTRY_DSN ?? '';
+const SENTRY_DSN = (process.env.EXPO_PUBLIC_SENTRY_DSN ?? '').trim();
+const HAS_DSN = Boolean(SENTRY_DSN);
 
 let isInitialized = false;
 let config: ErrorReportingConfig = defaultErrorReportingConfig;
 
 // ── Init ──────────────────────────────────────────────────────────────────
 
+/**
+ * Her zaman bir kez Sentry.init çağrılır (DSN yokken bile).
+ * DSN yokken veya __DEV__ iken enabled:false — aksi halde Sentry.wrap / native
+ * modül init edilmeden kullanılırsa girişte crash oluşabiliyor.
+ */
 export function initErrorReporting(overrides?: Partial<ErrorReportingConfig>): void {
-  if (isInitialized || !SENTRY_DSN) return;
+  if (isInitialized) return;
 
   if (overrides) config = { ...config, ...overrides };
 
+  const sendInThisBuild = HAS_DSN && !__DEV__;
+
   Sentry.init({
-    dsn: SENTRY_DSN,
-    tracesSampleRate: 1.0,
-    enableAutoSessionTracking: true,
-    attachScreenshot: true,
-    debug: __DEV__,
+    dsn: HAS_DSN ? SENTRY_DSN : undefined,
+    enabled: sendInThisBuild,
+    tracesSampleRate: sendInThisBuild ? 1.0 : 0,
+    enableAutoSessionTracking: sendInThisBuild,
+    attachScreenshot: false,
+    debug: __DEV__ && HAS_DSN,
     environment: __DEV__ ? 'development' : 'production',
-    enabled: !__DEV__,
   });
 
   isInitialized = true;
 }
 
 export function isErrorReportingActive(): boolean {
-  return isInitialized && !__DEV__;
+  return isInitialized && HAS_DSN && !__DEV__;
 }
 
 // ── Auth snapshot ─────────────────────────────────────────────────────────
@@ -52,7 +64,7 @@ function getAuthSnapshot(): {
   authStatus: string;
   isGuest: boolean;
 } {
-  const { auth } = store.getState();
+  const { auth } = getReduxStore().getState();
   if (!auth.user) {
     return { user: null, authStatus: auth.status, isGuest: auth.isGuest };
   }
