@@ -1,0 +1,5 @@
+{
+  "NSCameraUsageDescription": "Camera access is required for profile photo.",
+  "NSPhotoLibraryUsageDescription": "Gallery access is required to select a profile photo.",
+  "CFBundleDisplayName": "THY Assistant"
+}

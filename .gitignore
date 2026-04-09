@@ -5,6 +5,7 @@ node_modules/
 
 # Expo
 .expo/
+.expo-shared/
 dist/
 web-build/
 expo-env.d.ts
@@ -17,6 +18,11 @@ expo-env.d.ts
 *.p12
 *.key
 *.mobileprovision
+
+# React Native build artifacts
+*.apk
+*.aab
+*.ipa
 
 # Metro
 .metro-health-check*
@@ -31,6 +37,8 @@ yarn-error.*
 *.pem
 
 # local env files
+.env
+.env.local
 .env*.local
 
 # typescript

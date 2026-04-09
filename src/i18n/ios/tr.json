@@ -1,0 +1,5 @@
+{
+  "NSCameraUsageDescription": "Profil fotoğrafı için kamera erişimi gereklidir.",
+  "NSPhotoLibraryUsageDescription": "Profil fotoğrafı seçmek için galeri erişimi gereklidir.",
+  "CFBundleDisplayName": "THY Asistan"
+}
