@@ -113,9 +113,16 @@ export default function OnboardingScreen() {
     }
   }, [activeIndex, isLast, handleComplete]);
 
+  const isNavigatingRef = useRef(false);
   const handleSkip = useCallback(async () => {
-    await skipWithAnonymousLogin();
-    router.replace('/(tabs)');
+    if (isNavigatingRef.current) return;
+    isNavigatingRef.current = true;
+    try {
+      await skipWithAnonymousLogin();
+      router.push('/(tabs)');
+    } catch {
+      isNavigatingRef.current = false;
+    }
   }, [skipWithAnonymousLogin]);
 
   if (devConfig.onboardingV2Enabled) {

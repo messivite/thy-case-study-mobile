@@ -26,8 +26,6 @@ import Animated, {
   withSequence,
   withTiming,
   withSpring,
-  interpolate,
-  interpolateColor,
   cancelAnimation,
   Easing,
 } from 'react-native-reanimated';
@@ -127,8 +125,14 @@ const SlideCard = memo<{ slide: V2Slide; isActive: boolean }>(({ slide, isActive
   const tx = useSharedValue(isActive ? 0 : scale(30));
   const sc = useSharedValue(isActive ? 1 : 0.88);
   const op = useSharedValue(isActive ? 1 : 0.3);
+  const isMountedRef = useRef(false);
 
   useEffect(() => {
+    if (!isMountedRef.current) {
+      // İlk mount — initial değerler zaten set, animasyon başlatma
+      isMountedRef.current = true;
+      return;
+    }
     tx.value = withSpring(isActive ? 0 : scale(30), SPRING_CONFIG);
     sc.value = withSpring(isActive ? 1 : 0.88, SPRING_CONFIG);
     op.value = withSpring(isActive ? 1 : 0.3, SPRING_CONFIG);
@@ -168,13 +172,16 @@ const BgCircles = memo(() => {
   const p3 = useSharedValue(1);
 
   useEffect(() => {
-    p1.value = withRepeat(
-      withSequence(
-        withTiming(1.28, { duration: 3600, easing: Easing.inOut(Easing.sin) }),
-        withTiming(1.0, { duration: 3600, easing: Easing.inOut(Easing.sin) }),
-      ),
-      -1, false,
-    );
+    // İlk animasyonu bir frame sonraya ertele — New Arch worklet init race'ini önler
+    const t1 = setTimeout(() => {
+      p1.value = withRepeat(
+        withSequence(
+          withTiming(1.28, { duration: 3600, easing: Easing.inOut(Easing.sin) }),
+          withTiming(1.0, { duration: 3600, easing: Easing.inOut(Easing.sin) }),
+        ),
+        -1, false,
+      );
+    }, 50);
     const t2 = setTimeout(() => {
       p2.value = withRepeat(
         withSequence(
@@ -183,7 +190,7 @@ const BgCircles = memo(() => {
         ),
         -1, false,
       );
-    }, 900);
+    }, 950);
     const t3 = setTimeout(() => {
       p3.value = withRepeat(
         withSequence(
@@ -192,8 +199,9 @@ const BgCircles = memo(() => {
         ),
         -1, false,
       );
-    }, 400);
+    }, 450);
     return () => {
+      clearTimeout(t1);
       clearTimeout(t2);
       clearTimeout(t3);
       cancelAnimation(p1);
@@ -231,23 +239,31 @@ const circleStyles = StyleSheet.create({
 // ---------------------------------------------------------------------------
 
 const PaginationDot = memo<{ isActive: boolean }>(({ isActive }) => {
-  const progress = useSharedValue(isActive ? 1 : 0);
+  const width = useSharedValue(isActive ? scale(40) : scale(10));
+  const isMountedRef = useRef(false);
 
   useEffect(() => {
-    progress.value = withTiming(isActive ? 1 : 0, { duration: 220 });
-    return () => { cancelAnimation(progress); };
+    if (!isMountedRef.current) {
+      isMountedRef.current = true;
+      return;
+    }
+    width.value = withTiming(isActive ? scale(40) : scale(10), { duration: 220 });
+    return () => { cancelAnimation(width); };
   }, [isActive]);
 
   const dotAnim = useAnimatedStyle(() => ({
-    width: interpolate(progress.value, [0, 1], [scale(10), scale(40)]),
-    backgroundColor: interpolateColor(
-      progress.value,
-      [0, 1],
-      [palette.onboardingDotInactive, palette.onboardingActiveDot],
-    ),
+    width: width.value,
   }));
 
-  return <Animated.View style={[paginStyles.dot, dotAnim]} />;
+  return (
+    <Animated.View
+      style={[
+        paginStyles.dot,
+        dotAnim,
+        { backgroundColor: isActive ? palette.onboardingActiveDot : palette.onboardingDotInactive },
+      ]}
+    />
+  );
 });
 
 const Pagination = memo<{ total: number; activeIndex: number }>(({ total, activeIndex }) => (
@@ -316,8 +332,13 @@ const backBtnStyles = StyleSheet.create({
 
 const BackButtonFade = memo<{ isFirst: boolean; onBack: () => void }>(({ isFirst, onBack }) => {
   const opacity = useSharedValue(isFirst ? 0 : 1);
+  const isMountedRef = useRef(false);
 
   useEffect(() => {
+    if (!isMountedRef.current) {
+      isMountedRef.current = true;
+      return;
+    }
     opacity.value = withTiming(isFirst ? 0 : 1, { duration: 200 });
     return () => { cancelAnimation(opacity); };
   }, [isFirst]);

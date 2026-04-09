@@ -1,21 +1,19 @@
 import React, { useState, useCallback } from 'react';
-import { View, TouchableOpacity, StyleSheet } from 'react-native';
+import { TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { toast } from 'sonner-native';
 import { ChatLayout } from '@/templates/ChatLayout';
 import { MessageList } from '@/organisms/MessageList';
 import { ChatInput } from '@/organisms/ChatInput';
+import { AppHeader } from '@/organisms/AppHeader';
 import { ModelSelector } from '@/molecules/ModelSelector';
 import { ModelBadge } from '@/atoms/Badge';
-import { Text } from '@/atoms/Text';
 import { useChatSession } from '@/hooks/useChatSession';
 import { useTheme } from '@/hooks/useTheme';
 import { useHaptics } from '@/hooks/useHaptics';
 import { useI18n } from '@/hooks/useI18n';
-import { spacing } from '@/constants/spacing';
 import { palette } from '@/constants/colors';
-import { fontFamily } from '@/constants/typography';
 
 export default function HomeScreen() {
   const { colors } = useTheme();
@@ -53,28 +51,30 @@ export default function HomeScreen() {
   }, [fetchNextPage]);
 
   const header = (
-    <View style={[styles.header, { backgroundColor: colors.headerBg, borderBottomColor: 'rgba(255,255,255,0.1)' }]}>
-      <TouchableOpacity
-        style={styles.modelBadgeBtn}
-        onPress={() => setModelSelectorVisible(true)}
-      >
-        <ModelBadge modelId={selectedModel} />
-        <Ionicons name="chevron-down" size={14} color={palette.white} style={{ marginLeft: 4 }} />
-      </TouchableOpacity>
-
-      <Text variant="h4" color={palette.white} style={{ fontFamily: fontFamily.semiBold }}>
-        {t('home.headerTitle')}
-      </Text>
-
-      <TouchableOpacity onPress={handleNewChat} style={styles.newChatBtn}>
-        <Ionicons name="add-circle-outline" size={24} color={palette.white} />
-      </TouchableOpacity>
-    </View>
+    <AppHeader
+      title={t('home.headerTitle')}
+      leftContent={
+        <TouchableOpacity
+          style={styles.modelBadgeBtn}
+          onPress={() => setModelSelectorVisible(true)}
+        >
+          <ModelBadge modelId={selectedModel} />
+          <Ionicons name="chevron-down" size={14} color={palette.white} style={{ marginLeft: 4 }} />
+        </TouchableOpacity>
+      }
+      rightIcons={[
+        {
+          name: 'add-circle-outline',
+          onPress: handleNewChat,
+          accessibilityLabel: 'Yeni sohbet',
+        },
+      ]}
+    />
   );
 
   return (
     <>
-      <SafeAreaView style={{ backgroundColor: colors.headerBg }} edges={['top']} />
+      <SafeAreaView style={{ backgroundColor: palette.primary }} edges={['top']} />
       <ChatLayout
         header={header}
         input={
@@ -110,19 +110,8 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing[4],
-    paddingVertical: spacing[3],
-    borderBottomWidth: 1,
-  },
   modelBadgeBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  newChatBtn: {
-    padding: spacing[1],
   },
 });

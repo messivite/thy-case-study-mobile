@@ -36,7 +36,7 @@ export default function SplashPage() {
     }
     const sessionResult = await getCurrentSession();
     if (sessionResult.ok && sessionResult.data) {
-      router.replace('/(tabs)');
+      router.push('/(tabs)');
     } else {
       router.replace('/(auth)/welcome');
     }

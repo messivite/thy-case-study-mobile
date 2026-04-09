@@ -55,7 +55,27 @@ function AuthProvider() {
         <Stack.Screen name="index" />
         <Stack.Screen name="(onboarding)" />
         <Stack.Screen name="(auth)" />
-        <Stack.Screen name="(tabs)" />
+        <Stack.Screen
+          name="(tabs)"
+          options={{
+            presentation: 'formSheet',
+            contentStyle: { backgroundColor: 'transparent' },
+            sheetAllowedDetents: [1],
+            sheetGrabberVisible: false,
+            gestureEnabled: false,
+          }}
+        />
+        <Stack.Screen
+          name="webview-modal"
+          options={{
+            presentation: 'formSheet',
+            sheetAllowedDetents: [0.92],
+            sheetGrabberVisible: true,
+            sheetCornerRadius: 20,
+            gestureEnabled: true,
+            contentStyle: { backgroundColor: 'transparent' },
+          }}
+        />
       </Stack>
       <Toaster
         position="top-center"

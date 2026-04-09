@@ -22,7 +22,7 @@ export default function WelcomeScreen() {
 
   useEffect(() => {
     if (status === 'authenticated' || status === 'guest') {
-      router.replace('/(tabs)');
+      router.push('/(tabs)');
     }
   }, [status]);
 
@@ -31,7 +31,7 @@ export default function WelcomeScreen() {
 
   const handleGuest = () => {
     continueAsGuest();
-    router.replace('/(tabs)');
+    router.push('/(tabs)');
   };
 
   const handleGoogle = async () => {

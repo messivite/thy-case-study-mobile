@@ -39,7 +39,7 @@ export default function LoginScreen() {
     const result = await login(data.email, data.password);
     if (result.ok) {
       toast.success(t('toast.loginSuccess'));
-      router.replace('/(tabs)');
+      router.push('/(tabs)');
     } else {
       toast.error(result.error);
     }
