@@ -13,6 +13,7 @@ import { ModelSelector } from '@/molecules/ModelSelector';
 import { Avatar } from '@/atoms/Avatar';
 import { useChatSession } from '@/hooks/useChatSession';
 import { useAuth } from '@/hooks/useAuth';
+import { useWhoIAm } from '@/hooks/useWhoIAm';
 import { useI18n } from '@/hooks/useI18n';
 import { palette } from '@/constants/colors';
 import { ChatHistoryDrawer } from '@/organisms/ChatHistoryDrawer';
@@ -20,6 +21,7 @@ import { WelcomeQuickAction } from '@/organisms/HomeWelcomePanel';
 
 export default function HomeScreen() {
   const { user, isGuest } = useAuth();
+  const { displayName: profileDisplayName, profileReady } = useWhoIAm();
   const { t } = useI18n();
   const {
     messages,
@@ -91,10 +93,12 @@ export default function HomeScreen() {
 
   const displayName = useMemo(() => {
     if (isGuest) return t('settings.guest');
+    // me API'den gelen displayName once gelir, yoksa auth user.name'e fall back
+    if (profileReady && profileDisplayName) return profileDisplayName;
     const raw = user?.name?.trim();
     if (!raw) return t('settings.guest');
     return raw.split(' ')[0];
-  }, [isGuest, user?.name, t]);
+  }, [isGuest, profileReady, profileDisplayName, user?.name, t]);
 
   const handleQuickActionPress = useCallback(
     (action: WelcomeQuickAction) => {

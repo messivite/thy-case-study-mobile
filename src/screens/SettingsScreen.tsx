@@ -15,6 +15,7 @@ import { SettingsSection } from '@/organisms/SettingsSection';
 import { UsageStatsCard } from '@/molecules/UsageStatsCard';
 import { useTheme } from '@/hooks/useTheme';
 import { useAuth } from '@/hooks/useAuth';
+import { useWhoIAm } from '@/hooks/useWhoIAm';
 import { useI18n } from '@/hooks/useI18n';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { useNotificationPermission } from '@/hooks/useNotificationPermission';
@@ -30,7 +31,8 @@ type SettingsRowItem = ComponentProps<typeof SettingsSection>['items'][number];
 export default function SettingsScreen() {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
-  const { user, isGuest, logout } = useAuth();
+  const { isGuest, logout } = useAuth();
+  const { displayName: profileDisplayName, email: profileEmail, avatarUrl, isAnonymous } = useWhoIAm();
   const { t, changeLanguage, currentLanguage } = useI18n();
   const dispatch = useAppDispatch();
   const { theme, streamingEnabled } = useAppSelector((s) => s.settings);
@@ -173,9 +175,9 @@ export default function SettingsScreen() {
     ]);
   };
 
-  const guestLike = isGuest || user?.isAnonymous === true;
-  const displayName = guestLike ? t('settings.guest') : (user?.name ?? '');
-  const displayEmail = guestLike ? t('settings.loginToSync') : (user?.email ?? '');
+  const guestLike = isGuest || isAnonymous;
+  const displayName = guestLike || !profileDisplayName ? t('settings.guest') : profileDisplayName;
+  const displayEmail = guestLike ? t('settings.loginToSync') : (profileEmail || '');
   const appVersion = Constants.expoConfig?.version ?? '1.0.0';
   const buildNumber =
     Platform.OS === 'ios'
@@ -225,7 +227,7 @@ export default function SettingsScreen() {
             style={[styles.profileCard, { borderColor: colors.border }]}
           >
             <View style={styles.profileAvatarWrap}>
-              <Avatar name={displayName || 'G'} uri={user?.avatarUrl} size="lg" />
+              <Avatar name={displayName || 'G'} uri={avatarUrl} size="lg" />
               {!isGuest && (
                 <View style={[styles.onlineDot, { backgroundColor: palette.success }]} />
               )}
