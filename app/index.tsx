@@ -2,7 +2,6 @@ import React from 'react';
 import { InteractionManager } from 'react-native';
 import { router } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { devConfig } from '@/config/devConfig';
 import { mmkvStorage, STORAGE_KEYS } from '@/lib/mmkv';
 import { getCurrentSession } from '@/services/authService';
 import { AppSplashScreen } from '@/screens/AppSplashScreen';
@@ -23,15 +22,6 @@ function schedulePostSplashNavigation(action: () => void) {
 
 export default function SplashPage() {
   const navigate = async () => {
-    if (devConfig.onboardingInitial) {
-      schedulePostSplashNavigation(() => router.replace('/(onboarding)'));
-      return;
-    }
-    if (devConfig.welcomeInitial) {
-      schedulePostSplashNavigation(() => router.replace('/(auth)/welcome'));
-      return;
-    }
-
     const onboardingDone = mmkvStorage.getBoolean(STORAGE_KEYS.ONBOARDING_DONE);
     if (!onboardingDone) {
       schedulePostSplashNavigation(() => router.replace('/(onboarding)'));

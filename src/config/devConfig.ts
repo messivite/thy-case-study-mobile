@@ -1,6 +1,5 @@
 export const devConfig = {
-  onboardingInitial: false,
-  welcomeInitial: true,
+  /** false = klasik FlatList onboarding; true = V2 deck (prod). */
   onboardingV2Enabled: true,
   onboardingV2BackgroundVariant: 'red' as 'red' | 'navy' | 'gradient',
   /** Onboarding'de ag sheet UI onizlemesi: null = gercek NetInfo */

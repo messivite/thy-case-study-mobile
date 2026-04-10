@@ -29,7 +29,6 @@ import { useAuth } from '@/hooks/useAuth';
 import { useI18n } from '@/hooks/useI18n';
 import { palette } from '@/constants/colors';
 import { spacing, radius } from '@/constants/spacing';
-import { devConfig } from '@/config/devConfig';
 import { WELCOME_GUEST_AUTH_FLOW } from '@/constants/welcomeGuestAuthFlow';
 import {
   WELCOME_HERO_RATIO,
@@ -91,21 +90,13 @@ export default function WelcomeScreen() {
   const fadeAnim = useRef(new RNAnimated.Value(0)).current;
 
   useEffect(() => {
+    if (status !== 'unauthenticated') return;
     RNAnimated.timing(fadeAnim, {
       toValue: 1,
       duration: WELCOME_MOUNT_FADE_DURATION_MS,
       useNativeDriver: true,
     }).start();
-  }, [fadeAnim]);
-
-  useEffect(() => {
-    if (devConfig.welcomeInitial) return;
-    if (status === 'authenticated' || status === 'guest') {
-      router.replace('/(tabs)');
-    }
-  }, [status]);
-
-  if (!devConfig.welcomeInitial && (status === 'authenticated' || status === 'guest')) return null;
+  }, [status, fadeAnim]);
 
   const openInfoSite = () => {
     openExternalLink({
@@ -157,6 +148,26 @@ export default function WelcomeScreen() {
   );
 
   const fadeStyle = useMemo(() => [styles.fill, { opacity: fadeAnim }], [fadeAnim]);
+
+  if (status === 'authenticated' || status === 'guest') {
+    return null;
+  }
+
+  if (status === 'idle') {
+    return (
+      <View style={styles.screenWrap}>
+        <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
+        <LinearGradient
+          colors={gradientColors}
+          locations={gradientLocations}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={styles.gradientFill}
+          pointerEvents="none"
+        />
+      </View>
+    );
+  }
 
   return (
     <View style={screenWrapStyle}>

@@ -43,7 +43,7 @@ import {
 } from '@/services/authService';
 import { establishAnonymousSession } from '@/store/thunks/authThunks';
 import { supabase } from '@/services/supabase';
-import { clearSession } from '@/services/authService';
+import { clearSession, persistSession } from '@/services/authService';
 import { mmkvStorage, STORAGE_KEYS } from '@/lib/mmkv';
 import { authEventEmitter, AUTH_EVENTS } from '@/services/api';
 import { authMutex } from '@/lib/authMutex';
@@ -239,7 +239,9 @@ function useSupabaseAuthState(): SupabaseAuthApi {
           switch (event) {
             case 'SIGNED_IN':
               if (session) {
-                dispatchSession(mapSupabaseSession(session));
+                const appSession = mapSupabaseSession(session);
+                dispatchSession(appSession);
+                void persistSession(appSession);
                 startRefreshInterval();
               }
               break;
@@ -247,8 +249,9 @@ function useSupabaseAuthState(): SupabaseAuthApi {
             case 'TOKEN_REFRESHED':
             case 'USER_UPDATED':
               if (session) {
-                dispatchSession(mapSupabaseSession(session));
-                // startRefreshInterval burada çağrılmaz — SIGNED_IN'de bir kez başlatıldı
+                const appSession = mapSupabaseSession(session);
+                dispatchSession(appSession);
+                void persistSession(appSession);
               }
               break;
 

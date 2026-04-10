@@ -229,6 +229,7 @@ Release workflow’u önce test + typecheck koşar; kırmızıysa APK üretilmez
 
 ## TODOS
 
+- [ ] **Web — token güvenliği (XSS):** Üretim web’de access/refresh token’ları yalnızca tarayıcıda (`localStorage` / `sessionStorage` / JS bellek) tutmak XSS’te çalınabilir. Hedef mimari: oturumu **kendi backend / BFF** katmanınızdan yönetmek (ör. refresh token **httpOnly + Secure + SameSite** cookie, kısa ömürlü access token stratejisi veya sunucu tarafı session). Böylece tokenlar JS’in doğrudan okuyamayacağı kanaldan döner; XSS yüzeyi azalır. (Ayrıntılı not: `src/lib/secureStore.web.ts`.)
 - [ ] Web Push için service worker kaydı ekle (`navigator.serviceWorker.register`).
 - [ ] Web'de notification izin akışını ekle (`Notification.requestPermission`).
 - [ ] `PushManager.subscribe` ile web subscription al (VAPID public key ile).
