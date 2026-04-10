@@ -9,7 +9,7 @@
  * Animasyon: Tek seferlik mount fade-in, sallantı/spring yok.
  */
 
-import React, { useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import {
   View,
   StyleSheet,
@@ -30,7 +30,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { toast } from 'sonner-native';
+import { toast } from '@/lib/toast';
 import { FormField } from '@/molecules/FormField';
 import { Logo } from '@/atoms/Logo';
 import { SurfaceIconPressable } from '@/atoms/SurfaceIconPressable';
@@ -63,24 +63,28 @@ import {
   type WelcomeLoginFormValues,
 } from '@/schemas/authForms';
 
+// Sabit — Platform.OS runtime'da değişmez
+const IS_WEB = Platform.OS === 'web';
+const KeyboardContainer: ComponentType<any> = IS_WEB ? View : KeyboardAvoidingView;
+const keyboardContainerProps = IS_WEB ? {} : { behavior: 'padding' as const, keyboardVerticalOffset: 0 };
+const safeAreaEdges = ['top', 'bottom'] as const;
+const gradientColors = [...WELCOME_SKY_GRADIENT] as [string, string, ...string[]];
+const gradientLocations = [...WELCOME_SKY_GRADIENT_LOCATIONS] as [number, number, ...number[]];
+
 export default function WelcomeScreen() {
   const insets = useSafeAreaInsets();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const viewportHeight = windowHeight > 0 ? windowHeight : 844;
 
-  /** Web: onboarding ile aynı — içerik sütunu max telefon genişliği; mobil: etkisiz */
   const contentScale = useMemo(() => {
-    if (Platform.OS !== 'web') {
-      return scale;
-    }
+    if (!IS_WEB) return scale;
     const w = windowWidth > 0 ? windowWidth : DESIGN_BASE_WIDTH;
     const cw = Math.max(1, Math.min(w, DESIGN_BASE_WIDTH));
     return (n: number) => Math.round((cw / DESIGN_BASE_WIDTH) * n);
   }, [windowWidth]);
 
-  /** Web: StyleSheet içindeki scale() tam ekran genişliğine göre şişmesin — contentScale ile üstüne yaz */
   const webScaled = useMemo(() => {
-    if (Platform.OS !== 'web') return null;
+    if (!IS_WEB) return null;
     const cs = contentScale;
     return {
       heroTitle: { fontSize: cs(28), lineHeight: cs(34) },
@@ -94,37 +98,46 @@ export default function WelcomeScreen() {
       googleBtn: { height: cs(52) },
       googleBtnText: { fontSize: cs(15) },
       footerLink: { fontSize: cs(12) },
-      guestSigningToast: {
-        paddingVertical: cs(14),
-        paddingHorizontal: cs(22),
-      },
+      guestSigningToast: { paddingVertical: cs(14), paddingHorizontal: cs(22) },
       guestSigningToastText: { fontSize: cs(15) },
     };
   }, [contentScale]);
+
   const { t } = useI18n();
   const { status } = useAuth();
   const { login, loginWithGoogle, continueAsGuest } = useSupabaseAuth();
   const [guestAuthPending, setGuestAuthPending] = useState(false);
   const mountedRef = useRef(true);
 
-  // Mount fade-in — tek seferlik, RN Animated (Reanimated bağımlılığı yok burada)
   const fadeAnim = useRef(new RNAnimated.Value(0)).current;
-
   const loginSchema = useMemo(() => welcomeLoginSchema(t), [t]);
 
-  const { control, handleSubmit, watch, formState: { isSubmitting } } =
+  const { control, handleSubmit, watch, reset } =
     useValidatedForm<WelcomeLoginFormValues>(loginSchema, {
       defaultValues: { email: '', password: '' },
     });
 
   const email = watch('email');
   const password = watch('password');
+
+  const isLoginPending = status === 'loading';
   const canSubmit = useMemo(
     () => loginSchema.safeParse({ email, password }).success,
     [loginSchema, email, password],
   );
+  const anyPending = isLoginPending || guestAuthPending;
 
+  // --- Animations ---
   const loginBtnOpacity = useSharedValue(WELCOME_LOGIN_BUTTON_DISABLED_OPACITY);
+  const guestDimOpacity = useSharedValue(1);
+
+  const loginBtnAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: loginBtnOpacity.value,
+  }));
+  const guestDimAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: guestDimOpacity.value,
+  }));
+
   useEffect(() => {
     loginBtnOpacity.value = withTiming(
       canSubmit ? 1 : WELCOME_LOGIN_BUTTON_DISABLED_OPACITY,
@@ -132,21 +145,12 @@ export default function WelcomeScreen() {
     );
   }, [canSubmit, loginBtnOpacity]);
 
-  const loginBtnAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: loginBtnOpacity.value,
-  }));
-
-  const guestDimOpacity = useSharedValue(1);
   useEffect(() => {
     guestDimOpacity.value = withTiming(
-      guestAuthPending ? WELCOME_GUEST_AUTH_FLOW.dimTargetOpacity : 1,
+      anyPending ? WELCOME_GUEST_AUTH_FLOW.dimTargetOpacity : 1,
       { duration: WELCOME_GUEST_AUTH_FLOW.dimDurationMs },
     );
-  }, [guestAuthPending, guestDimOpacity]);
-
-  const guestDimAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: guestDimOpacity.value,
-  }));
+  }, [anyPending, guestDimOpacity]);
 
   useEffect(() => {
     RNAnimated.timing(fadeAnim, {
@@ -154,16 +158,11 @@ export default function WelcomeScreen() {
       duration: WELCOME_MOUNT_FADE_DURATION_MS,
       useNativeDriver: true,
     }).start();
-  }, []);
-
-  useEffect(() => {
     mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
+    return () => { mountedRef.current = false; };
   }, []);
 
-  // Authenticated guard — devConfig.welcomeInitial aktifse bypass et
+  // Authenticated guard
   useEffect(() => {
     if (devConfig.welcomeInitial) return;
     if (status === 'authenticated' || status === 'guest') {
@@ -173,21 +172,34 @@ export default function WelcomeScreen() {
 
   if (!devConfig.welcomeInitial && (status === 'authenticated' || status === 'guest')) return null;
 
-  const onSubmit = async (data: WelcomeLoginFormValues) => {
+  // --- Handlers ---
+  const onSubmit = useCallback(async (data: WelcomeLoginFormValues) => {
     const result = await login(data.email, data.password);
     if (result.ok) {
       toast.success(t('toast.loginSuccess'));
+      router.replace('/(tabs)');
     } else {
-      toast.error(result.error);
+      // Şifre alanını temizle, email'i koru
+      reset({ email: data.email, password: '' });
+
+      const errorKey = (() => {
+        switch (result.errorCode) {
+          case 'INVALID_CREDENTIALS': return 'toast.loginErrorInvalidCredentials';
+          case 'EMAIL_NOT_CONFIRMED': return 'toast.loginErrorEmailNotConfirmed';
+          case 'RATE_LIMITED': return 'toast.loginErrorRateLimited';
+          default: return 'toast.loginErrorUnknown';
+        }
+      })();
+      toast.error(t(errorKey));
     }
-  };
+  }, [login, t, reset]);
 
-  const handleGoogle = async () => {
+  const handleGoogle = useCallback(async () => {
     await loginWithGoogle();
-  };
+  }, [loginWithGoogle]);
 
-  const handleGuest = async () => {
-    if (guestAuthPending) return;
+  const handleGuest = useCallback(async () => {
+    if (anyPending) return;
     setGuestAuthPending(true);
     toast.custom(
       <View style={[styles.guestSigningToast, webScaled?.guestSigningToast]}>
@@ -195,252 +207,245 @@ export default function WelcomeScreen() {
           {t('auth.loggingIn')}
         </Text>
       </View>,
-      {
-        id: WELCOME_GUEST_SIGNING_TOAST_ID,
-        ...WELCOME_GUEST_AUTH_FLOW.signingToast,
-      },
+      { id: WELCOME_GUEST_SIGNING_TOAST_ID, ...WELCOME_GUEST_AUTH_FLOW.signingToast },
     );
     try {
       await continueAsGuest();
       router.replace('/(tabs)');
     } finally {
       toast.dismiss(WELCOME_GUEST_SIGNING_TOAST_ID);
-      if (mountedRef.current) {
-        setGuestAuthPending(false);
-      }
+      if (mountedRef.current) setGuestAuthPending(false);
     }
-  };
+  }, [anyPending, continueAsGuest, t, webScaled]);
 
-  const openInfoSite = () => {
+  const handleRegister = useCallback(() => {
+    router.push('/(auth)/register');
+  }, []);
+
+  const openInfoSite = useCallback(() => {
     openExternalLink({
       url: WELCOME_INFO_SITE_URL,
       openInApp: () =>
         router.push({
           pathname: '/webview-modal',
-          params: {
-            url: WELCOME_INFO_SITE_URL,
-            title: t('auth.infoSiteWebTitle'),
-          },
+          params: { url: WELCOME_INFO_SITE_URL, title: t('auth.infoSiteWebTitle') },
         }),
     });
-  };
+  }, [t]);
 
-  const screenWrapStyle = useMemo(() => {
+  // --- Computed styles ---
+  const screenWrapStyle = useMemo<(ViewStyle | false | undefined)[]>(() => {
     const s: (ViewStyle | false | undefined)[] = [styles.screenWrap];
-    if (Platform.OS === 'web') {
-      s.push({ minHeight: viewportHeight, height: viewportHeight });
-    }
+    if (IS_WEB) s.push({ minHeight: viewportHeight, height: viewportHeight });
     return s;
   }, [viewportHeight]);
 
-  const KeyboardContainer: ComponentType<any> =
-    Platform.OS === 'web' ? View : KeyboardAvoidingView;
-  const keyboardContainerProps =
-    Platform.OS === 'web' ? {} : { behavior: 'padding' as const, keyboardVerticalOffset: 0 };
+  const heroStyle = useMemo(
+    () => [styles.hero, { height: viewportHeight * WELCOME_HERO_RATIO }],
+    [viewportHeight],
+  );
+
+  const infoSiteAnchorStyle = useMemo(
+    () => [
+      styles.infoSiteAnchor,
+      { top: IS_WEB ? insets.top + spacing[3] : 0, right: spacing[4] + insets.right },
+      guestDimAnimatedStyle,
+    ],
+    [insets.top, insets.right, guestDimAnimatedStyle],
+  );
+
+  const pageGradientStyle = useMemo(
+    () => [styles.pageGradient, IS_WEB && styles.pageGradientWebRoot],
+    [],
+  );
+
+  const pageGradientInnerStyle = useMemo(
+    () => [styles.pageGradientInner, IS_WEB && styles.pageGradientInnerWeb],
+    [],
+  );
+
+  const safeOverlayStyle = useMemo(
+    () => [styles.safeOverlay, IS_WEB && styles.safeOverlayWeb],
+    [],
+  );
+
+  const fadeStyle = useMemo(() => [styles.fill, { opacity: fadeAnim }], [fadeAnim]);
 
   return (
     <View style={screenWrapStyle}>
       <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
       <LinearGradient
-        colors={[...WELCOME_SKY_GRADIENT]}
-        locations={[...WELCOME_SKY_GRADIENT_LOCATIONS]}
+        colors={gradientColors}
+        locations={gradientLocations}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
         style={styles.gradientFill}
         pointerEvents="none"
       />
-      <SafeAreaView
-        style={[styles.safeOverlay, Platform.OS === 'web' && styles.safeOverlayWeb]}
-        edges={['top', 'bottom']}
-      >
-        <RNAnimated.View
-          style={[
-            styles.fill,
-            { opacity: fadeAnim },
-          ]}
-        >
-        <KeyboardContainer
-          style={styles.fill}
-          {...keyboardContainerProps}
-        >
-          <View
-            style={[styles.pageGradient, Platform.OS === 'web' && styles.pageGradientWebRoot]}
-          >
-            <View
-              style={[
-                styles.pageGradientInner,
-                Platform.OS === 'web' && styles.pageGradientInnerWeb,
-              ]}
-            >
-              <Animated.View
-                style={[
-                  styles.infoSiteAnchor,
-                  {
-                    // Web’de çoğu ortamda insets.top = 0 (notch yok). En azından tasarım boşluğu ekle.
-                    top: Platform.OS === 'web' ? insets.top + spacing[3] : 0,
-                    right: spacing[4] + insets.right,
-                  },
-                  guestDimAnimatedStyle,
-                ]}
-                pointerEvents={guestAuthPending ? 'none' : 'auto'}
-              >
-                <SurfaceIconPressable
-                  shape="circle"
-                  width={contentScale(44)}
-                  height={contentScale(44)}
-                  onPress={openInfoSite}
-                  disabled={guestAuthPending}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  accessibilityLabel={t('auth.infoSiteA11yLabel')}
+      <SafeAreaView style={safeOverlayStyle} edges={safeAreaEdges}>
+        <RNAnimated.View style={fadeStyle}>
+          <KeyboardContainer style={styles.fill} {...keyboardContainerProps}>
+            <View style={pageGradientStyle}>
+              <View style={pageGradientInnerStyle}>
+                <Animated.View
+                  style={infoSiteAnchorStyle}
+                  pointerEvents={anyPending ? 'none' : 'auto'}
                 >
-                  <Ionicons
-                    name="information-circle-outline"
-                    size={contentScale(24)}
-                    color={palette.primary}
-                  />
-                </SurfaceIconPressable>
-              </Animated.View>
+                  <SurfaceIconPressable
+                    shape="circle"
+                    width={contentScale(44)}
+                    height={contentScale(44)}
+                    onPress={openInfoSite}
+                    disabled={anyPending}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    accessibilityLabel={t('auth.infoSiteA11yLabel')}
+                  >
+                    <Ionicons
+                      name="information-circle-outline"
+                      size={contentScale(24)}
+                      color={palette.primary}
+                    />
+                  </SurfaceIconPressable>
+                </Animated.View>
 
-              <View style={[styles.hero, { height: viewportHeight * WELCOME_HERO_RATIO }]}>
-                <View style={styles.heroLogoBox}>
-                  <Logo width={contentScale(100)} />
-                </View>
-                <View style={styles.heroTitleWrap}>
-                  <Text style={[styles.heroTitle, webScaled?.heroTitle]}>
-                    {t('auth.welcomeHeroLine1')}
-                    {'\n'}
-                    <Text style={[styles.heroTitleAccent, webScaled?.heroTitleAccent]}>
-                      {t('auth.welcomeHeroLine2')}
-                    </Text>
-                  </Text>
-                </View>
-                <Text style={[styles.heroSub, webScaled?.heroSub]}>
-                  {t('auth.welcomeSubtitle')}
-                </Text>
-              </View>
-
-              {/* Klavye açılınca sıkışır; form alta yapışır, scroll yok */}
-              <Animated.View
-                style={guestDimAnimatedStyle}
-                pointerEvents={guestAuthPending ? 'none' : 'auto'}
-              >
-              <View style={styles.flexSpacer} />
-
-              <View style={styles.formSection}>
-              <View style={styles.formBlock}>
-              {/* Email */}
-              <Text style={[styles.fieldLabel, webScaled?.fieldLabel]}>{t('auth.email')}</Text>
-              <FormField
-                control={control}
-                name="email"
-                placeholder={t('auth.emailPlaceholder')}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoComplete="email"
-                editable={!guestAuthPending}
-                leftIcon={<Ionicons name="mail-outline" size={18} color={palette.gray400} />}
-              />
-
-              {/* Password */}
-              <View style={styles.passwordHeader}>
-                <Text style={[styles.fieldLabel, webScaled?.fieldLabel]}>{t('auth.password')}</Text>
-                <TouchableOpacity
-                  onPress={() => {}}
-                  hitSlop={{ top: 8, bottom: 8, left: 12, right: 4 }}
-                  disabled={guestAuthPending}
-                  accessibilityState={{ disabled: guestAuthPending }}
-                >
-                  <Text style={[styles.forgotText, webScaled?.forgotText]}>{t('auth.forgotPassword')}</Text>
-                </TouchableOpacity>
-              </View>
-              <FormField
-                control={control}
-                name="password"
-                placeholder={t('auth.passwordPlaceholder')}
-                secure
-                editable={!guestAuthPending}
-              />
-
-              {/* Login butonu — geçersiz formda disabled + düşük opacity (Reanimated) */}
-              <Animated.View style={loginBtnAnimatedStyle}>
-                <TouchableOpacity
-                  style={[styles.loginBtn, webScaled?.loginBtn]}
-                  onPress={handleSubmit(onSubmit)}
-                  activeOpacity={0.85}
-                  disabled={!canSubmit || isSubmitting || guestAuthPending}
-                  accessibilityState={{ disabled: !canSubmit || isSubmitting || guestAuthPending }}
-                >
-                  {isSubmitting ? (
-                    <View style={styles.loginBtnRow}>
-                      <Ionicons
-                        name="reload-outline"
-                        size={contentScale(16)}
-                        color={palette.white}
-                      />
-                      <Text style={[styles.loginBtnText, webScaled?.loginBtnText]}>
-                        {t('auth.loggingIn')}
+                <View style={heroStyle}>
+                  <View style={styles.heroLogoBox}>
+                    <Logo width={contentScale(100)} />
+                  </View>
+                  <View style={styles.heroTitleWrap}>
+                    <Text style={[styles.heroTitle, webScaled?.heroTitle]}>
+                      {t('auth.welcomeHeroLine1')}
+                      {'\n'}
+                      <Text style={[styles.heroTitleAccent, webScaled?.heroTitleAccent]}>
+                        {t('auth.welcomeHeroLine2')}
                       </Text>
-                    </View>
-                  ) : (
-                    <Text style={[styles.loginBtnText, webScaled?.loginBtnText]}>
-                      {t('auth.login')}
                     </Text>
-                  )}
-                </TouchableOpacity>
-              </Animated.View>
-
-              {/* Divider */}
-              <View style={styles.divider}>
-                <View style={styles.dividerLine} />
-                <Text style={[styles.dividerText, webScaled?.dividerText]}>
-                  {t('auth.orContinueWith')}
-                </Text>
-                <View style={styles.dividerLine} />
-              </View>
-
-              {/* Google */}
-              <TouchableOpacity
-                style={[styles.googleBtn, webScaled?.googleBtn]}
-                onPress={handleGoogle}
-                activeOpacity={0.85}
-                disabled={guestAuthPending}
-                accessibilityState={{ disabled: guestAuthPending }}
-              >
-                <Ionicons name="logo-google" size={contentScale(18)} color="#4285F4" />
-                <Text style={[styles.googleBtnText, webScaled?.googleBtnText]}>
-                  {t('auth.loginWithGoogle')}
-                </Text>
-              </TouchableOpacity>
-              </View>
-
-              <View style={styles.footer}>
-                <TouchableOpacity
-                  onPress={handleGuest}
-                  hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
-                  disabled={guestAuthPending}
-                  accessibilityState={{ disabled: guestAuthPending }}
-                >
-                  <Text style={[styles.footerLink, webScaled?.footerLink]}>
-                    {t('auth.continueAsGuest')}
+                  </View>
+                  <Text style={[styles.heroSub, webScaled?.heroSub]}>
+                    {t('auth.welcomeSubtitle')}
                   </Text>
-                </TouchableOpacity>
-                <View style={styles.footerDot} />
-                <TouchableOpacity
-                  onPress={() => router.push('/(auth)/register')}
-                  hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
-                  disabled={guestAuthPending}
-                  accessibilityState={{ disabled: guestAuthPending }}
+                </View>
+
+                <Animated.View
+                  style={guestDimAnimatedStyle}
+                  pointerEvents={anyPending ? 'none' : 'auto'}
                 >
-                  <Text style={[styles.footerLink, webScaled?.footerLink]}>
-                    {t('auth.register')}
-                  </Text>
-                </TouchableOpacity>
+                  <View style={styles.flexSpacer} />
+                  <View style={styles.formSection}>
+                    <View style={styles.formBlock}>
+                      {/* Email */}
+                      <Text style={[styles.fieldLabel, webScaled?.fieldLabel]}>{t('auth.email')}</Text>
+                      <FormField
+                        control={control}
+                        name="email"
+                        placeholder={t('auth.emailPlaceholder')}
+                        keyboardType="email-address"
+                        autoCapitalize="none"
+                        autoComplete="email"
+                        editable={!anyPending}
+                        leftIcon={<Ionicons name="mail-outline" size={18} color={palette.gray400} />}
+                      />
+
+                      {/* Password */}
+                      <View style={styles.passwordHeader}>
+                        <Text style={[styles.fieldLabel, webScaled?.fieldLabel]}>{t('auth.password')}</Text>
+                        <TouchableOpacity
+                          onPress={() => {}}
+                          hitSlop={{ top: 8, bottom: 8, left: 12, right: 4 }}
+                          disabled={anyPending}
+                          accessibilityState={{ disabled: anyPending }}
+                        >
+                          <Text style={[styles.forgotText, webScaled?.forgotText]}>{t('auth.forgotPassword')}</Text>
+                        </TouchableOpacity>
+                      </View>
+                      <FormField
+                        control={control}
+                        name="password"
+                        placeholder={t('auth.passwordPlaceholder')}
+                        secure
+                        editable={!anyPending}
+                      />
+
+                      {/* Login button */}
+                      <Animated.View style={loginBtnAnimatedStyle}>
+                        <TouchableOpacity
+                          style={[styles.loginBtn, webScaled?.loginBtn]}
+                          onPress={handleSubmit(onSubmit)}
+                          activeOpacity={0.85}
+                          disabled={!canSubmit || anyPending}
+                          accessibilityState={{ disabled: !canSubmit || anyPending }}
+                        >
+                          {isLoginPending ? (
+                            <View style={styles.loginBtnRow}>
+                              <Ionicons
+                                name="reload-outline"
+                                size={contentScale(16)}
+                                color={palette.white}
+                              />
+                              <Text style={[styles.loginBtnText, webScaled?.loginBtnText]}>
+                                {t('auth.loggingIn')}
+                              </Text>
+                            </View>
+                          ) : (
+                            <Text style={[styles.loginBtnText, webScaled?.loginBtnText]}>
+                              {t('auth.login')}
+                            </Text>
+                          )}
+                        </TouchableOpacity>
+                      </Animated.View>
+
+                      {/* Divider */}
+                      <View style={styles.divider}>
+                        <View style={styles.dividerLine} />
+                        <Text style={[styles.dividerText, webScaled?.dividerText]}>
+                          {t('auth.orContinueWith')}
+                        </Text>
+                        <View style={styles.dividerLine} />
+                      </View>
+
+                      {/* Google */}
+                      <TouchableOpacity
+                        style={[styles.googleBtn, webScaled?.googleBtn]}
+                        onPress={handleGoogle}
+                        activeOpacity={0.85}
+                        disabled={anyPending}
+                        accessibilityState={{ disabled: anyPending }}
+                      >
+                        <Ionicons name="logo-google" size={contentScale(18)} color="#4285F4" />
+                        <Text style={[styles.googleBtnText, webScaled?.googleBtnText]}>
+                          {t('auth.loginWithGoogle')}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    <View style={styles.footer}>
+                      <TouchableOpacity
+                        onPress={handleGuest}
+                        hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
+                        disabled={anyPending}
+                        accessibilityState={{ disabled: anyPending }}
+                      >
+                        <Text style={[styles.footerLink, webScaled?.footerLink]}>
+                          {t('auth.continueAsGuest')}
+                        </Text>
+                      </TouchableOpacity>
+                      <View style={styles.footerDot} />
+                      <TouchableOpacity
+                        onPress={handleRegister}
+                        hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
+                        disabled={anyPending}
+                        accessibilityState={{ disabled: anyPending }}
+                      >
+                        <Text style={[styles.footerLink, webScaled?.footerLink]}>
+                          {t('auth.register')}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </Animated.View>
               </View>
-              </View>
-              </Animated.View>
             </View>
-          </View>
-        </KeyboardContainer>
+          </KeyboardContainer>
         </RNAnimated.View>
       </SafeAreaView>
     </View>
@@ -500,8 +505,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     zIndex: 2,
   },
-
-  // Hero (yükseklik: windowHeight * WELCOME_HERO_RATIO — useWindowDimensions)
   hero: {
     alignItems: 'center',
     justifyContent: 'flex-end',
@@ -509,7 +512,6 @@ const styles = StyleSheet.create({
     paddingBottom: spacing[2],
     gap: spacing[2],
   },
-  /** Onboarding V2 header ile aynı THY logo kabı */
   heroLogoBox: {
     backgroundColor: 'rgba(255,255,255,0.92)',
     borderRadius: radius.lg,
@@ -548,7 +550,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: scale(20),
   },
-
   formSection: {
     flexShrink: 0,
     paddingHorizontal: spacing[6],
@@ -558,8 +559,6 @@ const styles = StyleSheet.create({
   formBlock: {
     flexShrink: 0,
   },
-
-  // Form
   fieldLabel: {
     fontFamily: fontFamily.semiBold,
     fontSize: scale(12),
@@ -581,8 +580,6 @@ const styles = StyleSheet.create({
     color: palette.primary,
     letterSpacing: 0.2,
   },
-
-  // Login button
   loginBtn: {
     backgroundColor: palette.primary,
     borderRadius: radius.xl,
@@ -607,8 +604,6 @@ const styles = StyleSheet.create({
     color: palette.white,
     letterSpacing: 0.2,
   },
-
-  // Divider
   divider: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -626,8 +621,6 @@ const styles = StyleSheet.create({
     color: palette.gray400,
     letterSpacing: 0.2,
   },
-
-  // Google
   googleBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -645,8 +638,6 @@ const styles = StyleSheet.create({
     color: palette.gray700,
     letterSpacing: 0.1,
   },
-
-  // Footer
   footer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -667,7 +658,6 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: palette.gray300,
   },
-
   guestSigningToast: {
     backgroundColor: '#000000',
     paddingVertical: scale(14),

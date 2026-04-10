@@ -77,6 +77,7 @@ export type ThemeColors = {
   textSecondary: string;
   textDisabled: string;
   inputBg: string;
+  error: string;
   navBg: string;
   tabBarBg: string;
   tabBarBorder: string;
@@ -97,6 +98,7 @@ export const lightColors: ThemeColors = {
   textSecondary: palette.gray500,
   textDisabled: palette.gray300,
   inputBg: palette.white,
+  error: palette.error,
   navBg: palette.white,
   tabBarBg: palette.white,
   tabBarBorder: palette.gray100,
@@ -117,6 +119,7 @@ export const darkColors: ThemeColors = {
   textSecondary: palette.gray400,
   textDisabled: palette.gray600,
   inputBg: palette.darkInput,
+  error: palette.error,
   navBg: palette.darkCard,
   tabBarBg: palette.darkCard,
   tabBarBorder: palette.darkBorder,

@@ -16,7 +16,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { useHaptics } from '@/hooks/useHaptics';
 import { palette } from '@/constants/colors';
 import { radius, spacing } from '@/constants/spacing';
-import { toast } from 'sonner-native';
+import { toast } from '@/lib/toast';
 import { useI18n } from '@/hooks/useI18n';
 
 type Props = {

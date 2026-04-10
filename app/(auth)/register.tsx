@@ -16,7 +16,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { spacing } from '@/constants/spacing';
-import { toast } from 'sonner-native';
+import { toast } from '@/lib/toast';
 
 const registerSchema = z
   .object({

@@ -180,6 +180,10 @@
   },
   "toast": {
     "loginSuccess": "Giriş başarılı",
+    "loginErrorInvalidCredentials": "E-posta veya şifre hatalı",
+    "loginErrorEmailNotConfirmed": "E-posta adresinizi doğrulayın",
+    "loginErrorRateLimited": "Lütfen 60 saniye bekleyip tekrar deneyin",
+    "loginErrorUnknown": "Giriş yapılamadı, lütfen tekrar deneyin",
     "logoutSuccess": "Çıkış yapıldı",
     "registerSuccess": "Hesap oluşturuldu",
     "messageSent": "Mesaj gönderildi",

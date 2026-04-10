@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   TextInput,
   View,
@@ -11,12 +11,13 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
-  interpolateColor,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
 import { radius, spacing } from '@/constants/spacing';
 import { fontFamily, fontSize } from '@/constants/typography';
+
+const DURATION = 200;
 
 type Props = TextInputProps & {
   leftIcon?: React.ReactNode;
@@ -33,30 +34,45 @@ export const Input: React.FC<Props> = ({
   style,
   ...props
 }) => {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
+  const errorColor = colors.error;
   const [focused, setFocused] = useState(false);
   const [secureVisible, setSecureVisible] = useState(false);
-  const progress = useSharedValue(0);
+
+  // 3 durumu tek shared value ile yönet:
+  // 0 = idle, 1 = focused, 2 = error
+  const borderProgress = useSharedValue(0);
+
+  useEffect(() => {
+    if (error) {
+      borderProgress.value = withTiming(2, { duration: DURATION });
+    } else if (focused) {
+      borderProgress.value = withTiming(1, { duration: DURATION });
+    } else {
+      borderProgress.value = withTiming(0, { duration: DURATION });
+    }
+  }, [error, focused, borderProgress]);
 
   const handleFocus = () => {
     setFocused(true);
-    progress.value = withTiming(1, { duration: 200 });
     props.onFocus?.(null as any);
   };
 
   const handleBlur = () => {
     setFocused(false);
-    progress.value = withTiming(0, { duration: 200 });
     props.onBlur?.(null as any);
   };
 
-  const animatedBorder = useAnimatedStyle(() => ({
-    borderColor: interpolateColor(
-      progress.value,
-      [0, 1],
-      [error ? '#EF4444' : colors.border, error ? '#EF4444' : colors.primary],
-    ),
-  }));
+  const animatedBorder = useAnimatedStyle(() => {
+    'worklet';
+    if (borderProgress.value >= 1.5) {
+      return { borderColor: errorColor };
+    }
+    if (borderProgress.value >= 0.5) {
+      return { borderColor: colors.primary };
+    }
+    return { borderColor: colors.border };
+  });
 
   return (
     <View>
@@ -65,7 +81,6 @@ export const Input: React.FC<Props> = ({
           styles.container,
           { backgroundColor: colors.inputBg },
           animatedBorder,
-          error ? styles.errorBorder : undefined,
         ]}
       >
         {leftIcon && <View style={styles.iconLeft}>{leftIcon}</View>}
@@ -102,7 +117,7 @@ export const Input: React.FC<Props> = ({
       </Animated.View>
       {error ? (
         <Animated.Text
-          style={[styles.errorText, { color: '#EF4444', fontFamily: fontFamily.regular, fontSize: fontSize.xs }]}
+          style={[styles.errorText, { color: errorColor, fontFamily: fontFamily.regular, fontSize: fontSize.xs }]}
         >
           {error}
         </Animated.Text>
@@ -129,9 +144,6 @@ const styles = StyleSheet.create({
   },
   iconRight: {
     marginLeft: spacing[2],
-  },
-  errorBorder: {
-    borderColor: '#EF4444',
   },
   errorText: {
     marginTop: spacing[1],

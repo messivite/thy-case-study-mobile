@@ -11,7 +11,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { spacing } from '@/constants/spacing';
 import { useI18n } from '@/hooks/useI18n';
 import { stripTextForSpeech, speechLocaleForAppLang } from '@/lib/chatSpeech';
-import { toast } from 'sonner-native';
+import { toast } from '@/lib/toast';
 
 type Props = {
   messages: Message[];

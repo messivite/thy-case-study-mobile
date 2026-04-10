@@ -16,7 +16,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { spacing } from '@/constants/spacing';
-import { toast } from 'sonner-native';
+import { toast } from '@/lib/toast';
 
 const loginSchema = z.object({
   email: z.string().min(1, 'E-posta zorunludur').email('Geçerli bir e-posta girin'),

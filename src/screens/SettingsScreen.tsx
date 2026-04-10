@@ -6,7 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { MotiView } from '@/lib/motiView';
 import { Ionicons } from '@expo/vector-icons';
-import { toast } from 'sonner-native';
+import { toast } from '@/lib/toast';
 import Constants from 'expo-constants';
 import { Avatar } from '@/atoms/Avatar';
 import { Text } from '@/atoms/Text';

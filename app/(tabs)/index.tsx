@@ -4,7 +4,7 @@ import { router } from 'expo-router';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { toast } from 'sonner-native';
+import { toast } from '@/lib/toast';
 import { ChatLayout } from '@/templates/ChatLayout';
 import { MessageList } from '@/organisms/MessageList';
 import { ChatInput } from '@/organisms/ChatInput';

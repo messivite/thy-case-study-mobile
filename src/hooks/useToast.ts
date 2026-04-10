@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { toast } from 'sonner-native';
+import { toast } from '@/lib/toast';
 
 export const useToast = () => {
   const success = useCallback((message: string) => {

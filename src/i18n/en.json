@@ -180,6 +180,10 @@
   },
   "toast": {
     "loginSuccess": "Signed in successfully",
+    "loginErrorInvalidCredentials": "Incorrect email or password",
+    "loginErrorEmailNotConfirmed": "Please verify your email address",
+    "loginErrorRateLimited": "Please wait 60 seconds and try again",
+    "loginErrorUnknown": "Sign in failed, please try again",
     "logoutSuccess": "Signed out",
     "registerSuccess": "Account created",
     "messageSent": "Message sent",

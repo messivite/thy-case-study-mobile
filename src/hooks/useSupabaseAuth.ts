@@ -48,7 +48,7 @@ import { mmkvStorage, STORAGE_KEYS } from '@/lib/mmkv';
 import { authEventEmitter, AUTH_EVENTS } from '@/services/api';
 import { authMutex } from '@/lib/authMutex';
 import { setErrorReportingUser } from '@/services/errorReporting';
-import { toast } from 'sonner-native';
+import { toast } from '@/lib/toast';
 import type { AuthStatus } from '@/types/auth.types';
 import type { AuthResult } from '@/services/authService';
 
