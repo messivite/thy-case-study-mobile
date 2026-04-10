@@ -7,7 +7,8 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { I18nextProvider } from 'react-i18next';
 import { Toaster } from 'sonner-native';
 import { Stack } from 'expo-router';
-import { StyleSheet } from 'react-native';
+import { Platform, StyleSheet } from 'react-native';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 
 import { store } from '@/store';
 import { queryClient } from '@/services/queryClient';
@@ -23,6 +24,11 @@ initErrorReporting();
 function RootLayout() {
   return (
     <GestureHandlerRootView style={styles.root}>
+      <KeyboardProvider
+        statusBarTranslucent={Platform.OS === 'android'}
+        navigationBarTranslucent={Platform.OS === 'android'}
+        preserveEdgeToEdge={Platform.OS === 'android'}
+      >
       <AppErrorBoundary>
         <SafeAreaProvider>
           <Provider store={store}>
@@ -35,6 +41,7 @@ function RootLayout() {
           </Provider>
         </SafeAreaProvider>
       </AppErrorBoundary>
+      </KeyboardProvider>
     </GestureHandlerRootView>
   );
 }
@@ -73,7 +80,8 @@ function AuthProvider() {
             sheetGrabberVisible: true,
             sheetCornerRadius: 20,
             gestureEnabled: true,
-            contentStyle: { backgroundColor: 'transparent' },
+            // Opaque + flex: sheet içinde WebView / loader alanı doğru yükseklik alsın (transparent layout çökertiyordu)
+            contentStyle: { flex: 1, backgroundColor: '#FFFFFF' },
           }}
         />
       </Stack>

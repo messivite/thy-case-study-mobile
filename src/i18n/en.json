@@ -44,6 +44,10 @@
   },
   "auth": {
     "welcomeTitle": "Welcome",
+    "welcomeHeroLine1": "Welcome to",
+    "welcomeHeroLine2": "THY Study Case",
+    "infoSiteWebTitle": "mustafaaksoy.dev",
+    "infoSiteA11yLabel": "Open portfolio website",
     "welcomeSubtitle": "Sign in to THY AI Assistant",
     "loginWithGoogle": "Sign in with Google",
     "loginWithEmail": "Sign in with Email",
@@ -54,6 +58,7 @@
     "passwordPlaceholder": "Enter your password",
     "forgotPassword": "Forgot Password",
     "login": "Sign In",
+    "loggingIn": "Signing in...",
     "register": "Register",
     "noAccount": "Don't have an account?",
     "haveAccount": "Already have an account?",

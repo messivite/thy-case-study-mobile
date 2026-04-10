@@ -4,64 +4,68 @@
  * Onboarding bittikten sonra gösterilen ilk auth ekranı.
  * Ekran görüntüsündeki tasarımı referans alır:
  *   - Üst %45: açık mavi-gri gradient hero (uçak ikonu, başlık, alt başlık)
- *   - Alt %55: beyaz kart — email/password giriş formu, login butonu,
- *              Google ile giriş, misafir devam linki
+ *   - Alt: form alanı (beyaz kart yok — gradient ile devam), giriş, Google, linkler
  *
  * Animasyon: Tek seferlik mount fade-in, sallantı/spring yok.
  */
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import {
   View,
   StyleSheet,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
   TouchableOpacity,
   Animated as RNAnimated,
-  Dimensions,
+  useWindowDimensions,
+  StatusBar,
 } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { LinearGradient } from 'expo-linear-gradient';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import { Ionicons } from '@expo/vector-icons';
 import { toast } from 'sonner-native';
 import { FormField } from '@/molecules/FormField';
+import { Logo } from '@/atoms/Logo';
+import { SurfaceIconPressable } from '@/atoms/SurfaceIconPressable';
 import { Text } from '@/atoms/Text';
 import { useAuth } from '@/hooks/useAuth';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { useI18n } from '@/hooks/useI18n';
+import { useValidatedForm } from '@/hooks/useValidatedForm';
 import { palette } from '@/constants/colors';
 import { spacing, radius } from '@/constants/spacing';
 import { fontFamily, fontSize } from '@/constants/typography';
 import { scale } from '@/lib/responsive';
-
-// ---------------------------------------------------------------------------
-// Form schema
-// ---------------------------------------------------------------------------
-
-const loginSchema = z.object({
-  email: z.string().min(1, 'E-posta zorunludur').email('Geçerli bir e-posta girin'),
-  password: z.string().min(6, 'Şifre en az 6 karakter olmalıdır'),
-});
-
-type LoginForm = z.infer<typeof loginSchema>;
+import {
+  welcomeLoginSchema,
+  type WelcomeLoginFormValues,
+} from '@/schemas/authForms';
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-const { height: SCREEN_H } = Dimensions.get('window');
-const HERO_RATIO = 0.38;
+/** Daha alçak hero → form alanı yukarı, tek ekranda sabit layout */
+const HERO_RATIO = 0.30;
+
+/** Tam ekran dikey gökyüzü → açık ton (referans: üst #B6D8E4, alt #F0F7F9) */
+const WELCOME_SKY_GRADIENT = ['#B6D8E4', '#C9E4ED', '#E0F0F5', '#F0F7F9'] as const;
+const WELCOME_SKY_LOCATIONS = [0, 0.32, 0.68, 1] as const;
+
+const INFO_SITE_URL = 'https://mustafaaksoy.dev/';
 
 // ---------------------------------------------------------------------------
 // Screen
 // ---------------------------------------------------------------------------
 
 export default function WelcomeScreen() {
+  const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const { t } = useI18n();
   const { status } = useAuth();
   const { login, loginWithGoogle, continueAsGuest } = useSupabaseAuth();
@@ -86,12 +90,30 @@ export default function WelcomeScreen() {
 
   if (status === 'authenticated' || status === 'guest') return null;
 
-  const { control, handleSubmit, formState: { isSubmitting } } = useForm<LoginForm>({
-    resolver: zodResolver(loginSchema),
-    defaultValues: { email: '', password: '' },
-  });
+  const loginSchema = useMemo(() => welcomeLoginSchema(t), [t]);
 
-  const onSubmit = async (data: LoginForm) => {
+  const { control, handleSubmit, watch, formState: { isSubmitting } } =
+    useValidatedForm<WelcomeLoginFormValues>(loginSchema, {
+      defaultValues: { email: '', password: '' },
+    });
+
+  const email = watch('email');
+  const password = watch('password');
+  const canSubmit = useMemo(
+    () => loginSchema.safeParse({ email, password }).success,
+    [loginSchema, email, password],
+  );
+
+  const loginBtnOpacity = useSharedValue(0.42);
+  useEffect(() => {
+    loginBtnOpacity.value = withTiming(canSubmit ? 1 : 0.42, { duration: 220 });
+  }, [canSubmit, loginBtnOpacity]);
+
+  const loginBtnAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: loginBtnOpacity.value,
+  }));
+
+  const onSubmit = async (data: WelcomeLoginFormValues) => {
     const result = await login(data.email, data.password);
     if (result.ok) {
       toast.success(t('toast.loginSuccess'));
@@ -109,48 +131,80 @@ export default function WelcomeScreen() {
     router.replace('/(tabs)');
   };
 
+  const openInfoSite = () => {
+    router.push({
+      pathname: '/webview-modal',
+      params: {
+        url: INFO_SITE_URL,
+        title: t('auth.infoSiteWebTitle'),
+      },
+    });
+  };
+
   return (
-    <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
-      <RNAnimated.View style={[styles.fill, { opacity: fadeAnim }]}>
+    <View style={styles.screenWrap}>
+      <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
+      <LinearGradient
+        colors={[...WELCOME_SKY_GRADIENT]}
+        locations={[...WELCOME_SKY_LOCATIONS]}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+        style={styles.gradientFill}
+        pointerEvents="none"
+      />
+      <SafeAreaView style={styles.safeOverlay} edges={['bottom']}>
+        <RNAnimated.View
+          style={[
+            styles.fill,
+            { opacity: fadeAnim, paddingTop: insets.top },
+          ]}
+        >
         <KeyboardAvoidingView
           style={styles.fill}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior="padding"
           keyboardVerticalOffset={0}
         >
-          <ScrollView
-            style={styles.fill}
-            contentContainerStyle={styles.scroll}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-            bounces={false}
-          >
-            {/* ── Hero ─────────────────────────────────────────── */}
-            <LinearGradient
-              colors={['#D8E8F5', '#E8F2FA', '#F0F6FC']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 0.4, y: 1 }}
-              style={styles.hero}
-            >
-              {/* Uçak ikonu */}
-              <View style={styles.planeCircle}>
-                <Ionicons name="airplane" size={scale(28)} color={palette.primary} />
+          <View style={styles.pageGradient}>
+              <SurfaceIconPressable
+                shape="circle"
+                width={scale(44)}
+                height={scale(44)}
+                onPress={openInfoSite}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityLabel={t('auth.infoSiteA11yLabel')}
+                style={[
+                  styles.infoSiteAnchor,
+                  { top: 0, right: spacing[4] + insets.right },
+                ]}
+              >
+                <Ionicons
+                  name="information-circle-outline"
+                  size={scale(24)}
+                  color={palette.primary}
+                />
+              </SurfaceIconPressable>
+
+              <View style={[styles.hero, { height: windowHeight * HERO_RATIO }]}>
+                <View style={styles.heroLogoBox}>
+                  <Logo width={scale(100)} />
+                </View>
+                <View style={styles.heroTitleWrap}>
+                  <Text style={styles.heroTitle}>
+                    {t('auth.welcomeHeroLine1')}
+                    {'\n'}
+                    <Text style={styles.heroTitleAccent}>{t('auth.welcomeHeroLine2')}</Text>
+                  </Text>
+                </View>
+                <Text style={styles.heroSub}>
+                  {t('auth.welcomeSubtitle')}
+                </Text>
               </View>
 
-              {/* Başlık */}
-              <Text style={styles.heroTitle}>
-                Elevate Your{'\n'}
-                <Text style={styles.heroTitleAccent}>Journey</Text>
-              </Text>
+              {/* Klavye açılınca sıkışır; form alta yapışır, scroll yok */}
+              <View style={styles.flexSpacer} />
 
-              {/* Alt başlık */}
-              <Text style={styles.heroSub}>
-                {t('auth.welcomeSubtitle')}
-              </Text>
-            </LinearGradient>
-
-            {/* ── Form Card ────────────────────────────────────── */}
-            <View style={styles.card}>
-
+              <View style={styles.formSection}>
+              <View style={styles.formBlock}>
               {/* Email */}
               <Text style={styles.fieldLabel}>{t('auth.email')}</Text>
               <FormField
@@ -180,22 +234,25 @@ export default function WelcomeScreen() {
                 secure
               />
 
-              {/* Login butonu */}
-              <TouchableOpacity
-                style={[styles.loginBtn, isSubmitting && styles.loginBtnDisabled]}
-                onPress={handleSubmit(onSubmit)}
-                activeOpacity={0.85}
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? (
-                  <View style={styles.loginBtnRow}>
-                    <Ionicons name="reload-outline" size={scale(16)} color={palette.white} />
-                    <Text style={styles.loginBtnText}>Giriş yapılıyor...</Text>
-                  </View>
-                ) : (
-                  <Text style={styles.loginBtnText}>{t('auth.login')}</Text>
-                )}
-              </TouchableOpacity>
+              {/* Login butonu — geçersiz formda disabled + düşük opacity (Reanimated) */}
+              <Animated.View style={loginBtnAnimatedStyle}>
+                <TouchableOpacity
+                  style={styles.loginBtn}
+                  onPress={handleSubmit(onSubmit)}
+                  activeOpacity={0.85}
+                  disabled={!canSubmit || isSubmitting}
+                  accessibilityState={{ disabled: !canSubmit || isSubmitting }}
+                >
+                  {isSubmitting ? (
+                    <View style={styles.loginBtnRow}>
+                      <Ionicons name="reload-outline" size={scale(16)} color={palette.white} />
+                      <Text style={styles.loginBtnText}>{t('auth.loggingIn')}</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.loginBtnText}>{t('auth.login')}</Text>
+                  )}
+                </TouchableOpacity>
+              </Animated.View>
 
               {/* Divider */}
               <View style={styles.divider}>
@@ -213,8 +270,8 @@ export default function WelcomeScreen() {
                 <Ionicons name="logo-google" size={scale(18)} color="#4285F4" />
                 <Text style={styles.googleBtnText}>{t('auth.loginWithGoogle')}</Text>
               </TouchableOpacity>
+              </View>
 
-              {/* Alt linkler */}
               <View style={styles.footer}>
                 <TouchableOpacity onPress={handleGuest} hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}>
                   <Text style={styles.footerLink}>{t('auth.continueAsGuest')}</Text>
@@ -227,12 +284,12 @@ export default function WelcomeScreen() {
                   <Text style={styles.footerLink}>{t('auth.register')}</Text>
                 </TouchableOpacity>
               </View>
-
-            </View>
-          </ScrollView>
+              </View>
+          </View>
         </KeyboardAvoidingView>
-      </RNAnimated.View>
-    </SafeAreaView>
+        </RNAnimated.View>
+      </SafeAreaView>
+    </View>
   );
 }
 
@@ -241,40 +298,63 @@ export default function WelcomeScreen() {
 // ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
-  root: {
+  screenWrap: {
     flex: 1,
-    backgroundColor: '#D8E8F5',
+    backgroundColor: '#F0F7F9',
+  },
+  gradientFill: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  safeOverlay: {
+    flex: 1,
+    backgroundColor: 'transparent',
   },
   fill: {
     flex: 1,
   },
-  scroll: {
-    flexGrow: 1,
+  pageGradient: {
+    flex: 1,
+    minHeight: 0,
+    backgroundColor: 'transparent',
+    position: 'relative',
+    flexDirection: 'column',
+  },
+  flexSpacer: {
+    flex: 1,
+    minHeight: 0,
+  },
+  infoSiteAnchor: {
+    position: 'absolute',
+    zIndex: 2,
   },
 
-  // Hero
+  // Hero (yükseklik: windowHeight * HERO_RATIO — useWindowDimensions)
   hero: {
-    height: SCREEN_H * HERO_RATIO,
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-end',
     paddingHorizontal: spacing[8],
-    gap: spacing[3],
+    paddingBottom: spacing[2],
+    gap: spacing[2],
   },
-  planeCircle: {
-    width: scale(56),
-    height: scale(56),
-    borderRadius: 999,
-    backgroundColor: palette.white,
-    alignItems: 'center',
-    justifyContent: 'center',
+  /** Onboarding V2 header ile aynı THY logo kabı */
+  heroLogoBox: {
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[2],
+    marginBottom: spacing[1],
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 8,
     elevation: 3,
-    marginBottom: spacing[1],
+  },
+  heroTitleWrap: {
+    width: '100%',
+    alignItems: 'center',
   },
   heroTitle: {
+    width: '100%',
     fontFamily: fontFamily.bold,
     fontSize: scale(28),
     color: palette.navy,
@@ -286,6 +366,7 @@ const styles = StyleSheet.create({
     fontSize: scale(28),
     color: palette.primary,
     lineHeight: scale(34),
+    textAlign: 'center',
   },
   heroSub: {
     fontFamily: fontFamily.regular,
@@ -295,16 +376,14 @@ const styles = StyleSheet.create({
     lineHeight: scale(20),
   },
 
-  // Card
-  card: {
-    flex: 1,
-    backgroundColor: palette.white,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+  formSection: {
+    flexShrink: 0,
     paddingHorizontal: spacing[6],
-    paddingTop: spacing[7],
-    paddingBottom: spacing[8],
-    marginTop: -spacing[4],
+    paddingTop: spacing[2],
+    paddingBottom: spacing[4],
+  },
+  formBlock: {
+    flexShrink: 0,
   },
 
   // Form
@@ -343,9 +422,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.28,
     shadowRadius: 10,
     elevation: 4,
-  },
-  loginBtnDisabled: {
-    opacity: 0.7,
   },
   loginBtnRow: {
     flexDirection: 'row',
@@ -402,7 +478,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: spacing[6],
+    paddingTop: spacing[4],
     gap: spacing[3],
   },
   footerLink: {

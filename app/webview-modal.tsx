@@ -21,6 +21,7 @@ import {
   TouchableOpacity,
   Linking,
   Platform,
+  useWindowDimensions,
 } from 'react-native';
 import { WebView, type WebViewNavigation } from 'react-native-webview';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -122,11 +123,12 @@ const LogoLoader: React.FC = () => {
 
 const loaderStyles = StyleSheet.create({
   container: {
-    ...StyleSheet.absoluteFillObject,
+    flex: 1,
+    width: '100%',
+    minHeight: 0,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: palette.white,
-    zIndex: 10,
   },
   ring: {
     position: 'absolute',
@@ -257,6 +259,7 @@ function extractHost(url: string): string {
 
 export default function WebViewModal() {
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const { url, title } = useLocalSearchParams<WebViewModalParams>();
 
   const webViewRef = useRef<WebView>(null);
@@ -297,8 +300,19 @@ export default function WebViewModal() {
     );
   }
 
+  const showLoadingOverlay = isLoading && !hasError;
+
   return (
-    <View style={[styles.root, { paddingBottom: insets.bottom }]}>
+    <View
+      style={[
+        styles.root,
+        {
+          paddingBottom: insets.bottom,
+          // Form sheet detenti (_layout sheetAllowedDetents) ile uyumlu taban; flex bazen 0 kalıyordu
+          minHeight: Math.round(windowHeight * 0.92),
+        },
+      ]}
+    >
       {/* Header */}
       <AppHeader
         title={headerTitle}
@@ -317,12 +331,12 @@ export default function WebViewModal() {
       {/* Progress bar */}
       <ProgressBar progress={loadProgress} />
 
-      {/* WebView */}
+      {/* WebView + tam yükseklikte beyaz yükleme katmanı */}
       <View style={styles.webviewContainer}>
         <WebView
           ref={webViewRef}
           source={{ uri: safeUrl }}
-          style={styles.webview}
+          style={[styles.webview, showLoadingOverlay && styles.webviewWhileLoading]}
           onLoadStart={() => { setIsLoading(true); setHasError(false); }}
           onLoadEnd={() => setIsLoading(false)}
           onError={() => { setHasError(true); setIsLoading(false); }}
@@ -336,11 +350,13 @@ export default function WebViewModal() {
           sharedCookiesEnabled
         />
 
-        {/* Yüklenirken logo */}
-        {isLoading && !hasError && <LogoLoader />}
+        {showLoadingOverlay ? (
+          <View style={styles.loadingOverlay} pointerEvents="none">
+            <LogoLoader />
+          </View>
+        ) : null}
 
-        {/* Hata durumu */}
-        {hasError && <ErrorView onRetry={handleRetry} />}
+        {hasError ? <ErrorView onRetry={handleRetry} /> : null}
       </View>
     </View>
   );
@@ -353,14 +369,30 @@ export default function WebViewModal() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
+    width: '100%',
+    minHeight: 0,
     backgroundColor: palette.white,
   },
   webviewContainer: {
     flex: 1,
+    minHeight: 0,
+    width: '100%',
     position: 'relative',
+    backgroundColor: palette.white,
   },
   webview: {
     flex: 1,
+    width: '100%',
+    minHeight: 0,
+    backgroundColor: palette.white,
+  },
+  webviewWhileLoading: {
+    opacity: 0,
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 10,
+    backgroundColor: palette.white,
   },
   centered: {
     flex: 1,

@@ -1,13 +1,7 @@
 import React from 'react';
-import {
-  View,
-  StyleSheet,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
-  Image,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, StyleSheet } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useTheme } from '@/hooks/useTheme';
 import { spacing } from '@/constants/spacing';
 import { palette } from '@/constants/colors';
@@ -18,19 +12,23 @@ type Props = {
 };
 
 export const AuthLayout: React.FC<Props> = ({ children, showLogo = true }) => {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      <KeyboardAwareScrollView
         style={styles.kav}
+        contentContainerStyle={[
+          styles.scroll,
+          { paddingBottom: spacing[8] + insets.bottom },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        keyboardDismissMode="on-drag"
+        bottomOffset={spacing[4] + insets.bottom}
+        extraKeyboardSpace={spacing[2]}
       >
-        <ScrollView
-          contentContainerStyle={styles.scroll}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
           {showLogo && (
             <View style={styles.logoWrap}>
               {/* THY Logo placeholder — assets/images/thy-logo.png buraya gelecek */}
@@ -42,8 +40,7 @@ export const AuthLayout: React.FC<Props> = ({ children, showLogo = true }) => {
             </View>
           )}
           <View style={styles.content}>{children}</View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 };
@@ -58,7 +55,6 @@ const styles = StyleSheet.create({
   scroll: {
     flexGrow: 1,
     paddingHorizontal: spacing[6],
-    paddingBottom: spacing[8],
   },
   logoWrap: {
     alignItems: 'center',

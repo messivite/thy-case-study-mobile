@@ -44,6 +44,10 @@
   },
   "auth": {
     "welcomeTitle": "Hoş Geldiniz",
+    "welcomeHeroLine1": "Hoş geldiniz",
+    "welcomeHeroLine2": "THY Study Case",
+    "infoSiteWebTitle": "mustafaaksoy.dev",
+    "infoSiteA11yLabel": "Portfolyo web sitesini aç",
     "welcomeSubtitle": "THY AI Asistan'a giriş yapın",
     "loginWithGoogle": "Google ile Giriş Yap",
     "loginWithEmail": "E-posta ile Giriş Yap",
@@ -54,6 +58,7 @@
     "passwordPlaceholder": "Şifrenizi girin",
     "forgotPassword": "Şifremi Unuttum",
     "login": "Giriş Yap",
+    "loggingIn": "Giriş yapılıyor...",
     "register": "Kayıt Ol",
     "noAccount": "Hesabınız yok mu?",
     "haveAccount": "Zaten hesabınız var mı?",
