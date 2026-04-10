@@ -202,6 +202,8 @@ Release workflow’u önce test + typecheck koşar; kırmızıysa APK üretilmez
 
 - Native: `react-native-mmkv`
 - Web: `localStorage` fallback (`mmkv.web.ts`)
+- Realm: son `20` sohbet oturumu ve her oturumdaki son `20` mesaj lokal tutulur.
+- Local Realm verisi remote kaynakla senkronize çalışır (sync akışı).
 
 ---
 
