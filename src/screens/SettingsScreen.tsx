@@ -393,7 +393,7 @@ export default function SettingsScreen() {
           <View style={[styles.sentryCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={styles.sentryHeader}>
               <View style={[styles.sentryIconWrap, { backgroundColor: palette.warning + '20' }]}>
-                <Text style={styles.sentryEmoji}>😄</Text>
+                <Ionicons name="information-circle-outline" size={20} color={palette.warning} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text variant="bodyMedium" style={{ fontFamily: fontFamily.semiBold }}>
@@ -412,7 +412,7 @@ export default function SettingsScreen() {
             </View>
 
             <Text variant="caption" color={colors.textSecondary} style={styles.sentryDesc}>
-              Butona basınca uygulama kasıtlı crash atar, Sentry hatayı yakalar ve Error Boundary devreye girer. Case study değerlendiricileri için 🚀
+              Butona basınca uygulama kasıtlı crash atar, Sentry hatayı yakalar ve Error Boundary devreye girer.
             </Text>
 
             <Pressable
@@ -537,9 +537,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  sentryEmoji: {
-    fontSize: 20,
   },
   sentryBadge: {
     flexDirection: 'row',
