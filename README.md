@@ -25,8 +25,6 @@ Proje; onboarding, kimlik doğrulama, asistan sohbet akışı, ayarlar, çoklu d
 - [Geliştirme Komutları](#geliştirme-komutları)
 - [Çalışma Akışları](#çalışma-akışları)
 - [CI/CD, Codecov ve Release](#cicd-codecov-ve-release)
-- [Web Dağıtımı](#web-dağıtımı)
-- [iOS Dağıtımı (Xcode)](#ios-dağıtımı-xcode)
 - [Roadmap](#roadmap)
 
 ---
@@ -204,32 +202,6 @@ Release workflow’u önce test + typecheck koşar; kırmızıysa APK üretilmez
 
 - Native: `react-native-mmkv`
 - Web: `localStorage` fallback (`mmkv.web.ts`)
-
----
-
-## Web Dağıtımı
-
-Web build:
-
-```bash
-npx expo export --platform web
-```
-
-Çıktıyı (`dist/`) Vercel veya Netlify'a deploy ederek paylaşabilirsin.
-
----
-
-## iOS Dağıtımı (Xcode)
-
-EAS kullanmadan Xcode ile sürüm akışı:
-
-1. `npx expo prebuild` (gerekiyorsa)
-2. `ios/` workspace'i Xcode'da aç
-3. Signing, bundle id, version/build number ayarla
-4. Archive al
-5. TestFlight/App Store Connect'e gönder
-
-Not: Dev test için `npm run ios` + `npm start` akışı yeterli olur.
 
 ---
 
