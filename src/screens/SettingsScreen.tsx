@@ -364,31 +364,11 @@ export default function SettingsScreen() {
           </LinearGradient>
         </MotiView>
 
-        {/* Logout */}
-        <MotiView
-          from={{ opacity: 0, translateY: 16 }}
-          animate={{ opacity: 1, translateY: 0 }}
-          transition={{ type: 'timing', duration: 350, delay: 360 }}
-        >
-          <SettingsSection
-            items={[
-              {
-                id: 'logout',
-                label: t('settings.logout'),
-                icon: 'log-out-outline',
-                iconColor: palette.error,
-                destructive: true,
-                onPress: handleLogout,
-              },
-            ]}
-          />
-        </MotiView>
-
         {/* Sentry / Error Boundary Test */}
         <MotiView
           from={{ opacity: 0, translateY: 16 }}
           animate={{ opacity: 1, translateY: 0 }}
-          transition={{ type: 'timing', duration: 350, delay: 440 }}
+          transition={{ type: 'timing', duration: 350, delay: 360 }}
         >
           <View style={[styles.sentryCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={styles.sentryHeader}>
@@ -436,6 +416,26 @@ export default function SettingsScreen() {
               </LinearGradient>
             </Pressable>
           </View>
+        </MotiView>
+
+        {/* Logout */}
+        <MotiView
+          from={{ opacity: 0, translateY: 16 }}
+          animate={{ opacity: 1, translateY: 0 }}
+          transition={{ type: 'timing', duration: 350, delay: 440 }}
+        >
+          <SettingsSection
+            items={[
+              {
+                id: 'logout',
+                label: t('settings.logout'),
+                icon: 'log-out-outline',
+                iconColor: palette.error,
+                destructive: true,
+                onPress: handleLogout,
+              },
+            ]}
+          />
         </MotiView>
         </View>
       </ScrollView>

@@ -4,10 +4,10 @@ import {
   createAction,
   createListenerMiddleware,
 } from '@reduxjs/toolkit';
-import authReducer from './slices/authSlice';
-import chatReducer from './slices/chatSlice';
-import settingsReducer from './slices/settingsSlice';
-import uiReducer from './slices/uiSlice';
+import authReducer from '@/store/slices/authSlice';
+import chatReducer from '@/store/slices/chatSlice';
+import settingsReducer from '@/store/slices/settingsSlice';
+import uiReducer from '@/store/slices/uiSlice';
 import { queryClient } from '@/services/queryClient';
 
 /** Logout / oturum düşmesi: tüm slice'lar initialState'e döner + React Query önbelleği temizlenir */

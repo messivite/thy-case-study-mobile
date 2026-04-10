@@ -12,5 +12,5 @@
 
 // Re-export everything from native — TypeScript type checking için.
 // Web'de Metro bunu mmkv.web.ts ile override eder.
-export { storage, mmkvStorage, STORAGE_KEYS } from './mmkv.native';
+export { storage, mmkvStorage, STORAGE_KEYS } from '@/lib/mmkv.native';
 export type { MMKV } from 'react-native-mmkv';

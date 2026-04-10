@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, StyleSheet, ViewStyle } from 'react-native';
-import { Text } from './Text';
+import { Text } from '@/atoms/Text';
 import { AI_MODELS, AIModelId } from '@/constants/models';
 import { radius, spacing } from '@/constants/spacing';
 import { fontFamily, fontSize } from '@/constants/typography';

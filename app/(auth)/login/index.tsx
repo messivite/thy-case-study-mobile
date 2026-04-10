@@ -15,6 +15,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { spacing } from '@/constants/spacing';
+import { AUTH_NO_CREDENTIAL_SAVE_PROPS } from '@/constants/authCredentialAutofill';
 import { toast } from '@/lib/toast';
 import { loginSchema, type LoginFormValues } from '@/forms/auth/login/schema';
 
@@ -34,7 +35,6 @@ export default function LoginScreen() {
   const onSubmit = async (data: LoginFormValues) => {
     const result = await login(data.email, data.password);
     if (result.ok) {
-      toast.success(t('toast.loginSuccess'));
       router.push('/(tabs)');
     } else {
       toast.error(result.error);
@@ -67,8 +67,8 @@ export default function LoginScreen() {
             placeholder={t('auth.emailPlaceholder')}
             keyboardType="email-address"
             autoCapitalize="none"
-            autoComplete="email"
             leftIcon={<Ionicons name="mail-outline" size={18} color={colors.textSecondary} />}
+            {...AUTH_NO_CREDENTIAL_SAVE_PROPS}
           />
           <FormField
             control={control}
@@ -77,6 +77,7 @@ export default function LoginScreen() {
             placeholder={t('auth.passwordPlaceholder')}
             secure
             leftIcon={<Ionicons name="lock-closed-outline" size={18} color={colors.textSecondary} />}
+            {...AUTH_NO_CREDENTIAL_SAVE_PROPS}
           />
 
           <TextButton

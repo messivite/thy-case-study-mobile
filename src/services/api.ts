@@ -18,7 +18,7 @@ import axios, {
   AxiosRequestConfig,
   InternalAxiosRequestConfig,
 } from 'axios';
-import { supabase } from './supabase';
+import { supabase } from '@/services/supabase';
 import { authMutex } from '@/lib/authMutex';
 import { captureApiError } from '@/services/errorReporting';
 

@@ -6,7 +6,7 @@
  * RTK dispatch'i useSupabaseAuth hook'u üstlenir.
  */
 
-import { supabase } from './supabase';
+import { supabase } from '@/services/supabase';
 import { secureStorage, SECURE_KEYS } from '@/lib/secureStore';
 import type { Session, User as SupabaseUser, AuthError } from '@supabase/supabase-js';
 

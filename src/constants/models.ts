@@ -1,4 +1,4 @@
-import { palette } from './colors';
+import { palette } from '@/constants/colors';
 
 export type AIModelId = 'gemini' | 'gpt' | 'claude' | 'custom';
 

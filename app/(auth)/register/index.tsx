@@ -15,6 +15,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { spacing } from '@/constants/spacing';
+import { AUTH_NO_CREDENTIAL_SAVE_PROPS } from '@/constants/authCredentialAutofill';
 import { toast } from '@/lib/toast';
 import { registerSchema, type RegisterFormValues } from '@/forms/auth/register/schema';
 
@@ -82,6 +83,7 @@ export default function RegisterScreen() {
             keyboardType="email-address"
             autoCapitalize="none"
             leftIcon={<Ionicons name="mail-outline" size={18} color={colors.textSecondary} />}
+            {...AUTH_NO_CREDENTIAL_SAVE_PROPS}
           />
           <FormField
             control={control}
@@ -90,6 +92,7 @@ export default function RegisterScreen() {
             placeholder={t('auth.passwordPlaceholder')}
             secure
             leftIcon={<Ionicons name="lock-closed-outline" size={18} color={colors.textSecondary} />}
+            {...AUTH_NO_CREDENTIAL_SAVE_PROPS}
           />
           <FormField
             control={control}
@@ -98,6 +101,7 @@ export default function RegisterScreen() {
             placeholder={t('auth.confirmPasswordPlaceholder')}
             secure
             leftIcon={<Ionicons name="lock-closed-outline" size={18} color={colors.textSecondary} />}
+            {...AUTH_NO_CREDENTIAL_SAVE_PROPS}
           />
 
           <Button

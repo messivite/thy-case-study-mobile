@@ -7,7 +7,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { Text } from './Text';
+import { Text } from '@/atoms/Text';
 import { useHaptics } from '@/hooks/useHaptics';
 import { fontFamily, fontSize } from '@/constants/typography';
 import { spacing } from '@/constants/spacing';

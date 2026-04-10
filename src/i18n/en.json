@@ -184,7 +184,7 @@
     "loginErrorEmailNotConfirmed": "Please verify your email address",
     "loginErrorRateLimited": "Please wait 60 seconds and try again",
     "loginErrorUnknown": "Sign in failed, please try again",
-    "logoutSuccess": "Signed out",
+    "logoutSuccess": "You have successfully signed out.",
     "registerSuccess": "Account created",
     "messageSent": "Message sent",
     "offlineQueued": "Offline – message queued",

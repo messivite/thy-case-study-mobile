@@ -24,6 +24,7 @@ import {
   WELCOME_LOGIN_BUTTON_DISABLED_OPACITY,
   WELCOME_LOGIN_BUTTON_OPACITY_TRANSITION_MS,
 } from '@/constants/welcomeScreen';
+import { AUTH_NO_CREDENTIAL_SAVE_PROPS } from '@/constants/authCredentialAutofill';
 import { fontFamily } from '@/constants/typography';
 import { scale } from '@/lib/responsive';
 import {
@@ -115,7 +116,6 @@ export function WelcomeAuthForm({
     async (data: WelcomeLoginFormValues) => {
       const result = await login(data.email, data.password);
       if (result.ok) {
-        toast.success(t('toast.loginSuccess'));
         router.replace('/(tabs)');
       } else {
         reset({ email: data.email, password: '' });
@@ -180,9 +180,9 @@ export function WelcomeAuthForm({
             placeholder={t('auth.emailPlaceholder')}
             keyboardType="email-address"
             autoCapitalize="none"
-            autoComplete="email"
             editable={!anyPending}
             leftIcon={<Ionicons name="mail-outline" size={18} color={palette.gray400} />}
+            {...AUTH_NO_CREDENTIAL_SAVE_PROPS}
           />
 
           <View style={styles.passwordHeader}>
@@ -202,6 +202,7 @@ export function WelcomeAuthForm({
             placeholder={t('auth.passwordPlaceholder')}
             secure
             editable={!anyPending}
+            {...AUTH_NO_CREDENTIAL_SAVE_PROPS}
           />
 
           <Animated.View style={loginBtnAnimatedStyle}>

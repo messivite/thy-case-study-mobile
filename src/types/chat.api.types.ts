@@ -1,4 +1,4 @@
-import { AIMessage, AIProviderInfo, AIUsage } from './api.types';
+import { AIMessage, AIProviderInfo, AIUsage } from '@/types/api.types';
 
 // ---------------------------------------------------------------------------
 // POST /api/chats — Yeni chat oluşturma
