@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo, useEffect } from 'react';
 import {
   View,
   TouchableOpacity,
@@ -6,6 +6,15 @@ import {
   ViewStyle,
   Text as RNText,
 } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withSequence,
+  withTiming,
+  cancelAnimation,
+  Easing,
+} from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { radius, spacing } from '@/constants/spacing';
 import { fontFamily, fontSize } from '@/constants/typography';
@@ -30,12 +39,44 @@ type Props = {
   selectorLabel: string;
   /** Alt satır dot rengi */
   selectorDotColor?: string;
+  /** Sağdaki chevron çifti (ör. model seçimi) — sadece ilgili slaytta */
+  showSelectorChevrons?: boolean;
+  /** `ai`: pulse noktası yerine AI ikon rozeti (Choose model slaytı) */
+  selectorLeading?: 'pulse' | 'ai';
   onPressPicker?: () => void;
   style?: ViewStyle;
 };
 
 const CARD_BG = palette.onboardingCardBg;
 const BORDER_COLOR = palette.onboardingCardBorder;
+/** Alt bant (çizginin altı) — sabit yükseklik, satır bu alanda ortalanır */
+const FOOTER_BAND_HEIGHT = scale(50);
+const SELECTOR_AI_BADGE = scale(26);
+const SELECTOR_AI_ICON = scale(17);
+
+const SelectorDotPulse = memo<{ color: string }>(({ color }) => {
+  const pulse = useSharedValue(1);
+
+  useEffect(() => {
+    pulse.value = withRepeat(
+      withSequence(
+        withTiming(1.2, { duration: 850, easing: Easing.inOut(Easing.sin) }),
+        withTiming(1, { duration: 850, easing: Easing.inOut(Easing.sin) }),
+      ),
+      -1,
+      false,
+    );
+    return () => cancelAnimation(pulse);
+  }, []);
+
+  const pulseStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: pulse.value }],
+  }));
+
+  return (
+    <Animated.View style={[styles.selectorDot, { backgroundColor: color }, pulseStyle]} />
+  );
+});
 
 export const ModelPickerCard: React.FC<Props> = ({
   title,
@@ -44,75 +85,84 @@ export const ModelPickerCard: React.FC<Props> = ({
   overlayIcons,
   selectorLabel,
   selectorDotColor = palette.onboardingActiveDot,
+  showSelectorChevrons = false,
+  selectorLeading = 'pulse',
   onPressPicker,
   style,
 }) => {
   return (
     <View style={[styles.card, style]}>
-      {/* Icon row */}
-      <View style={styles.iconRow}>
-        {/* Ana kare ikon */}
-        <View style={[styles.mainIconWrap, { backgroundColor: mainIcon.bgColor }]}>
-          <Ionicons
-            name={mainIcon.name}
-            size={mainIcon.size ?? 26}
-            color={mainIcon.color}
-          />
-        </View>
-
-        {/* İki overlap daire */}
-        <View style={styles.overlapRow}>
-          <View style={[styles.overlapCircle, { backgroundColor: overlayIcons[0].bgColor }]}>
+      <View style={styles.bodyTop}>
+        {/* Icon row */}
+        <View style={styles.iconRow}>
+          <View style={[styles.mainIconWrap, { backgroundColor: mainIcon.bgColor }]}>
             <Ionicons
-              name={overlayIcons[0].name}
-              size={overlayIcons[0].size ?? 14}
-              color={overlayIcons[0].color}
+              name={mainIcon.name}
+              size={mainIcon.size ?? 26}
+              color={mainIcon.color}
             />
           </View>
-          <View style={[styles.overlapCircle, styles.overlapSecond, { backgroundColor: overlayIcons[1].bgColor }]}>
-            <Ionicons
-              name={overlayIcons[1].name}
-              size={overlayIcons[1].size ?? 14}
-              color={overlayIcons[1].color}
-            />
+          <View style={styles.overlapRow}>
+            <View style={[styles.overlapCircle, { backgroundColor: overlayIcons[0].bgColor }]}>
+              <Ionicons
+                name={overlayIcons[0].name}
+                size={overlayIcons[0].size ?? 14}
+                color={overlayIcons[0].color}
+              />
+            </View>
+            <View style={[styles.overlapCircle, styles.overlapSecond, { backgroundColor: overlayIcons[1].bgColor }]}>
+              <Ionicons
+                name={overlayIcons[1].name}
+                size={overlayIcons[1].size ?? 14}
+                color={overlayIcons[1].color}
+              />
+            </View>
           </View>
         </View>
+        <RNText style={styles.title} numberOfLines={2}>{title}</RNText>
+        <RNText style={styles.description} numberOfLines={2}>{description}</RNText>
       </View>
 
-      {/* Başlık */}
-      <RNText style={styles.title} numberOfLines={1}>{title}</RNText>
-
-      {/* Açıklama */}
-      <RNText style={styles.description} numberOfLines={2}>{description}</RNText>
-
-      {/* Separator */}
       <View style={styles.separator} />
 
-      {/* Selector row */}
-      <TouchableOpacity
-        style={styles.selectorRow}
-        onPress={onPressPicker}
-        activeOpacity={onPressPicker ? 0.7 : 1}
-      >
-        <View style={[styles.selectorDot, { backgroundColor: selectorDotColor }]} />
-        <RNText style={styles.selectorLabel}>{selectorLabel}</RNText>
-        <View style={styles.chevronWrap}>
-          <Ionicons name="chevron-up" size={11} color="#9CA3AF" />
-          <Ionicons name="chevron-down" size={11} color="#9CA3AF" style={styles.chevronDown} />
-        </View>
-      </TouchableOpacity>
+      {/* Sabit yükseklik — FLIGHT INFO satırı bu bant içinde dikey ortada */}
+      <View style={styles.footer}>
+        <TouchableOpacity
+          style={styles.selectorRow}
+          onPress={onPressPicker}
+          activeOpacity={onPressPicker ? 0.7 : 1}
+        >
+          {selectorLeading === 'ai' ? (
+            <View style={styles.selectorAiBadge}>
+              <Ionicons name="sparkles" size={SELECTOR_AI_ICON} color={palette.primary} />
+            </View>
+          ) : (
+            <SelectorDotPulse color={selectorDotColor} />
+          )}
+          <RNText style={styles.selectorLabel}>{selectorLabel}</RNText>
+          {showSelectorChevrons ? (
+            <View style={styles.chevronWrap}>
+              <Ionicons name="chevron-up" size={11} color="#9CA3AF" />
+              <Ionicons name="chevron-down" size={11} color="#9CA3AF" style={styles.chevronDown} />
+            </View>
+          ) : null}
+        </TouchableOpacity>
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   card: {
+    flexDirection: 'column',
+    alignSelf: 'stretch',
+    width: '100%',
     backgroundColor: CARD_BG,
     borderRadius: 36,
     paddingHorizontal: spacing[6],
-    paddingTop: spacing[6],
+    paddingTop: spacing[5],
     paddingBottom: 0,
-    height: scale(280),
+    minHeight: scale(248),
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 0 },
@@ -120,13 +170,24 @@ const styles = StyleSheet.create({
     shadowRadius: 0,
     elevation: 0,
   },
+  bodyTop: {
+    flexShrink: 0,
+    marginBottom: spacing[2],
+  },
+  footer: {
+    height: FOOTER_BAND_HEIGHT,
+    flexShrink: 0,
+    justifyContent: 'center',
+    alignItems: 'stretch',
+    width: '100%',
+  },
 
   // Icons
   iconRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[2],
-    marginBottom: spacing[6],
+    marginBottom: spacing[5],
   },
   mainIconWrap: {
     width: 56,
@@ -161,17 +222,17 @@ const styles = StyleSheet.create({
   // Text
   title: {
     fontFamily: fontFamily.bold,
-    fontSize: fontSize['3xl'],
-    lineHeight: Math.round(fontSize['3xl'] * 1.22),
+    fontSize: fontSize.xl,
+    lineHeight: Math.round(fontSize.xl * 1.25),
     color: '#1A1A2E',
-    marginBottom: spacing[3],
+    marginBottom: spacing[2],
   },
   description: {
     fontFamily: fontFamily.regular,
     fontSize: fontSize.base,
     lineHeight: Math.round(fontSize.base * 1.7),
     color: '#6B7280',
-    marginBottom: spacing[5],
+    marginBottom: 0,
   },
 
   // Separator
@@ -185,14 +246,23 @@ const styles = StyleSheet.create({
   selectorRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    alignSelf: 'stretch',
     gap: spacing[3],
-    paddingTop: spacing[4],
-    paddingBottom: spacing[5],
+    paddingTop: spacing[2],
+    paddingBottom: spacing[2],
   },
   selectorDot: {
     width: 9,
     height: 9,
     borderRadius: radius.full,
+  },
+  selectorAiBadge: {
+    width: SELECTOR_AI_BADGE,
+    height: SELECTOR_AI_BADGE,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(232, 25, 50, 0.12)',
   },
   selectorLabel: {
     flex: 1,

@@ -1,9 +1,11 @@
 /**
  * OnboardingDeckV2
  *
- * Native ScrollView paging — parmak takipli smooth swipe.
- * Tek sabit gradient (re-render yok), bubble spring kart animasyonu,
- * beyaz alt alan, memo'lu bottom section.
+ * Reanimated scroll-driven animasyon:
+ * - Scroll offset shared value olarak okunur (UI thread, JS bridge yok)
+ * - Her kart kendi scale/opacity/translateY'ını offset'e göre sürekli hesaplar
+ * - Parmak hareketi ile tamamen senkron, gecikme sıfır
+ * - Button ile geçişte spring easing (daha canlı)
  */
 
 import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
@@ -13,21 +15,21 @@ import {
   StatusBar,
   Dimensions,
   TouchableOpacity,
-  ScrollView,
-  NativeSyntheticEvent,
-  NativeScrollEvent,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
+  useAnimatedScrollHandler,
   withRepeat,
   withSequence,
   withTiming,
-  withSpring,
   cancelAnimation,
   Easing,
+  interpolate,
+  interpolateColor,
+  Extrapolation,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { Logo } from '@/atoms/Logo';
@@ -45,6 +47,10 @@ import { scale } from '@/lib/responsive';
 // ---------------------------------------------------------------------------
 
 const { width: W } = Dimensions.get('window');
+/** JS thread'de hesaplanır — useAnimatedStyle worklet içinde scale() çağrılamaz (native crash). */
+const SLIDE_INACTIVE_TRANSLATE_Y = scale(20);
+const PAGINATION_DOT_NARROW = scale(10);
+const PAGINATION_DOT_WIDE = scale(40);
 const TOTAL_SLIDES = 4;
 
 // ---------------------------------------------------------------------------
@@ -115,41 +121,52 @@ const V2_SLIDES: V2Slide[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// Slide card — Reanimated bubble spring animasyonu, re-render yok
+// SlideCard — scroll offset'e göre real-time UI thread animasyonu
 // ---------------------------------------------------------------------------
 
-const SPRING_CONFIG = { damping: 19, stiffness: 185, mass: 0.8 };
-
-const SlideCard = memo<{ slide: V2Slide; isActive: boolean }>(({ slide, isActive }) => {
+const SlideCard = memo<{
+  slide: V2Slide;
+  index: number;
+  scrollX: ReturnType<typeof useSharedValue<number>>;
+}>(({ slide, index, scrollX }) => {
   const { t } = useI18n();
-  const tx = useSharedValue(isActive ? 0 : scale(30));
-  const sc = useSharedValue(isActive ? 1 : 0.88);
-  const op = useSharedValue(isActive ? 1 : 0.3);
-  const isMountedRef = useRef(false);
 
-  useEffect(() => {
-    if (!isMountedRef.current) {
-      // İlk mount — initial değerler zaten set, animasyon başlatma
-      isMountedRef.current = true;
-      return;
-    }
-    tx.value = withSpring(isActive ? 0 : scale(30), SPRING_CONFIG);
-    sc.value = withSpring(isActive ? 1 : 0.88, SPRING_CONFIG);
-    op.value = withSpring(isActive ? 1 : 0.3, SPRING_CONFIG);
-    return () => {
-      cancelAnimation(tx);
-      cancelAnimation(sc);
-      cancelAnimation(op);
+  const animStyle = useAnimatedStyle(() => {
+    // Bu kartın merkezi ile scroll pozisyonu arasındaki fark (-1 .. 0 .. 1)
+    const offset = (scrollX.value / W) - index;
+
+    // Scale: aktifken 1.0, uzaklaştıkça 0.88
+    const sc = interpolate(
+      offset,
+      [-1, 0, 1],
+      [0.88, 1.0, 0.88],
+      Extrapolation.CLAMP,
+    );
+
+    // Opacity: aktifken 1, uzaklaştıkça 0.45
+    const op = interpolate(
+      offset,
+      [-1, 0, 1],
+      [0.45, 1.0, 0.45],
+      Extrapolation.CLAMP,
+    );
+
+    // translateY: aktifken 0, uzaklaştıkça hafif aşağı (bubble efekti)
+    const ty = interpolate(
+      offset,
+      [-1, 0, 1],
+      [SLIDE_INACTIVE_TRANSLATE_Y, 0, SLIDE_INACTIVE_TRANSLATE_Y],
+      Extrapolation.CLAMP,
+    );
+
+    return {
+      transform: [{ scale: sc }, { translateY: ty }],
+      opacity: op,
     };
-  }, [isActive]);
-
-  const animStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: tx.value }, { scale: sc.value }],
-    opacity: op.value,
-  }));
+  });
 
   return (
-    <Animated.View style={animStyle}>
+    <Animated.View style={[mainStyles.slideWrapper, animStyle]}>
       <ModelPickerCard
         title={t(slide.titleKey)}
         description={t(slide.descKey)}
@@ -157,13 +174,15 @@ const SlideCard = memo<{ slide: V2Slide; isActive: boolean }>(({ slide, isActive
         overlayIcons={slide.overlayIcons}
         selectorLabel={t(slide.selectorLabelKey)}
         selectorDotColor={slide.selectorDotColor}
+        showSelectorChevrons={index === 1}
+        selectorLeading={index === 1 ? 'ai' : 'pulse'}
       />
     </Animated.View>
   );
 });
 
 // ---------------------------------------------------------------------------
-// Dekoratif daireler — sabit, sadece ilk mount'ta olusur
+// BgCircles — sabit, sadece ilk mount'ta oluşur
 // ---------------------------------------------------------------------------
 
 const BgCircles = memo(() => {
@@ -172,7 +191,6 @@ const BgCircles = memo(() => {
   const p3 = useSharedValue(1);
 
   useEffect(() => {
-    // İlk animasyonu bir frame sonraya ertele — New Arch worklet init race'ini önler
     const t1 = setTimeout(() => {
       p1.value = withRepeat(
         withSequence(
@@ -235,11 +253,16 @@ const circleStyles = StyleSheet.create({
 });
 
 // ---------------------------------------------------------------------------
-// Pagination — memo, re-render sadece activeIndex degisince
+// Pagination
 // ---------------------------------------------------------------------------
 
+const PAGINATION_TIMING = {
+  duration: 320,
+  easing: Easing.inOut(Easing.cubic),
+} as const;
+
 const PaginationDot = memo<{ isActive: boolean }>(({ isActive }) => {
-  const width = useSharedValue(isActive ? scale(40) : scale(10));
+  const progress = useSharedValue(isActive ? 1 : 0);
   const isMountedRef = useRef(false);
 
   useEffect(() => {
@@ -247,23 +270,27 @@ const PaginationDot = memo<{ isActive: boolean }>(({ isActive }) => {
       isMountedRef.current = true;
       return;
     }
-    width.value = withTiming(isActive ? scale(40) : scale(10), { duration: 220 });
-    return () => { cancelAnimation(width); };
+    progress.value = withTiming(isActive ? 1 : 0, PAGINATION_TIMING);
+    return () => {
+      cancelAnimation(progress);
+    };
   }, [isActive]);
 
-  const dotAnim = useAnimatedStyle(() => ({
-    width: width.value,
-  }));
+  const dotAnim = useAnimatedStyle(() => {
+    const w = interpolate(
+      progress.value,
+      [0, 1],
+      [PAGINATION_DOT_NARROW, PAGINATION_DOT_WIDE],
+    );
+    const bg = interpolateColor(
+      progress.value,
+      [0, 1],
+      [palette.onboardingDotInactive, palette.onboardingActiveDot],
+    );
+    return { width: w, backgroundColor: bg };
+  });
 
-  return (
-    <Animated.View
-      style={[
-        paginStyles.dot,
-        dotAnim,
-        { backgroundColor: isActive ? palette.onboardingActiveDot : palette.onboardingDotInactive },
-      ]}
-    />
-  );
+  return <Animated.View style={[paginStyles.dot, dotAnim]} />;
 });
 
 const Pagination = memo<{ total: number; activeIndex: number }>(({ total, activeIndex }) => (
@@ -279,7 +306,7 @@ const paginStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: scale(7),
+    gap: 10,
   },
   dot: {
     height: scale(10),
@@ -288,17 +315,13 @@ const paginStyles = StyleSheet.create({
 });
 
 // ---------------------------------------------------------------------------
-// Back circle button — memo, asla re-render olmaz
+// Back button
 // ---------------------------------------------------------------------------
 
 const BackCircleButton = memo<{ onPress: () => void }>(({ onPress }) => {
   const haptics = useHaptics();
-
   return (
-    <TouchableOpacity
-      onPress={() => { haptics.light(); onPress(); }}
-      activeOpacity={0.85}
-    >
+    <TouchableOpacity onPress={() => { haptics.light(); onPress(); }} activeOpacity={0.85}>
       <LinearGradient
         colors={[palette.primary, palette.primaryDark]}
         start={{ x: 0, y: 0 }}
@@ -318,27 +341,15 @@ const backBtnStyles = StyleSheet.create({
     borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: palette.primary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0,
-    shadowRadius: 0,
-    elevation: 0,
   },
 });
-
-// ---------------------------------------------------------------------------
-// BottomSection — memo ile izole, re-render sadece activeIndex degisince
-// ---------------------------------------------------------------------------
 
 const BackButtonFade = memo<{ isFirst: boolean; onBack: () => void }>(({ isFirst, onBack }) => {
   const opacity = useSharedValue(isFirst ? 0 : 1);
   const isMountedRef = useRef(false);
 
   useEffect(() => {
-    if (!isMountedRef.current) {
-      isMountedRef.current = true;
-      return;
-    }
+    if (!isMountedRef.current) { isMountedRef.current = true; return; }
     opacity.value = withTiming(isFirst ? 0 : 1, { duration: 200 });
     return () => { cancelAnimation(opacity); };
   }, [isFirst]);
@@ -352,20 +363,21 @@ const BackButtonFade = memo<{ isFirst: boolean; onBack: () => void }>(({ isFirst
   );
 });
 
+// ---------------------------------------------------------------------------
+// BottomSection
+// ---------------------------------------------------------------------------
+
 const BottomSection = memo<{
   activeIndex: number;
-  total: number;
   onNext: () => void;
   onBack: () => void;
-}>(({ activeIndex, total, onNext, onBack }) => {
+}>(({ activeIndex, onNext, onBack }) => {
   const { t } = useI18n();
-  const isLast = activeIndex === total - 1;
+  const isLast = activeIndex === TOTAL_SLIDES - 1;
   const isFirst = activeIndex === 0;
 
   return (
     <View style={bottomStyles.container}>
-      <Pagination total={total} activeIndex={activeIndex} />
-
       <View style={bottomStyles.buttonRow}>
         <BackButtonFade isFirst={isFirst} onBack={onBack} />
         <GradientButton
@@ -383,8 +395,7 @@ const bottomStyles = StyleSheet.create({
   container: {
     paddingHorizontal: spacing[5],
     paddingBottom: spacing[8],
-    paddingTop: spacing[2],
-    gap: spacing[3],
+    alignItems: 'stretch',
     backgroundColor: 'transparent',
   },
   buttonRow: {
@@ -412,20 +423,28 @@ export const OnboardingDeckV2: React.FC<OnboardingDeckV2Props> = ({
   onSkip,
 }) => {
   const [activeIndex, setActiveIndex] = useState(0);
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<Animated.ScrollView>(null);
 
-  // Scroll bitti — aktif index'i guncelle (tek setState noktasi)
-  const handleMomentumEnd = useCallback(
-    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const newIndex = Math.round(e.nativeEvent.contentOffset.x / W);
-      if (newIndex !== activeIndex) {
-        setActiveIndex(newIndex);
-      }
+  // Scroll offset — UI thread'de canlı, JS bridge yok
+  const scrollX = useSharedValue(0);
+
+  const scrollHandler = useAnimatedScrollHandler({
+    onScroll: (e) => {
+      scrollX.value = e.contentOffset.x;
     },
-    [activeIndex],
+  });
+
+  // Momentum bitti — JS tarafı sadece activeIndex'i günceller (pagination/buton için)
+  const handleMomentumEnd = useCallback(
+    (e: { nativeEvent: { contentOffset: { x: number } } }) => {
+      const newIndex = Math.round(e.nativeEvent.contentOffset.x / W);
+      setActiveIndex(newIndex);
+    },
+    [],
   );
 
   const scrollToIndex = useCallback((index: number) => {
+    // Button ile geçişte programatik scroll — paging zaten smooth yapar
     scrollRef.current?.scrollTo({ x: index * W, animated: true });
   }, []);
 
@@ -447,14 +466,12 @@ export const OnboardingDeckV2: React.FC<OnboardingDeckV2Props> = ({
     <View style={mainStyles.root}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-      {/* Tek sabit gradient — asla degismez, re-render yok */}
       <LinearGradient
         colors={[...palette.onboardingGradient]}
         locations={[...palette.onboardingGradientLocations]}
         style={mainStyles.gradient}
       />
 
-      {/* Dekoratif daireler — sabit, mount sonrasi degismez */}
       <BgCircles />
 
       <SafeAreaView style={mainStyles.safe}>
@@ -476,30 +493,38 @@ export const OnboardingDeckV2: React.FC<OnboardingDeckV2Props> = ({
           </View>
         </View>
 
-        {/* Swipeable cards — native paging */}
-        <View style={mainStyles.cardArea}>
-          <ScrollView
-            ref={scrollRef}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            bounces={false}
-            onMomentumScrollEnd={handleMomentumEnd}
-            scrollEventThrottle={16}
-            style={mainStyles.scrollView}
-          >
-            {V2_SLIDES.map((slide, i) => (
-              <View key={i} style={mainStyles.slideWrapper}>
-                <SlideCard slide={slide} isActive={i === activeIndex} />
-              </View>
-            ))}
-          </ScrollView>
+        {/* Kart + pagination — altta 20px ile butonlardan ayrılır */}
+        <View style={mainStyles.deckWithDots}>
+          <View style={mainStyles.cardArea}>
+            <Animated.ScrollView
+              ref={scrollRef}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              bounces={false}
+              scrollEventThrottle={1}
+              onScroll={scrollHandler}
+              onMomentumScrollEnd={handleMomentumEnd}
+              style={mainStyles.scrollView}
+              contentContainerStyle={mainStyles.scrollContent}
+            >
+              {V2_SLIDES.map((slide, i) => (
+                <SlideCard
+                  key={i}
+                  slide={slide}
+                  index={i}
+                  scrollX={scrollX}
+                />
+              ))}
+            </Animated.ScrollView>
+          </View>
+          <View style={mainStyles.paginationStrip}>
+            <Pagination total={TOTAL_SLIDES} activeIndex={activeIndex} />
+          </View>
         </View>
 
-        {/* Bottom — beyaz arka plan, pagination + butonlar */}
         <BottomSection
           activeIndex={activeIndex}
-          total={TOTAL_SLIDES}
           onNext={handleNext}
           onBack={handleBack}
         />
@@ -532,23 +557,33 @@ const mainStyles = StyleSheet.create({
     borderRadius: radius.lg,
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[2],
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0,
-    shadowRadius: 0,
-    elevation: 0,
+  },
+  deckWithDots: {
+    flex: 1,
   },
   cardArea: {
     flex: 1,
-    justifyContent: 'flex-end',
+  },
+  paginationStrip: {
+    paddingTop: 10,
+    paddingBottom: 32,
+    width: '100%',
+    alignItems: 'center',
   },
   scrollView: {
-    flexGrow: 0,
+    flex: 1,
   },
+  scrollContent: {
+    flexGrow: 1,
+    alignItems: 'flex-end',
+  },
+  // Tam yükseklik + alta hizalı — kart 2 satır başlıkta yukarı doğru büyür
   slideWrapper: {
     width: W,
+    height: '100%',
+    justifyContent: 'flex-end',
     paddingHorizontal: spacing[4],
-    paddingBottom: spacing[2],
+    paddingBottom: 0,
   },
   header: {
     flexDirection: 'row',
