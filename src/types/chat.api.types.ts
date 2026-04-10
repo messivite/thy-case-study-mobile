@@ -31,6 +31,18 @@ export type ChatListItem = AIProviderInfo & {
 export type GetChatsResponse = ChatListItem[];
 
 // ---------------------------------------------------------------------------
+// GET /api/chats?limit=X&offset=Y — Paginated chats
+// ---------------------------------------------------------------------------
+
+/** Paginated chat listesi response modeli */
+export type PaginatedChatsResponse = {
+  chats: ChatListItem[];
+  nextOffset: number | null;
+  hasMore: boolean;
+  total: number;
+};
+
+// ---------------------------------------------------------------------------
 // GET /api/chats/:chatId — Chat detayı + tüm mesajlar
 // ---------------------------------------------------------------------------
 

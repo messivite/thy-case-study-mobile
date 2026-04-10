@@ -1,5 +1,7 @@
-import React, { useState, useCallback } from 'react';
-import { TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useState, useCallback, useMemo } from 'react';
+import { TouchableOpacity, StyleSheet, View } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { runOnJS } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { toast } from 'sonner-native';
 import { ChatLayout } from '@/templates/ChatLayout';
@@ -12,6 +14,7 @@ import { useChatSession } from '@/hooks/useChatSession';
 import { useAuth } from '@/hooks/useAuth';
 import { useI18n } from '@/hooks/useI18n';
 import { palette } from '@/constants/colors';
+import { ChatHistoryDrawer } from '@/organisms/ChatHistoryDrawer';
 
 export default function HomeScreen() {
   const { user, isGuest } = useAuth();
@@ -29,6 +32,23 @@ export default function HomeScreen() {
   } = useChatSession();
 
   const [modelSelectorVisible, setModelSelectorVisible] = useState(false);
+  const [drawerVisible, setDrawerVisible] = useState(false);
+
+  // Sol kenardan sağa swipe → drawer aç
+  const openDrawer = useCallback(() => setDrawerVisible(true), []);
+  const openDrawerGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .activeOffsetX([15, 999])
+        .failOffsetY([-12, 12])
+        .onEnd((e) => {
+          'worklet';
+          if (e.translationX > 40 && e.velocityX > 0) {
+            runOnJS(openDrawer)();
+          }
+        }),
+    [openDrawer],
+  );
 
   const handleSend = useCallback(
     (text: string, attachments: import('@/types/chat.types').Attachment[]) => {
@@ -48,9 +68,7 @@ export default function HomeScreen() {
         <TouchableOpacity
           style={styles.menuBtn}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          onPress={() => {
-            // Drawer/chat history akışı bir sonraki adımda bağlanacak.
-          }}
+          onPress={() => setDrawerVisible(true)}
           accessibilityRole="button"
           accessibilityLabel="Sohbet geçmişi menüsü"
         >
@@ -80,7 +98,8 @@ export default function HomeScreen() {
   );
 
   return (
-    <>
+    <GestureDetector gesture={openDrawerGesture}>
+      <View style={styles.root}>
       <ChatLayout
         header={header}
         input={
@@ -111,11 +130,20 @@ export default function HomeScreen() {
         }}
         onClose={() => setModelSelectorVisible(false)}
       />
-    </>
+
+      <ChatHistoryDrawer
+        visible={drawerVisible}
+        onClose={() => setDrawerVisible(false)}
+      />
+      </View>
+    </GestureDetector>
   );
 }
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
   /** AppHeader satırı scale(48); layout şişmesin, dokunma hitSlop ile kalır. */
   menuBtn: {
     width: 44,

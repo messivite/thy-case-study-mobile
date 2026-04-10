@@ -80,4 +80,5 @@ export const STORAGE_KEYS = {
   SELECTED_MODEL: 'selected_model',
   CHAT_MESSAGES: 'chat_messages',
   REACT_QUERY_CACHE: 'rq_cache',
+  STREAMING: 'streaming_enabled',
 } as const;

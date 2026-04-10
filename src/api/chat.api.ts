@@ -7,6 +7,7 @@ import {
   GetChatResponse,
   NonStreamChatRequest,
   NonStreamChatResponse,
+  PaginatedChatsResponse,
   PaginatedMessagesResponse,
   StreamChatCallbacks,
   StreamChatRequest,
@@ -126,6 +127,20 @@ export const createChat = async (payload: CreateChatRequest): Promise<CreateChat
  */
 export const getChats = async (): Promise<GetChatsResponse> => {
   const { data } = await privateApi.get<GetChatsResponse>('/api/chats');
+  return data;
+};
+
+/**
+ * GET /api/chats?limit=X&offset=Y
+ * Sayfalanmış chat listesini döner. Infinite scroll için kullanılır.
+ */
+export const getPaginatedChats = async (
+  limit: number = 10,
+  offset: number = 0,
+): Promise<PaginatedChatsResponse> => {
+  const { data } = await privateApi.get<PaginatedChatsResponse>('/api/chats', {
+    params: { limit, offset },
+  });
   return data;
 };
 

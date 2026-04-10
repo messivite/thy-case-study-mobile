@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { ScrollView, View, StyleSheet, Alert, Platform, Pressable } from 'react-native';
+import React, { useCallback, useMemo, useState, type ComponentProps } from 'react';
+import { ScrollView, View, StyleSheet, Alert, Platform, Pressable, Linking } from 'react-native';
+import * as Notifications from 'expo-notifications';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
@@ -16,18 +17,141 @@ import { useTheme } from '@/hooks/useTheme';
 import { useAuth } from '@/hooks/useAuth';
 import { useI18n } from '@/hooks/useI18n';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { setTheme, setNotifications, setStreaming } from '@/store/slices/settingsSlice';
+import { useNotificationPermission } from '@/hooks/useNotificationPermission';
+import { canDeliverPushNotifications } from '@/lib/notificationPermission';
+import { setTheme, setStreaming } from '@/store/slices/settingsSlice';
 import { spacing, radius } from '@/constants/spacing';
 import { palette } from '@/constants/colors';
 import { fontFamily } from '@/constants/typography';
 import { openExternalLink } from '@/lib/openExternalLink';
+
+type SettingsRowItem = ComponentProps<typeof SettingsSection>['items'][number];
 
 export default function SettingsScreen() {
   const { colors, isDark } = useTheme();
   const { user, isGuest, logout } = useAuth();
   const { t, changeLanguage, currentLanguage } = useI18n();
   const dispatch = useAppDispatch();
-  const { theme, notificationsEnabled, streamingEnabled } = useAppSelector((s) => s.settings);
+  const { theme, streamingEnabled } = useAppSelector((s) => s.settings);
+  const {
+    granted: notificationGranted,
+    loading: notificationPermissionLoading,
+    refresh: refreshNotificationPermission,
+  } = useNotificationPermission();
+
+  const themeSubtitle =
+    theme === 'light'
+      ? t('settings.themeLight')
+      : theme === 'dark'
+        ? t('settings.themeDark')
+        : t('settings.themeSystem');
+
+  const handleNotificationToggle = useCallback(
+    async (turnOn: boolean) => {
+      if (Platform.OS === 'web') return;
+
+      if (turnOn) {
+        let perm = await Notifications.getPermissionsAsync();
+        if (!canDeliverPushNotifications(perm)) {
+          perm = await Notifications.requestPermissionsAsync();
+        }
+        await refreshNotificationPermission();
+        if (canDeliverPushNotifications(perm)) return;
+
+        Alert.alert(
+          t('settings.notificationsOpenSettingsTitle'),
+          t('settings.notificationsOpenSettingsMessage'),
+          [
+            { text: t('common.cancel'), style: 'cancel' },
+            {
+              text: t('settings.openSystemSettings'),
+              onPress: () => {
+                void Linking.openSettings();
+              },
+            },
+          ],
+        );
+        return;
+      }
+
+      if (!notificationGranted) return;
+
+      Alert.alert(
+        t('settings.notificationsTurnOffTitle'),
+        t('settings.notificationsTurnOffMessage'),
+        [
+          { text: t('common.cancel'), style: 'cancel' },
+          {
+            text: t('settings.openSystemSettings'),
+            onPress: () => {
+              void Linking.openSettings();
+            },
+          },
+        ],
+      );
+    },
+    [notificationGranted, refreshNotificationPermission, t],
+  );
+
+  const preferenceItems = useMemo((): SettingsRowItem[] => {
+      const items: SettingsRowItem[] = [
+        {
+          id: 'language',
+          label: t('settings.language'),
+          subtitle: currentLanguage === 'tr' ? t('settings.languageTR') : t('settings.languageEN'),
+          icon: 'language-outline',
+          iconColor: palette.geminiBlue,
+          onPress: () => {
+            const next = currentLanguage === 'tr' ? 'en' : 'tr';
+            changeLanguage(next);
+            toast.info(t('toast.settingsSaved'));
+          },
+        },
+        {
+          id: 'theme',
+          label: t('settings.theme'),
+          subtitle: themeSubtitle,
+          icon: isDark ? 'moon-outline' : 'sunny-outline',
+          iconColor: palette.claudeOrange,
+          onPress: () => {
+            const next = theme === 'system' ? 'light' : theme === 'light' ? 'dark' : 'system';
+            dispatch(setTheme(next));
+          },
+        },
+      ];
+
+      if (Platform.OS !== 'web') {
+        items.push({
+          id: 'notifications',
+          label: t('settings.notifications'),
+          subtitle: notificationPermissionLoading
+            ? ''
+            : notificationGranted
+              ? t('settings.notificationsStatusOn')
+              : t('settings.notificationsStatusOff'),
+          icon: 'notifications-outline',
+          iconColor: palette.gptGreen,
+          toggle: true,
+          toggleValue: notificationGranted,
+          onToggle: (v) => void handleNotificationToggle(v),
+        });
+      }
+
+      return items;
+    },
+    [
+      t,
+      currentLanguage,
+      changeLanguage,
+      themeSubtitle,
+      isDark,
+      theme,
+      dispatch,
+      notificationPermissionLoading,
+      notificationGranted,
+      handleNotificationToggle,
+    ],
+  );
 
   const [shouldCrash, setShouldCrash] = useState(false);
   if (shouldCrash) {
@@ -56,13 +180,6 @@ export default function SettingsScreen() {
     Platform.OS === 'ios'
       ? (Constants.expoConfig?.ios?.buildNumber ?? '—')
       : String(Constants.expoConfig?.android?.versionCode ?? '—');
-
-  const themeSubtitle =
-    theme === 'light'
-      ? t('settings.themeLight')
-      : theme === 'dark'
-      ? t('settings.themeDark')
-      : t('settings.themeSystem');
 
   // TODO: API entegresinde gerçek quota verisiyle değiştirilecek.
   const usageMock = {
@@ -137,44 +254,7 @@ export default function SettingsScreen() {
           animate={{ opacity: 1, translateY: 0 }}
           transition={{ type: 'timing', duration: 350, delay: 80 }}
         >
-          <SettingsSection
-            title={t('settings.preferences')}
-            items={[
-              {
-                id: 'language',
-                label: t('settings.language'),
-                subtitle: currentLanguage === 'tr' ? t('settings.languageTR') : t('settings.languageEN'),
-                icon: 'language-outline',
-                iconColor: palette.geminiBlue,
-                onPress: () => {
-                  const next = currentLanguage === 'tr' ? 'en' : 'tr';
-                  changeLanguage(next);
-                  toast.info(t('toast.settingsSaved'));
-                },
-              },
-              {
-                id: 'theme',
-                label: t('settings.theme'),
-                subtitle: themeSubtitle,
-                icon: isDark ? 'moon-outline' : 'sunny-outline',
-                iconColor: palette.claudeOrange,
-                onPress: () => {
-                  const next = theme === 'system' ? 'light' : theme === 'light' ? 'dark' : 'system';
-                  dispatch(setTheme(next));
-                },
-              },
-              {
-                id: 'notifications',
-                label: t('settings.notifications'),
-                subtitle: t('settings.notificationsDesc'),
-                icon: 'notifications-outline',
-                iconColor: palette.gptGreen,
-                toggle: true,
-                toggleValue: notificationsEnabled,
-                onToggle: (v) => dispatch(setNotifications(v)),
-              },
-            ]}
-          />
+          <SettingsSection title={t('settings.preferences')} items={preferenceItems} />
         </MotiView>
 
         {/* Chat Settings */}

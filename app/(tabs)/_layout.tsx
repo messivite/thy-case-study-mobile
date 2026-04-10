@@ -7,11 +7,13 @@ import { PostNavigationEnterFade } from '@/components/PostNavigationEnterFade';
 import { TabBarItem } from '@/molecules/TabBarItem';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
+import { usePushNotifications } from '@/hooks/usePushNotifications';
 
 export default function TabLayout() {
   const { t } = useI18n();
   const { isDark } = useTheme();
   const insets = useSafeAreaInsets();
+  usePushNotifications();
 
   const bottomPad = Math.max(insets.bottom, 8);
 

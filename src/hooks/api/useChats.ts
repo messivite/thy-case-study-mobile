@@ -1,5 +1,6 @@
-import { useMutation, useQuery, useInfiniteQuery, useQueryClient, InfiniteData } from '@tanstack/react-query';
+import { useMutation, useQuery, useInfiniteQuery, useQueryClient, InfiniteData, UseQueryOptions } from '@tanstack/react-query';
 import { getChats, getChat, createChat, sendMessage, streamChat, syncChat, getChatMessages } from '@/api/chat.api';
+import { getMockChatsPage, MockChatsPage } from '@/data/mockChats';
 import {
   CreateChatRequest,
   CreateChatResponse,
@@ -17,6 +18,7 @@ import {
 
 export const CHAT_QUERY_KEYS = {
   chats: ['chats'] as const,
+  chatsList: ['chats', 'list'] as const,
   chat: (chatId: string) => ['chats', chatId] as const,
   messages: (chatId: string) => ['chats', chatId, 'messages'] as const,
 };
@@ -29,10 +31,32 @@ export const CHAT_QUERY_KEYS = {
  *   const { data, isLoading } = useGetChatsQuery();
  *   data?.map(chat => chat.title)
  */
-export const useGetChatsQuery = () =>
+export const useGetChatsQuery = (
+  options?: Partial<UseQueryOptions<GetChatsResponse, Error>>,
+) =>
   useQuery<GetChatsResponse, Error>({
     queryKey: CHAT_QUERY_KEYS.chats,
     queryFn: () => getChats(),
+    ...options,
+  });
+
+/**
+ * GET /api/chats — Infinite scroll (paginated) versiyonu
+ *
+ * Şu an mock data kullanır. API entegrasyon aşamasında sadece
+ * queryFn içindeki getMockChatsPage → getChats(cursor) ile değiştirilir.
+ *
+ * Kullanım:
+ *   const { data, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteChatsQuery();
+ *   const allChats = data?.pages.flatMap(p => p.items) ?? [];
+ */
+export const useInfiniteChatsQuery = () =>
+  useInfiniteQuery<MockChatsPage, Error>({
+    queryKey: CHAT_QUERY_KEYS.chatsList,
+    queryFn: ({ pageParam }) => getMockChatsPage(pageParam as string | undefined),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    staleTime: Infinity,
   });
 
 /**
