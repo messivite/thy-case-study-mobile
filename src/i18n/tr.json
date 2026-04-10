@@ -81,6 +81,16 @@
     "title": "AI Chat",
     "headerTitle": "THY Case Study"
   },
+  "network": {
+    "offlineTitle": "İnternet bağlantısı yok",
+    "offlineMessage": "Şu an çevrimdışı görünüyorsun. İçerik kaydedilebilir; bağlantı gelince bekleyen işlemlerini senkronize edebileceksin.",
+    "offlineDismiss": "Tamam",
+    "onlineTitle": "Bağlantı yeniden kuruldu",
+    "onlineMessage": "Çevrimdışıyken biriken mesajların varsa şimdi sunucuyla eşitleyebilirsin.",
+    "onlineSync": "Senkronize et",
+    "onlineLater": "Sonra",
+    "syncPlaceholder": "Senkronizasyon bir sonraki adımda (offline kuyruk) eklenecek."
+  },
   "assistant": {
     "title": "Asistan",
     "placeholder": "Mesajınızı yazın...",
@@ -93,7 +103,9 @@
     "emptyTitle": "Nasıl yardımcı olabilirim?",
     "emptySubtitle": "Bir soru yazın, AI asistanınız yanıtlasın.",
     "typing": "Yazıyor...",
-    "loadingMore": "Eski mesajlar yükleniyor..."
+    "loadingMore": "Eski mesajlar yükleniyor...",
+    "speak": "Sesli dinle",
+    "stopSpeaking": "Okumayı durdur"
   },
   "settings": {
     "title": "Ayarlar",
@@ -144,6 +156,7 @@
     "modelChanged": "Model değiştirildi",
     "settingsSaved": "Ayarlar kaydedildi",
     "networkError": "İnternet bağlantısı yok",
-    "unknownError": "Bir hata oluştu"
+    "unknownError": "Bir hata oluştu",
+    "speechError": "Sesli okuma başlatılamadı"
   }
 }

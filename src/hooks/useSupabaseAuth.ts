@@ -5,8 +5,8 @@
  *
  * Sorumlulukları:
  *  1. App açılışında mevcut session'ı restore et
- *  2. Supabase onAuthStateChange listener'ı → RTK dispatch (SIGNED_OUT’ta reset/nav yok;
- *     açılışta SDK gürültüsü + çıkış optimistic path ile çakışmasın diye)
+ *  2. Supabase onAuthStateChange listener'ı → RTK dispatch
+ *     (SIGNED_OUT: sadece Redux’ta gerçekten oturum varken reset/nav — açılış gürültüsünde atla)
  *  3. Token süresi dolduysa proaktif refresh (background interval)
  *  4. 401 interceptor sinyalini dinle → refresh → retry
  *  5. Login / register / logout / Google OAuth methodlarını dışa aç
@@ -104,6 +104,11 @@ function useSupabaseAuthState(): SupabaseAuthApi {
   const { accessToken, refreshToken, expiresAt, status } = useAppSelector((s) => s.auth);
   const refreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isRefreshingRef = useRef(false);
+  /** SIGNED_OUT anında güncel auth.status (idle iken gelen gürültüyü yok saymak için) */
+  const authStatusRef = useRef(status);
+  useEffect(() => {
+    authStatusRef.current = status;
+  }, [status]);
 
   // -------------------------------------------------------------------------
   // Helpers
@@ -247,11 +252,20 @@ function useSupabaseAuthState(): SupabaseAuthApi {
               }
               break;
 
-            case 'SIGNED_OUT':
-              // Çıkış / oturum düşmesi: reset + navigate sadece manuel logout, SESSION_EXPIRED, REFRESH_FAILED.
-              // SIGNED_OUT açılışta da tetiklenebiliyor; burada state veya route’a dokunma.
+            case 'SIGNED_OUT': {
               stopRefreshInterval();
+              const hadUserSession =
+                authStatusRef.current === 'authenticated' ||
+                authStatusRef.current === 'guest';
+              if (!hadUserSession) {
+                break;
+              }
+              await clearSession();
+              dispatch(resetAfterLogout());
+              setErrorReportingUser(null);
+              router.replace('/(auth)/welcome');
               break;
+            }
 
             case 'PASSWORD_RECOVERY':
               // Deep link ile şifre sıfırlama sayfasına yönlendirme

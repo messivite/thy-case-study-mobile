@@ -10,6 +10,7 @@ import Constants from 'expo-constants';
 import { Avatar } from '@/atoms/Avatar';
 import { Text } from '@/atoms/Text';
 import { SettingsSection } from '@/organisms/SettingsSection';
+import { UsageStatsCard } from '@/molecules/UsageStatsCard';
 import { useTheme } from '@/hooks/useTheme';
 import { useAuth } from '@/hooks/useAuth';
 import { useI18n } from '@/hooks/useI18n';
@@ -60,6 +61,14 @@ export default function SettingsScreen() {
       : theme === 'dark'
       ? t('settings.themeDark')
       : t('settings.themeSystem');
+
+  // TODO: API entegresinde gerçek quota verisiyle değiştirilecek.
+  const usageMock = {
+    dailyUsed: 7,
+    dailyLimit: 20,
+    weeklyUsed: 32,
+    weeklyLimit: 90,
+  } as const;
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]} edges={['top']}>
@@ -119,6 +128,20 @@ export default function SettingsScreen() {
               />
             </View>
           </LinearGradient>
+        </MotiView>
+
+        {/* Usage Stats (Mock) */}
+        <MotiView
+          from={{ opacity: 0, translateY: 16 }}
+          animate={{ opacity: 1, translateY: 0 }}
+          transition={{ type: 'timing', duration: 350, delay: 40 }}
+        >
+          <UsageStatsCard
+            dailyUsed={usageMock.dailyUsed}
+            dailyLimit={usageMock.dailyLimit}
+            weeklyUsed={usageMock.weeklyUsed}
+            weeklyLimit={usageMock.weeklyLimit}
+          />
         </MotiView>
 
         {/* Preferences */}

@@ -2,13 +2,6 @@ import React from 'react';
 import { InteractionManager } from 'react-native';
 import { router } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useFonts } from 'expo-font';
-import {
-  Inter_400Regular,
-  Inter_500Medium,
-  Inter_600SemiBold,
-  Inter_700Bold,
-} from '@expo-google-fonts/inter';
 import { devConfig } from '@/config/devConfig';
 import { mmkvStorage, STORAGE_KEYS } from '@/lib/mmkv';
 import { getCurrentSession } from '@/services/authService';
@@ -29,13 +22,6 @@ function schedulePostSplashNavigation(action: () => void) {
 }
 
 export default function SplashPage() {
-  const [fontsLoaded] = useFonts({
-    Inter_400Regular,
-    Inter_500Medium,
-    Inter_600SemiBold,
-    Inter_700Bold,
-  });
-
   const navigate = async () => {
     if (devConfig.onboardingInitial) {
       schedulePostSplashNavigation(() => router.replace('/(onboarding)'));
@@ -56,6 +42,6 @@ export default function SplashPage() {
   };
 
   return (
-    <AppSplashScreen fontsLoaded={fontsLoaded} onSplashFinished={navigate} />
+    <AppSplashScreen fontsLoaded onSplashFinished={navigate} />
   );
 }

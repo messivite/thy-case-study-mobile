@@ -24,9 +24,19 @@ type Props = {
   onLike?: (id: string, liked: boolean | null) => void;
   onRegenerate?: (id: string) => void;
   index: number;
+  /** Asistan balonu: sesli okuma */
+  isSpeaking?: boolean;
+  onSpeakToggle?: () => void;
 };
 
-export const MessageBubble: React.FC<Props> = ({ message, onLike, onRegenerate, index }) => {
+export const MessageBubble: React.FC<Props> = ({
+  message,
+  onLike,
+  onRegenerate,
+  index,
+  isSpeaking = false,
+  onSpeakToggle,
+}) => {
   const { colors } = useTheme();
   const haptics = useHaptics();
   const { t } = useI18n();
@@ -56,6 +66,11 @@ export const MessageBubble: React.FC<Props> = ({ message, onLike, onRegenerate, 
     },
     [message.id, message.liked, onLike],
   );
+
+  const handleSpeak = useCallback(() => {
+    haptics.light();
+    onSpeakToggle?.();
+  }, [onSpeakToggle, haptics]);
 
   return (
     <MotiView
@@ -125,6 +140,22 @@ export const MessageBubble: React.FC<Props> = ({ message, onLike, onRegenerate, 
 
           {!isUser && (
             <View style={styles.actions}>
+              {onSpeakToggle && (
+                <TouchableOpacity
+                  onPress={handleSpeak}
+                  style={styles.actionBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    isSpeaking ? t('assistant.stopSpeaking') : t('assistant.speak')
+                  }
+                >
+                  <Ionicons
+                    name={isSpeaking ? 'stop-circle-outline' : 'volume-high-outline'}
+                    size={14}
+                    color={isSpeaking ? colors.primary : colors.textSecondary}
+                  />
+                </TouchableOpacity>
+              )}
               {message.content.length > 0 && (
                 <TouchableOpacity onPress={handleCopy} style={styles.actionBtn}>
                   <Ionicons name="copy-outline" size={14} color={colors.textSecondary} />

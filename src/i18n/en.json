@@ -81,6 +81,16 @@
     "title": "AI Chat",
     "headerTitle": "THY Case Study"
   },
+  "network": {
+    "offlineTitle": "No internet connection",
+    "offlineMessage": "You appear to be offline. Content can still be queued; when you’re back online you’ll be able to sync pending work.",
+    "offlineDismiss": "OK",
+    "onlineTitle": "You’re back online",
+    "onlineMessage": "If you have messages queued while offline, you can sync them with the server now.",
+    "onlineSync": "Sync now",
+    "onlineLater": "Later",
+    "syncPlaceholder": "Sync will be wired up with the offline queue next."
+  },
   "assistant": {
     "title": "Assistant",
     "placeholder": "Type your message...",
@@ -93,7 +103,9 @@
     "emptyTitle": "How can I help you?",
     "emptySubtitle": "Write a question and your AI assistant will respond.",
     "typing": "Typing...",
-    "loadingMore": "Loading older messages..."
+    "loadingMore": "Loading older messages...",
+    "speak": "Listen",
+    "stopSpeaking": "Stop reading"
   },
   "settings": {
     "title": "Settings",
@@ -144,6 +156,7 @@
     "modelChanged": "Model changed",
     "settingsSaved": "Settings saved",
     "networkError": "No internet connection",
-    "unknownError": "An error occurred"
+    "unknownError": "An error occurred",
+    "speechError": "Could not start text-to-speech"
   }
 }

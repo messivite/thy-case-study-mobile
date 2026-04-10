@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { InteractionManager } from 'react-native';
+import { InteractionManager, Platform } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -33,5 +33,15 @@ export function PostNavigationEnterFade({ children }: Props) {
     opacity: opacity.value,
   }));
 
-  return <Animated.View style={fadeStyle}>{children}</Animated.View>;
+  return (
+    <Animated.View
+      style={[
+        fadeStyle,
+        // Web flex: iç içe flex + ScrollView yüksekliği için (min-height:auto)
+        Platform.OS === 'web' && { minHeight: 0 },
+      ]}
+    >
+      {children}
+    </Animated.View>
+  );
 }

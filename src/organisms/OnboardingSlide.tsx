@@ -7,7 +7,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import { palette } from '@/constants/colors';
 import { radius, spacing } from '@/constants/spacing';
-import { scale, verticalScale, screen } from '@/lib/responsive';
+import { verticalScale, DESIGN_BASE_WIDTH } from '@/lib/responsive';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -24,6 +24,8 @@ interface OnboardingSlideProps {
   slide: SlideData;
   index: number;
   isActive: boolean;
+  /** Slide genişliği (web’de sütun; native’de ekran genişliği) */
+  slideWidth: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -52,13 +54,6 @@ export const ONBOARDING_SLIDES: SlideData[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// Responsive constants
-// ---------------------------------------------------------------------------
-
-const ICON_WRAP_SIZE = scale(148);
-const ICON_SIZE = scale(68);
-
-// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -68,13 +63,22 @@ const TEXT_ENTER_TRANSITION = { type: 'timing' as const, duration: 350, delay: 1
 export const OnboardingSlide = memo<OnboardingSlideProps>(function OnboardingSlide({
   slide,
   isActive,
+  slideWidth,
 }) {
   const { colors } = useTheme();
   const { t } = useI18n();
 
+  const { iconWrapSize, iconSize } = useMemo(() => {
+    const ratio = slideWidth / DESIGN_BASE_WIDTH;
+    return {
+      iconWrapSize: Math.round(148 * ratio),
+      iconSize: Math.round(68 * ratio),
+    };
+  }, [slideWidth]);
+
   const iconWrapStyle = useMemo(
-    () => [styles.iconWrap, { width: ICON_WRAP_SIZE, height: ICON_WRAP_SIZE }],
-    [],
+    () => [styles.iconWrap, { width: iconWrapSize, height: iconWrapSize }],
+    [iconWrapSize],
   );
 
   const iconInnerStyle = useMemo(
@@ -88,7 +92,7 @@ export const OnboardingSlide = memo<OnboardingSlideProps>(function OnboardingSli
   );
 
   return (
-    <View style={styles.slide}>
+    <View style={[styles.slide, { width: slideWidth }]}>
       <MotiView
         from={{ opacity: 0, scale: 0.7 }}
         animate={iconAnimate}
@@ -96,7 +100,7 @@ export const OnboardingSlide = memo<OnboardingSlideProps>(function OnboardingSli
         style={iconWrapStyle}
       >
         <View style={iconInnerStyle}>
-          <Ionicons name={slide.icon} size={ICON_SIZE} color={slide.color} />
+          <Ionicons name={slide.icon} size={iconSize} color={slide.color} />
         </View>
       </MotiView>
 
@@ -123,7 +127,6 @@ export const OnboardingSlide = memo<OnboardingSlideProps>(function OnboardingSli
 
 const styles = StyleSheet.create({
   slide: {
-    width: screen.width,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing[8],

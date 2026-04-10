@@ -8,7 +8,15 @@ import React, {
   Suspense,
   lazy,
 } from 'react';
-import { View, StyleSheet, FlatList, type ListRenderItemInfo, type ViewStyle } from 'react-native';
+import {
+  View,
+  StyleSheet,
+  FlatList,
+  Platform,
+  useWindowDimensions,
+  type ListRenderItemInfo,
+  type ViewStyle,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import Animated, {
@@ -21,6 +29,7 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import { PostNavigationEnterFade } from '@/components/PostNavigationEnterFade';
+import { NetworkConnectivitySheets } from '@/organisms/NetworkConnectivitySheets';
 import { Button } from '@/atoms/Button';
 import { TextButton } from '@/atoms/TextButton';
 import { Logo } from '@/atoms/Logo';
@@ -37,7 +46,7 @@ import { spacing } from '@/constants/spacing';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
-import { scale, verticalScale, screen } from '@/lib/responsive';
+import { scale, verticalScale, DESIGN_BASE_WIDTH } from '@/lib/responsive';
 import { fontSize, fontFamily } from '@/constants/typography';
 
 /** V2 ayrı async chunk — kapalıyken Moti/Deck native bundle'a hiç girmez (SIGABRT riski). */
@@ -46,8 +55,6 @@ const OnboardingDeckV2Lazy = lazy(() =>
 );
 
 const SKIP_HIT_SLOP = { top: 8, bottom: 8, left: 24, right: 24 } as const;
-
-const SLIDE_PAGE_WIDTH = screen.width;
 
 // ---------------------------------------------------------------------------
 // Animated background circle
@@ -108,10 +115,15 @@ const BgCircle = memo<BgCircleProps>(function BgCircle({
 // ---------------------------------------------------------------------------
 
 export default function OnboardingScreen() {
+  const { width: windowWidth } = useWindowDimensions();
+  const slidePageWidth =
+    Platform.OS === 'web' ? Math.min(windowWidth, DESIGN_BASE_WIDTH) : windowWidth;
+
   const { colors } = useTheme();
   const { t } = useI18n();
   const { skipWithAnonymousLogin } = useSupabaseAuth();
   const [activeIndex, setActiveIndex] = useState(0);
+  const [v2ActiveIndex, setV2ActiveIndex] = useState(0);
   const listRef = useRef<FlatList>(null);
 
   const isLast = activeIndex === ONBOARDING_SLIDES.length - 1;
@@ -121,7 +133,10 @@ export default function OnboardingScreen() {
     [colors.background],
   );
 
-  const flatListStyle = useMemo(() => ({ flex: 1 }), []);
+  const flatListStyle = useMemo(
+    () => [styles.flatListBase, Platform.OS === 'web' && styles.flatListWeb],
+    [],
+  );
 
   const nextButtonTitle = useMemo(
     () => (isLast ? t('onboarding.getStarted') : t('common.next')),
@@ -132,18 +147,23 @@ export default function OnboardingScreen() {
 
   const getItemLayout = useCallback(
     (_data: ArrayLike<SlideData> | null | undefined, index: number) => ({
-      length: SLIDE_PAGE_WIDTH,
-      offset: SLIDE_PAGE_WIDTH * index,
+      length: slidePageWidth,
+      offset: slidePageWidth * index,
       index,
     }),
-    [],
+    [slidePageWidth],
   );
 
   const renderSlide = useCallback(
     ({ item, index }: ListRenderItemInfo<SlideData>) => (
-      <OnboardingSlide slide={item} index={index} isActive={index === activeIndex} />
+      <OnboardingSlide
+        slide={item}
+        index={index}
+        isActive={index === activeIndex}
+        slideWidth={slidePageWidth}
+      />
     ),
-    [activeIndex],
+    [activeIndex, slidePageWidth],
   );
 
   const v2Fallback = useMemo(
@@ -180,18 +200,29 @@ export default function OnboardingScreen() {
 
   if (devConfig.onboardingV2Enabled) {
     return (
-      <Suspense fallback={v2Fallback}>
-        <PostNavigationEnterFade>
-          <OnboardingDeckV2Lazy onComplete={handleComplete} onSkip={handleSkip} />
-        </PostNavigationEnterFade>
-      </Suspense>
+      <>
+        <Suspense fallback={v2Fallback}>
+          <PostNavigationEnterFade>
+            <OnboardingDeckV2Lazy
+              onComplete={handleComplete}
+              onSkip={handleSkip}
+              onActiveIndexChange={setV2ActiveIndex}
+            />
+          </PostNavigationEnterFade>
+        </Suspense>
+        <NetworkConnectivitySheets enabled={v2ActiveIndex === 0} />
+      </>
     );
   }
 
   return (
-    <SafeAreaView style={safeAreaStyle}>
+    <>
+    <SafeAreaView
+      style={[safeAreaStyle, Platform.OS === 'web' && styles.safeWeb]}
+    >
       <PostNavigationEnterFade>
-      {/* Animated background circles */}
+      <View style={[styles.screenFill, Platform.OS === 'web' && styles.screenFillWeb]}>
+      {/* Animated background circles — tam genişlik */}
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
         <BgCircle
           size={scale(200)}
@@ -216,47 +247,49 @@ export default function OnboardingScreen() {
         <Logo width={150} />
       </View>
 
-      {/* Slides */}
-      <FlatList
-        ref={listRef}
-        data={ONBOARDING_SLIDES}
-        keyExtractor={keyExtractor}
-        getItemLayout={getItemLayout}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        scrollEnabled={false}
-        renderItem={renderSlide}
-        style={flatListStyle}
-        removeClippedSubviews={false}
-      />
-
-      {/* Bottom */}
-      <View style={styles.bottom}>
-        {/* Segment progress */}
-        <View style={styles.progressWrap}>
-          <OnboardingProgress
-            activeIndex={activeIndex}
-            total={ONBOARDING_SLIDES.length}
+      <View style={[styles.deckOuter, Platform.OS === 'web' && styles.deckOuterWeb]}>
+        <View style={[styles.deckInner, Platform.OS === 'web' && styles.deckInnerWeb]}>
+          <FlatList
+            ref={listRef}
+            data={ONBOARDING_SLIDES}
+            keyExtractor={keyExtractor}
+            getItemLayout={getItemLayout}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            scrollEnabled={false}
+            renderItem={renderSlide}
+            style={flatListStyle}
+            removeClippedSubviews={false}
           />
+
+          <View style={styles.bottom}>
+            <View style={styles.progressWrap}>
+              <OnboardingProgress
+                activeIndex={activeIndex}
+                total={ONBOARDING_SLIDES.length}
+              />
+            </View>
+
+            <Button title={nextButtonTitle} onPress={handleNext} fullWidth />
+
+            <TextButton
+              title={t('onboarding.skipAndContinue')}
+              color={colors.textSecondary}
+              onPress={handleSkip}
+              hapticType="selection"
+              style={styles.skipBtn}
+              textStyle={styles.skipText}
+              hitSlop={SKIP_HIT_SLOP}
+            />
+          </View>
         </View>
-
-        {/* Next / Get Started */}
-        <Button title={nextButtonTitle} onPress={handleNext} fullWidth />
-
-        {/* Skip — Next'in altında, text olarak */}
-        <TextButton
-          title={t('onboarding.skipAndContinue')}
-          color={colors.textSecondary}
-          onPress={handleSkip}
-          hapticType="selection"
-          style={styles.skipBtn}
-          textStyle={styles.skipText}
-          hitSlop={SKIP_HIT_SLOP}
-        />
+      </View>
       </View>
       </PostNavigationEnterFade>
     </SafeAreaView>
+    <NetworkConnectivitySheets enabled={activeIndex === 0} />
+    </>
   );
 }
 
@@ -267,6 +300,39 @@ export default function OnboardingScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
+    width: '100%',
+  },
+  screenFill: {
+    flex: 1,
+    width: '100%',
+  },
+  screenFillWeb: {
+    minHeight: 0,
+  },
+  safeWeb: {
+    minHeight: 0,
+  },
+  deckOuter: {
+    flex: 1,
+    width: '100%',
+  },
+  deckOuterWeb: {
+    minHeight: 0,
+  },
+  deckInner: {
+    flex: 1,
+    width: '100%',
+  },
+  deckInnerWeb: {
+    maxWidth: DESIGN_BASE_WIDTH,
+    alignSelf: 'center',
+    minHeight: 0,
+  },
+  flatListBase: {
+    flex: 1,
+  },
+  flatListWeb: {
+    minHeight: 0,
   },
   logoWrap: {
     alignItems: 'center',

@@ -9,7 +9,7 @@
  * Animasyon: Tek seferlik mount fade-in, sallantı/spring yok.
  */
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import {
   View,
   StyleSheet,
@@ -17,6 +17,8 @@ import {
   Animated as RNAnimated,
   useWindowDimensions,
   StatusBar,
+  Platform,
+  type ViewStyle,
 } from 'react-native';
 import Animated, {
   useAnimatedStyle,
@@ -53,7 +55,7 @@ import {
   WELCOME_SKY_GRADIENT_LOCATIONS,
 } from '@/constants/welcomeScreen';
 import { fontFamily } from '@/constants/typography';
-import { scale } from '@/lib/responsive';
+import { scale, DESIGN_BASE_WIDTH } from '@/lib/responsive';
 import {
   welcomeLoginSchema,
   type WelcomeLoginFormValues,
@@ -61,7 +63,42 @@ import {
 
 export default function WelcomeScreen() {
   const insets = useSafeAreaInsets();
-  const { height: windowHeight } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const viewportHeight = windowHeight > 0 ? windowHeight : 844;
+
+  /** Web: onboarding ile aynı — içerik sütunu max telefon genişliği; mobil: etkisiz */
+  const contentScale = useMemo(() => {
+    if (Platform.OS !== 'web') {
+      return scale;
+    }
+    const w = windowWidth > 0 ? windowWidth : DESIGN_BASE_WIDTH;
+    const cw = Math.max(1, Math.min(w, DESIGN_BASE_WIDTH));
+    return (n: number) => Math.round((cw / DESIGN_BASE_WIDTH) * n);
+  }, [windowWidth]);
+
+  /** Web: StyleSheet içindeki scale() tam ekran genişliğine göre şişmesin — contentScale ile üstüne yaz */
+  const webScaled = useMemo(() => {
+    if (Platform.OS !== 'web') return null;
+    const cs = contentScale;
+    return {
+      heroTitle: { fontSize: cs(28), lineHeight: cs(34) },
+      heroTitleAccent: { fontSize: cs(28), lineHeight: cs(34) },
+      heroSub: { fontSize: cs(13), lineHeight: cs(20) },
+      fieldLabel: { fontSize: cs(12) },
+      forgotText: { fontSize: cs(12) },
+      loginBtn: { height: cs(52) },
+      loginBtnText: { fontSize: cs(16) },
+      dividerText: { fontSize: cs(12) },
+      googleBtn: { height: cs(52) },
+      googleBtnText: { fontSize: cs(15) },
+      footerLink: { fontSize: cs(12) },
+      guestSigningToast: {
+        paddingVertical: cs(14),
+        paddingHorizontal: cs(22),
+      },
+      guestSigningToastText: { fontSize: cs(15) },
+    };
+  }, [contentScale]);
   const { t } = useI18n();
   const { status } = useAuth();
   const { login, loginWithGoogle, continueAsGuest } = useSupabaseAuth();
@@ -150,8 +187,10 @@ export default function WelcomeScreen() {
     if (guestAuthPending) return;
     setGuestAuthPending(true);
     toast.custom(
-      <View style={styles.guestSigningToast}>
-        <Text style={styles.guestSigningToastText}>{t('auth.loggingIn')}</Text>
+      <View style={[styles.guestSigningToast, webScaled?.guestSigningToast]}>
+        <Text style={[styles.guestSigningToastText, webScaled?.guestSigningToastText]}>
+          {t('auth.loggingIn')}
+        </Text>
       </View>,
       {
         id: WELCOME_GUEST_SIGNING_TOAST_ID,
@@ -179,8 +218,21 @@ export default function WelcomeScreen() {
     });
   };
 
+  const screenWrapStyle = useMemo(() => {
+    const s: (ViewStyle | false | undefined)[] = [styles.screenWrap];
+    if (Platform.OS === 'web') {
+      s.push({ minHeight: viewportHeight, height: viewportHeight });
+    }
+    return s;
+  }, [viewportHeight]);
+
+  const KeyboardContainer: ComponentType<any> =
+    Platform.OS === 'web' ? View : KeyboardAvoidingView;
+  const keyboardContainerProps =
+    Platform.OS === 'web' ? {} : { behavior: 'padding' as const, keyboardVerticalOffset: 0 };
+
   return (
-    <View style={styles.screenWrap}>
+    <View style={screenWrapStyle}>
       <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
       <LinearGradient
         colors={[...WELCOME_SKY_GRADIENT]}
@@ -190,31 +242,45 @@ export default function WelcomeScreen() {
         style={styles.gradientFill}
         pointerEvents="none"
       />
-      <SafeAreaView style={styles.safeOverlay} edges={['bottom']}>
+      <SafeAreaView
+        style={[styles.safeOverlay, Platform.OS === 'web' && styles.safeOverlayWeb]}
+        edges={['top', 'bottom']}
+      >
         <RNAnimated.View
           style={[
             styles.fill,
-            { opacity: fadeAnim, paddingTop: insets.top },
+            { opacity: fadeAnim },
           ]}
         >
-        <KeyboardAvoidingView
+        <KeyboardContainer
           style={styles.fill}
-          behavior="padding"
-          keyboardVerticalOffset={0}
+          {...keyboardContainerProps}
         >
-          <View style={styles.pageGradient}>
+          <View
+            style={[styles.pageGradient, Platform.OS === 'web' && styles.pageGradientWebRoot]}
+          >
+            <View
+              style={[
+                styles.pageGradientInner,
+                Platform.OS === 'web' && styles.pageGradientInnerWeb,
+              ]}
+            >
               <Animated.View
                 style={[
                   styles.infoSiteAnchor,
-                  { top: 0, right: spacing[4] + insets.right },
+                  {
+                    // Web’de çoğu ortamda insets.top = 0 (notch yok). En azından tasarım boşluğu ekle.
+                    top: Platform.OS === 'web' ? insets.top + spacing[3] : 0,
+                    right: spacing[4] + insets.right,
+                  },
                   guestDimAnimatedStyle,
                 ]}
                 pointerEvents={guestAuthPending ? 'none' : 'auto'}
               >
                 <SurfaceIconPressable
                   shape="circle"
-                  width={scale(44)}
-                  height={scale(44)}
+                  width={contentScale(44)}
+                  height={contentScale(44)}
                   onPress={openInfoSite}
                   disabled={guestAuthPending}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -222,24 +288,26 @@ export default function WelcomeScreen() {
                 >
                   <Ionicons
                     name="information-circle-outline"
-                    size={scale(24)}
+                    size={contentScale(24)}
                     color={palette.primary}
                   />
                 </SurfaceIconPressable>
               </Animated.View>
 
-              <View style={[styles.hero, { height: windowHeight * WELCOME_HERO_RATIO }]}>
+              <View style={[styles.hero, { height: viewportHeight * WELCOME_HERO_RATIO }]}>
                 <View style={styles.heroLogoBox}>
-                  <Logo width={scale(100)} />
+                  <Logo width={contentScale(100)} />
                 </View>
                 <View style={styles.heroTitleWrap}>
-                  <Text style={styles.heroTitle}>
+                  <Text style={[styles.heroTitle, webScaled?.heroTitle]}>
                     {t('auth.welcomeHeroLine1')}
                     {'\n'}
-                    <Text style={styles.heroTitleAccent}>{t('auth.welcomeHeroLine2')}</Text>
+                    <Text style={[styles.heroTitleAccent, webScaled?.heroTitleAccent]}>
+                      {t('auth.welcomeHeroLine2')}
+                    </Text>
                   </Text>
                 </View>
-                <Text style={styles.heroSub}>
+                <Text style={[styles.heroSub, webScaled?.heroSub]}>
                   {t('auth.welcomeSubtitle')}
                 </Text>
               </View>
@@ -254,7 +322,7 @@ export default function WelcomeScreen() {
               <View style={styles.formSection}>
               <View style={styles.formBlock}>
               {/* Email */}
-              <Text style={styles.fieldLabel}>{t('auth.email')}</Text>
+              <Text style={[styles.fieldLabel, webScaled?.fieldLabel]}>{t('auth.email')}</Text>
               <FormField
                 control={control}
                 name="email"
@@ -268,14 +336,14 @@ export default function WelcomeScreen() {
 
               {/* Password */}
               <View style={styles.passwordHeader}>
-                <Text style={styles.fieldLabel}>{t('auth.password')}</Text>
+                <Text style={[styles.fieldLabel, webScaled?.fieldLabel]}>{t('auth.password')}</Text>
                 <TouchableOpacity
                   onPress={() => {}}
                   hitSlop={{ top: 8, bottom: 8, left: 12, right: 4 }}
                   disabled={guestAuthPending}
                   accessibilityState={{ disabled: guestAuthPending }}
                 >
-                  <Text style={styles.forgotText}>{t('auth.forgotPassword')}</Text>
+                  <Text style={[styles.forgotText, webScaled?.forgotText]}>{t('auth.forgotPassword')}</Text>
                 </TouchableOpacity>
               </View>
               <FormField
@@ -289,7 +357,7 @@ export default function WelcomeScreen() {
               {/* Login butonu — geçersiz formda disabled + düşük opacity (Reanimated) */}
               <Animated.View style={loginBtnAnimatedStyle}>
                 <TouchableOpacity
-                  style={styles.loginBtn}
+                  style={[styles.loginBtn, webScaled?.loginBtn]}
                   onPress={handleSubmit(onSubmit)}
                   activeOpacity={0.85}
                   disabled={!canSubmit || isSubmitting || guestAuthPending}
@@ -297,11 +365,19 @@ export default function WelcomeScreen() {
                 >
                   {isSubmitting ? (
                     <View style={styles.loginBtnRow}>
-                      <Ionicons name="reload-outline" size={scale(16)} color={palette.white} />
-                      <Text style={styles.loginBtnText}>{t('auth.loggingIn')}</Text>
+                      <Ionicons
+                        name="reload-outline"
+                        size={contentScale(16)}
+                        color={palette.white}
+                      />
+                      <Text style={[styles.loginBtnText, webScaled?.loginBtnText]}>
+                        {t('auth.loggingIn')}
+                      </Text>
                     </View>
                   ) : (
-                    <Text style={styles.loginBtnText}>{t('auth.login')}</Text>
+                    <Text style={[styles.loginBtnText, webScaled?.loginBtnText]}>
+                      {t('auth.login')}
+                    </Text>
                   )}
                 </TouchableOpacity>
               </Animated.View>
@@ -309,20 +385,24 @@ export default function WelcomeScreen() {
               {/* Divider */}
               <View style={styles.divider}>
                 <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>{t('auth.orContinueWith')}</Text>
+                <Text style={[styles.dividerText, webScaled?.dividerText]}>
+                  {t('auth.orContinueWith')}
+                </Text>
                 <View style={styles.dividerLine} />
               </View>
 
               {/* Google */}
               <TouchableOpacity
-                style={styles.googleBtn}
+                style={[styles.googleBtn, webScaled?.googleBtn]}
                 onPress={handleGoogle}
                 activeOpacity={0.85}
                 disabled={guestAuthPending}
                 accessibilityState={{ disabled: guestAuthPending }}
               >
-                <Ionicons name="logo-google" size={scale(18)} color="#4285F4" />
-                <Text style={styles.googleBtnText}>{t('auth.loginWithGoogle')}</Text>
+                <Ionicons name="logo-google" size={contentScale(18)} color="#4285F4" />
+                <Text style={[styles.googleBtnText, webScaled?.googleBtnText]}>
+                  {t('auth.loginWithGoogle')}
+                </Text>
               </TouchableOpacity>
               </View>
 
@@ -333,7 +413,9 @@ export default function WelcomeScreen() {
                   disabled={guestAuthPending}
                   accessibilityState={{ disabled: guestAuthPending }}
                 >
-                  <Text style={styles.footerLink}>{t('auth.continueAsGuest')}</Text>
+                  <Text style={[styles.footerLink, webScaled?.footerLink]}>
+                    {t('auth.continueAsGuest')}
+                  </Text>
                 </TouchableOpacity>
                 <View style={styles.footerDot} />
                 <TouchableOpacity
@@ -342,13 +424,16 @@ export default function WelcomeScreen() {
                   disabled={guestAuthPending}
                   accessibilityState={{ disabled: guestAuthPending }}
                 >
-                  <Text style={styles.footerLink}>{t('auth.register')}</Text>
+                  <Text style={[styles.footerLink, webScaled?.footerLink]}>
+                    {t('auth.register')}
+                  </Text>
                 </TouchableOpacity>
               </View>
               </View>
               </Animated.View>
+            </View>
           </View>
-        </KeyboardAvoidingView>
+        </KeyboardContainer>
         </RNAnimated.View>
       </SafeAreaView>
     </View>
@@ -371,6 +456,11 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'transparent',
   },
+  safeOverlayWeb: {
+    width: '100%',
+    minHeight: 0,
+    height: '100%',
+  },
   fill: {
     flex: 1,
   },
@@ -378,8 +468,22 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
     backgroundColor: 'transparent',
+    flexDirection: 'column',
+  },
+  pageGradientWebRoot: {
+    width: '100%',
+    minHeight: 0,
+  },
+  pageGradientInner: {
+    flex: 1,
+    width: '100%',
+    minHeight: 0,
     position: 'relative',
     flexDirection: 'column',
+  },
+  pageGradientInnerWeb: {
+    maxWidth: DESIGN_BASE_WIDTH,
+    alignSelf: 'center',
   },
   flexSpacer: {
     flex: 1,
