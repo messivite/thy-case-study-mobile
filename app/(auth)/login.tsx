@@ -4,7 +4,7 @@ import { router } from 'expo-router';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { MotiView } from 'moti';
+import { MotiView } from '@/lib/motiView';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthLayout } from '@/templates/AuthLayout';
 import { FormField } from '@/molecules/FormField';

@@ -32,6 +32,7 @@
         "backgroundColor": "#FFFFFF"
       },
       "package": "com.thy.assistant",
+      "softwareKeyboardLayoutMode": "pan",
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },

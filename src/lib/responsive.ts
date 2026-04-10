@@ -13,8 +13,9 @@
 
 import { Dimensions, PixelRatio, Platform } from 'react-native';
 
-const BASE_WIDTH = 390;
+export const DESIGN_BASE_WIDTH = 390;
 const BASE_HEIGHT = 844;
+const BASE_WIDTH = DESIGN_BASE_WIDTH;
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 

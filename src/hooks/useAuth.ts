@@ -1,26 +1,22 @@
 /**
  * useAuth — ekranların kullandığı lightweight selector hook.
  *
- * State okuma + dispatch için. Supabase çağrıları yapmaz,
- * onlar useSupabaseAuth içinde veya doğrudan authService'te.
+ * State okuma + dispatch için. Supabase çağrıları useSupabaseAuth / authService’te.
+ * Çıkış: useSupabaseAuth.logout (optimistic + interval durdurma).
  */
 
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { logout, setGuest } from '@/store/slices/authSlice';
-import { signOut } from '@/services/authService';
+import { setGuest } from '@/store/slices/authSlice';
+import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 
 export const useAuth = () => {
   const dispatch = useAppDispatch();
   const auth = useAppSelector((s) => s.auth);
+  const { logout } = useSupabaseAuth();
 
   const isAuthenticated = auth.status === 'authenticated';
   const isGuest = auth.status === 'guest';
   const isLoading = auth.status === 'loading' || auth.status === 'idle';
-
-  const handleLogout = async () => {
-    await signOut();
-    dispatch(logout());
-  };
 
   const loginAsGuest = () => {
     dispatch(setGuest());
@@ -36,7 +32,7 @@ export const useAuth = () => {
     isGuest,
     isLoading,
     status: auth.status,
-    logout: handleLogout,
+    logout,
     loginAsGuest,
   };
 };

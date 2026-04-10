@@ -1,12 +1,16 @@
 import { privateApi } from '@/services/api';
 import { supabase } from '@/services/supabase';
 import {
+  ChatSearchParams,
+  ChatSearchResponse,
   CreateChatRequest,
   CreateChatResponse,
   GetChatsResponse,
   GetChatResponse,
+  GetMessagesParams,
   NonStreamChatRequest,
   NonStreamChatResponse,
+  PaginatedChatsResponse,
   PaginatedMessagesResponse,
   StreamChatCallbacks,
   StreamChatRequest,
@@ -130,6 +134,20 @@ export const getChats = async (): Promise<GetChatsResponse> => {
 };
 
 /**
+ * GET /api/chats?limit=X&cursor=Y
+ * Cursor tabanlı sayfalanmış chat listesini döner. Infinite scroll için kullanılır.
+ */
+export const getPaginatedChats = async (
+  limit: number = 20,
+  cursor?: string,
+): Promise<PaginatedChatsResponse> => {
+  const params: Record<string, string | number> = { limit };
+  if (cursor) params.cursor = cursor;
+  const { data } = await privateApi.get<PaginatedChatsResponse>('/api/chats', { params });
+  return data;
+};
+
+/**
  * GET /api/chats/:chatId
  * Chat detayını ve tüm mesajlarını döner.
  */
@@ -169,20 +187,41 @@ export const syncChat = async (
 };
 
 /**
- * GET /api/chats/:chatId/messages?cursor=xxx&limit=20
- * Chat mesajlarını paginated olarak döner (infinite scroll).
+ * GET /api/chats/search?q=xxx&limit=20&cursor=xxx
+ * Sohbet başlıkları ve mesaj içerikleri üzerinde full-text arama yapar.
+ * Infinite scroll için cursor tabanlı sayfalama destekler.
+ */
+export const searchChats = async (params: ChatSearchParams): Promise<ChatSearchResponse> => {
+  const queryParams: Record<string, string | number> = {
+    q: params.q,
+    limit: params.limit ?? 20,
+  };
+  if (params.cursor) queryParams.cursor = params.cursor;
+
+  const { data } = await privateApi.get<ChatSearchResponse>('/api/chats/search', {
+    params: queryParams,
+  });
+  return data;
+};
+
+/**
+ * GET /api/chats/:chatId/messages?limit=20&direction=older&cursor=xxx
+ * Chat mesajlarını paginated olarak döner. direction: 'older' | 'newer'
+ * İlk yükleme: direction=older (son mesajlara doğru)
+ * Yukarı kaydır: direction=older&cursor=OLDER_CURSOR
+ * Yeni mesajları çek: direction=newer&cursor=NEWEST_VISIBLE_CURSOR
  */
 export const getChatMessages = async (
   chatId: string,
-  cursor?: string,
-  limit: number = 20,
+  params: GetMessagesParams = {},
 ): Promise<PaginatedMessagesResponse> => {
-  const params: Record<string, string | number> = { limit };
-  if (cursor) params.cursor = cursor;
+  const { limit = 20, cursor, direction = 'older' } = params;
+  const qp: Record<string, string | number> = { limit, direction };
+  if (cursor) qp.cursor = cursor;
 
   const { data } = await privateApi.get<PaginatedMessagesResponse>(
     `/api/chats/${chatId}/messages`,
-    { params },
+    { params: qp },
   );
   return data;
 };

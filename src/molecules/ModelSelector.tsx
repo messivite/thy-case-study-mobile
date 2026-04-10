@@ -8,7 +8,7 @@ import {
   Platform,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
-import { MotiView } from 'moti';
+import { MotiView } from '@/lib/motiView';
 import { Ionicons } from '@expo/vector-icons';
 import { AI_MODELS, AIModelId } from '@/constants/models';
 import { Text } from '@/atoms/Text';

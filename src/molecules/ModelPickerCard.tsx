@@ -5,6 +5,7 @@ import {
   StyleSheet,
   ViewStyle,
   Text as RNText,
+  Platform,
 } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -50,9 +51,10 @@ type Props = {
 const CARD_BG = palette.onboardingCardBg;
 const BORDER_COLOR = palette.onboardingCardBorder;
 /** Alt bant (çizginin altı) — sabit yükseklik, satır bu alanda ortalanır */
-const FOOTER_BAND_HEIGHT = scale(50);
-const SELECTOR_AI_BADGE = scale(26);
-const SELECTOR_AI_ICON = scale(17);
+const FOOTER_BAND_HEIGHT = Platform.OS === 'web' ? 50 : scale(50);
+const SELECTOR_AI_BADGE = Platform.OS === 'web' ? 26 : scale(26);
+const SELECTOR_AI_ICON = Platform.OS === 'web' ? 17 : scale(17);
+const CARD_MIN_HEIGHT = Platform.OS === 'web' ? 248 : scale(248);
 
 const SelectorDotPulse = memo<{ color: string }>(({ color }) => {
   const pulse = useSharedValue(1);
@@ -162,7 +164,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[6],
     paddingTop: spacing[5],
     paddingBottom: 0,
-    minHeight: scale(248),
+    minHeight: CARD_MIN_HEIGHT,
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 0 },

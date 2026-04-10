@@ -8,6 +8,8 @@
 
 const PREFIX = 'thy:';
 
+const canUseDOM = typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
+
 // MMKV type'ını taklit eden interface — native tip import etmeden
 export interface StorageLike {
   getString(key: string): string | undefined;
@@ -21,29 +23,36 @@ export interface StorageLike {
 
 const webStorage: StorageLike = {
   getString(key) {
+    if (!canUseDOM) return undefined;
     return localStorage.getItem(PREFIX + key) ?? undefined;
   },
   set(key, value) {
+    if (!canUseDOM) return;
     localStorage.setItem(PREFIX + key, String(value));
   },
   getBoolean(key) {
+    if (!canUseDOM) return undefined;
     const v = localStorage.getItem(PREFIX + key);
     if (v === null) return undefined;
     return v === 'true';
   },
   getNumber(key) {
+    if (!canUseDOM) return undefined;
     const v = localStorage.getItem(PREFIX + key);
     if (v === null) return undefined;
     const n = Number(v);
     return isNaN(n) ? undefined : n;
   },
   remove(key) {
+    if (!canUseDOM) return;
     localStorage.removeItem(PREFIX + key);
   },
   contains(key) {
+    if (!canUseDOM) return false;
     return localStorage.getItem(PREFIX + key) !== null;
   },
   clearAll() {
+    if (!canUseDOM) return;
     Object.keys(localStorage)
       .filter((k) => k.startsWith(PREFIX))
       .forEach((k) => localStorage.removeItem(k));
@@ -71,4 +80,5 @@ export const STORAGE_KEYS = {
   SELECTED_MODEL: 'selected_model',
   CHAT_MESSAGES: 'chat_messages',
   REACT_QUERY_CACHE: 'rq_cache',
+  STREAMING: 'streaming_enabled',
 } as const;

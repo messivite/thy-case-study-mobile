@@ -27,6 +27,7 @@ export type AppUser = {
   email: string;
   name: string;
   avatarUrl?: string;
+  isAnonymous?: boolean;
 };
 
 export type AppSession = {
@@ -37,14 +38,23 @@ export type AppSession = {
 };
 
 function mapUser(supaUser: SupabaseUser): AppUser {
+  const appMeta = supaUser.app_metadata as Record<string, unknown> | undefined;
+  const isAnonymous =
+    (supaUser as { is_anonymous?: boolean }).is_anonymous === true ||
+    appMeta?.provider === 'anonymous';
+
+  const name = isAnonymous
+    ? ''
+    : (supaUser.user_metadata?.full_name as string | undefined) ??
+      (supaUser.user_metadata?.name as string | undefined) ??
+      supaUser.email?.split('@')[0] ??
+      'Kullanıcı';
+
   return {
     id: supaUser.id,
     email: supaUser.email ?? '',
-    name:
-      (supaUser.user_metadata?.full_name as string | undefined) ??
-      (supaUser.user_metadata?.name as string | undefined) ??
-      supaUser.email?.split('@')[0] ??
-      'Kullanıcı',
+    name,
+    isAnonymous: Boolean(isAnonymous),
     avatarUrl:
       (supaUser.user_metadata?.avatar_url as string | undefined) ??
       (supaUser.user_metadata?.picture as string | undefined),
@@ -58,6 +68,11 @@ function mapSession(session: Session): AppSession {
     refreshToken: session.refresh_token,
     expiresAt: session.expires_at ?? Math.floor(Date.now() / 1000) + 3600,
   };
+}
+
+/** onAuthStateChange vb. için tek kaynaklı Session → AppSession */
+export function mapSupabaseSession(session: Session): AppSession {
+  return mapSession(session);
 }
 
 // ---------------------------------------------------------------------------

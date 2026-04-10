@@ -6,6 +6,9 @@
     "paths": {
       "@/*": [
         "src/*"
+      ],
+      "moti/build/components/view.js": [
+        "./node_modules/moti/build/components/view"
       ]
     }
   },

@@ -3,6 +3,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   ViewStyle,
+  TextStyle,
   ActivityIndicator,
   Platform,
 } from 'react-native';
@@ -28,6 +29,7 @@ type Props = {
   disabled?: boolean;
   fullWidth?: boolean;
   style?: ViewStyle;
+  titleStyle?: TextStyle;
   icon?: React.ReactNode;
   hapticFeedback?: boolean;
 };
@@ -42,6 +44,7 @@ export const Button: React.FC<Props> = ({
   disabled = false,
   fullWidth = true,
   style,
+  titleStyle,
   icon,
   hapticFeedback = true,
 }) => {
@@ -93,7 +96,7 @@ export const Button: React.FC<Props> = ({
           <Text
             variant="bodyMedium"
             color={variantStyles.textColor}
-            style={[styles.label, icon ? { marginLeft: spacing[2] } : undefined]}
+            style={[styles.label, icon ? { marginLeft: spacing[2] } : undefined, titleStyle]}
           >
             {title}
           </Text>

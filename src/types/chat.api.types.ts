@@ -31,6 +31,24 @@ export type ChatListItem = AIProviderInfo & {
 export type GetChatsResponse = ChatListItem[];
 
 // ---------------------------------------------------------------------------
+// GET /api/chats?limit=X&cursor=Y — Paginated chats (cursor tabanlı)
+// ---------------------------------------------------------------------------
+
+/** GET /api/chats query parametreleri */
+export type GetChatsParams = {
+  limit?: number;
+  cursor?: string;
+};
+
+/** Paginated chat listesi response modeli — search ile aynı cursor yapısı */
+export type PaginatedChatsResponse = {
+  totalCount: number;
+  hasNext: boolean;
+  nextCursor: string | null;
+  items: ChatListItem[];
+};
+
+// ---------------------------------------------------------------------------
 // GET /api/chats/:chatId — Chat detayı + tüm mesajlar
 // ---------------------------------------------------------------------------
 
@@ -150,12 +168,60 @@ export type SyncChatResponse = {
 };
 
 // ---------------------------------------------------------------------------
-// GET /api/chats/:chatId/messages — Paginated Messages
+// GET /api/chats/:chatId/messages — Paginated Messages (direction tabanlı)
 // ---------------------------------------------------------------------------
+
+/** GET /api/chats/:chatId/messages query parametreleri */
+export type GetMessagesParams = {
+  limit?: number;
+  cursor?: string;
+  direction?: 'older' | 'newer';
+};
 
 /** Paginated mesaj listesi response modeli */
 export type PaginatedMessagesResponse = {
   messages: ChatMessage[];
   nextCursor: string | null;
   hasMore: boolean;
+};
+
+// ---------------------------------------------------------------------------
+// GET /api/chats/search — Sohbet arama (full-text)
+// ---------------------------------------------------------------------------
+
+/** Arama sonucundaki highlight aralığı */
+export type SearchHighlight = {
+  field: 'title' | 'matchedContent';
+  start: number;
+  end: number;
+};
+
+/** Tek bir arama sonucu öğesi */
+export type ChatSearchResultItem = {
+  sessionId: string;
+  title: string;
+  sessionCreatedAt: string;
+  sessionUpdatedAt: string;
+  lastMessageAt: string;
+  titleMatched: boolean;
+  matchedMessageId: string | null;
+  matchedRole: 'user' | 'assistant' | null;
+  matchedContent: string | null;
+  matchedAt: string | null;
+  highlights: SearchHighlight[];
+};
+
+/** GET /api/chats/search response modeli */
+export type ChatSearchResponse = {
+  totalCount: number;
+  hasNext: boolean;
+  nextCursor: string | null;
+  items: ChatSearchResultItem[];
+};
+
+/** GET /api/chats/search query parametreleri */
+export type ChatSearchParams = {
+  q: string;
+  limit?: number;
+  cursor?: string;
 };

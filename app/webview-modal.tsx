@@ -21,6 +21,7 @@ import {
   TouchableOpacity,
   Linking,
   Platform,
+  useWindowDimensions,
 } from 'react-native';
 import { WebView, type WebViewNavigation } from 'react-native-webview';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -58,7 +59,7 @@ type WebViewModalParams = {
 // THY Logo Pulse — yükleme sırasında gösterilir
 // ---------------------------------------------------------------------------
 
-const LogoLoader: React.FC = () => {
+const LogoLoader: React.FC<{ uiScale?: (n: number) => number }> = ({ uiScale }) => {
   const outerScale = useSharedValue(1);
   const innerScale = useSharedValue(1);
   const opacity = useSharedValue(0.6);
@@ -107,12 +108,18 @@ const LogoLoader: React.FC = () => {
   return (
     <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)} style={loaderStyles.container}>
       {/* Dış halka */}
-      <Animated.View style={[loaderStyles.ring, outerStyle]} />
+      <Animated.View
+        style={[
+          loaderStyles.ring,
+          uiScale && { width: uiScale(100), height: uiScale(100) },
+          outerStyle,
+        ]}
+      />
       {/* Logo */}
       <Animated.View style={[loaderStyles.logoWrap, innerStyle]}>
         <Image
           source={require('../assets/svg/compact-logo.png')}
-          style={loaderStyles.logo}
+          style={[loaderStyles.logo, uiScale && { width: uiScale(64), height: uiScale(64) }]}
           resizeMode="contain"
         />
       </Animated.View>
@@ -122,11 +129,12 @@ const LogoLoader: React.FC = () => {
 
 const loaderStyles = StyleSheet.create({
   container: {
-    ...StyleSheet.absoluteFillObject,
+    flex: 1,
+    width: '100%',
+    minHeight: 0,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: palette.white,
-    zIndex: 10,
   },
   ring: {
     position: 'absolute',
@@ -151,14 +159,21 @@ const loaderStyles = StyleSheet.create({
 // Error view
 // ---------------------------------------------------------------------------
 
-const ErrorView: React.FC<{ onRetry: () => void }> = ({ onRetry }) => (
+const ErrorView: React.FC<{ onRetry: () => void; uiScale?: (n: number) => number }> = ({ onRetry, uiScale }) => (
   <Animated.View entering={FadeIn.duration(200)} style={errorStyles.container}>
-    <Ionicons name="wifi-outline" size={scale(48)} color={palette.gray300} />
-    <Text style={errorStyles.title}>Sayfa yüklenemedi</Text>
-    <Text style={errorStyles.sub}>Bağlantınızı kontrol edip tekrar deneyin.</Text>
+    <Ionicons name="wifi-outline" size={uiScale ? uiScale(48) : scale(48)} color={palette.gray300} />
+    <Text style={[errorStyles.title, uiScale && { fontSize: uiScale(17) }]}>Sayfa yüklenemedi</Text>
+    <Text style={[errorStyles.sub, uiScale && { fontSize: uiScale(13), lineHeight: uiScale(20) }]}>
+      Bağlantınızı kontrol edip tekrar deneyin.
+    </Text>
     <TouchableOpacity onPress={onRetry} style={errorStyles.btn} activeOpacity={0.8}>
-      <Ionicons name="refresh-outline" size={scale(16)} color={palette.white} style={{ marginRight: 6 }} />
-      <Text style={errorStyles.btnText}>Tekrar Dene</Text>
+      <Ionicons
+        name="refresh-outline"
+        size={uiScale ? uiScale(16) : scale(16)}
+        color={palette.white}
+        style={{ marginRight: 6 }}
+      />
+      <Text style={[errorStyles.btnText, uiScale && { fontSize: uiScale(14) }]}>Tekrar Dene</Text>
     </TouchableOpacity>
   </Animated.View>
 );
@@ -257,6 +272,7 @@ function extractHost(url: string): string {
 
 export default function WebViewModal() {
   const insets = useSafeAreaInsets();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const { url, title } = useLocalSearchParams<WebViewModalParams>();
 
   const webViewRef = useRef<WebView>(null);
@@ -267,6 +283,10 @@ export default function WebViewModal() {
 
   const safeUrl = url ?? '';
   const headerTitle = title ?? extractHost(safeUrl);
+  const webScale = Platform.OS === 'web'
+    ? Math.min(windowWidth > 0 ? windowWidth : 390, 390) / 390
+    : 1;
+  const uiScale = (n: number) => Math.round(n * webScale);
 
   const handleClose = useCallback(() => {
     router.back();
@@ -289,7 +309,7 @@ export default function WebViewModal() {
   if (!safeUrl) {
     return (
       <View style={[styles.root, { paddingBottom: insets.bottom }]}>
-        <AppHeader title="Hata" isBack onBack={handleClose} />
+        <AppHeader title="Hata" isBack onBack={handleClose} safeAreaTop={false} />
         <View style={styles.centered}>
           <Text style={styles.errorText}>URL parametresi eksik.</Text>
         </View>
@@ -297,13 +317,25 @@ export default function WebViewModal() {
     );
   }
 
+  const showLoadingOverlay = isLoading && !hasError;
+
   return (
-    <View style={[styles.root, { paddingBottom: insets.bottom }]}>
+    <View
+      style={[
+        styles.root,
+        {
+          paddingBottom: insets.bottom,
+          // Form sheet detenti (_layout sheetAllowedDetents) ile uyumlu taban; flex bazen 0 kalıyordu
+          minHeight: Math.round(windowHeight * 0.92),
+        },
+      ]}
+    >
       {/* Header */}
       <AppHeader
         title={headerTitle}
         subtitle={currentUrl !== safeUrl ? extractHost(currentUrl) : undefined}
         isBack
+        safeAreaTop={false}
         onBack={handleClose}
         rightIcons={[
           {
@@ -317,12 +349,12 @@ export default function WebViewModal() {
       {/* Progress bar */}
       <ProgressBar progress={loadProgress} />
 
-      {/* WebView */}
+      {/* WebView + tam yükseklikte beyaz yükleme katmanı */}
       <View style={styles.webviewContainer}>
         <WebView
           ref={webViewRef}
           source={{ uri: safeUrl }}
-          style={styles.webview}
+          style={[styles.webview, showLoadingOverlay && styles.webviewWhileLoading]}
           onLoadStart={() => { setIsLoading(true); setHasError(false); }}
           onLoadEnd={() => setIsLoading(false)}
           onError={() => { setHasError(true); setIsLoading(false); }}
@@ -336,11 +368,15 @@ export default function WebViewModal() {
           sharedCookiesEnabled
         />
 
-        {/* Yüklenirken logo */}
-        {isLoading && !hasError && <LogoLoader />}
+        {showLoadingOverlay ? (
+          <View style={styles.loadingOverlay} pointerEvents="none">
+            <LogoLoader uiScale={Platform.OS === 'web' ? uiScale : undefined} />
+          </View>
+        ) : null}
 
-        {/* Hata durumu */}
-        {hasError && <ErrorView onRetry={handleRetry} />}
+        {hasError ? (
+          <ErrorView onRetry={handleRetry} uiScale={Platform.OS === 'web' ? uiScale : undefined} />
+        ) : null}
       </View>
     </View>
   );
@@ -353,14 +389,30 @@ export default function WebViewModal() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
+    width: '100%',
+    minHeight: 0,
     backgroundColor: palette.white,
   },
   webviewContainer: {
     flex: 1,
+    minHeight: 0,
+    width: '100%',
     position: 'relative',
+    backgroundColor: palette.white,
   },
   webview: {
     flex: 1,
+    width: '100%',
+    minHeight: 0,
+    backgroundColor: palette.white,
+  },
+  webviewWhileLoading: {
+    opacity: 0,
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 10,
+    backgroundColor: palette.white,
   },
   centered: {
     flex: 1,

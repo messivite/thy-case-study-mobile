@@ -44,6 +44,10 @@
   },
   "auth": {
     "welcomeTitle": "Welcome",
+    "welcomeHeroLine1": "Welcome to",
+    "welcomeHeroLine2": "THY Study Case",
+    "infoSiteWebTitle": "mustafaaksoy.dev",
+    "infoSiteA11yLabel": "Open portfolio website",
     "welcomeSubtitle": "Sign in to THY AI Assistant",
     "loginWithGoogle": "Sign in with Google",
     "loginWithEmail": "Sign in with Email",
@@ -54,6 +58,7 @@
     "passwordPlaceholder": "Enter your password",
     "forgotPassword": "Forgot Password",
     "login": "Sign In",
+    "loggingIn": "Signing in...",
     "register": "Register",
     "noAccount": "Don't have an account?",
     "haveAccount": "Already have an account?",
@@ -76,6 +81,16 @@
     "title": "AI Chat",
     "headerTitle": "THY Case Study"
   },
+  "network": {
+    "offlineTitle": "No internet connection",
+    "offlineMessage": "You appear to be offline. Content can still be queued; when you’re back online you’ll be able to sync pending work.",
+    "offlineDismiss": "OK",
+    "onlineTitle": "You’re back online",
+    "onlineMessage": "If you have messages queued while offline, you can sync them with the server now.",
+    "onlineSync": "Sync now",
+    "onlineLater": "Later",
+    "syncPlaceholder": "Sync will be wired up with the offline queue next."
+  },
   "assistant": {
     "title": "Assistant",
     "placeholder": "Type your message...",
@@ -87,8 +102,20 @@
     "regenerate": "Regenerate",
     "emptyTitle": "How can I help you?",
     "emptySubtitle": "Write a question and your AI assistant will respond.",
+    "welcomeGreeting": "Hi {{name}}",
+    "welcomeQuestion": "Where should we begin?",
+    "quickActionImage": "Create Image",
+    "quickActionImagePrompt": "Generate a creative visual idea for me.",
+    "quickActionMusic": "Create Music",
+    "quickActionMusicPrompt": "Suggest a short focus music playlist.",
+    "quickActionEnergy": "Boost my day",
+    "quickActionEnergyPrompt": "Give me 5 short tips to start the day with energy.",
+    "quickActionVideo": "Create Video",
+    "quickActionVideoPrompt": "Suggest a 30-second social media video concept.",
     "typing": "Typing...",
-    "loadingMore": "Loading older messages..."
+    "loadingMore": "Loading older messages...",
+    "speak": "Listen",
+    "stopSpeaking": "Stop reading"
   },
   "settings": {
     "title": "Settings",
@@ -103,6 +130,13 @@
     "themeSystem": "System",
     "notifications": "Notifications",
     "notificationsDesc": "Enable app notifications",
+    "notificationsStatusOn": "On in system settings",
+    "notificationsStatusOff": "Off in system settings",
+    "notificationsOpenSettingsTitle": "Notification permission needed",
+    "notificationsOpenSettingsMessage": "To turn on notifications, allow them for this app in your device settings.",
+    "notificationsTurnOffTitle": "Turn off notifications",
+    "notificationsTurnOffMessage": "To turn off notifications, disable them for this app in your device settings.",
+    "openSystemSettings": "Open settings",
     "chat": "Chat",
     "streaming": "Streaming Mode",
     "streamingDesc": "Receive AI responses token by token",
@@ -129,6 +163,21 @@
     "retry": "Try Again",
     "errorId": "Error Code"
   },
+  "chatHistory": {
+    "title": "Chat History",
+    "searchPlaceholder": "Search chats",
+    "newChat": "New Chat",
+    "emptyTitle": "No chats yet",
+    "emptySubtitle": "Start a new conversation with the assistant.",
+    "archive": "Archive",
+    "delete": "Delete",
+    "searching": "Searching...",
+    "noResults": "No results found",
+    "noResultsFor": "No match for \"{{query}}\"",
+    "noRecentSearches": "No search history",
+    "recentSection": "Recent",
+    "cancel": "Cancel"
+  },
   "toast": {
     "loginSuccess": "Signed in successfully",
     "logoutSuccess": "Signed out",
@@ -139,6 +188,7 @@
     "modelChanged": "Model changed",
     "settingsSaved": "Settings saved",
     "networkError": "No internet connection",
-    "unknownError": "An error occurred"
+    "unknownError": "An error occurred",
+    "speechError": "Could not start text-to-speech"
   }
 }

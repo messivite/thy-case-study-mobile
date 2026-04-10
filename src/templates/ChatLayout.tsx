@@ -1,22 +1,21 @@
 import React from 'react';
 import { View, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 
 type Props = {
   header: React.ReactNode;
   children: React.ReactNode;
+  /** Rendered below content, pinned to bottom. Receives bottomInset as padding. */
   input: React.ReactNode;
 };
 
 export const ChatLayout: React.FC<Props> = ({ header, children, input }) => {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
 
   return (
-    <SafeAreaView
-      style={[styles.safe, { backgroundColor: colors.background }]}
-      edges={['top']}
-    >
+    <View style={[styles.root, { backgroundColor: colors.background }]}>
       {header}
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -24,20 +23,21 @@ export const ChatLayout: React.FC<Props> = ({ header, children, input }) => {
         keyboardVerticalOffset={0}
       >
         <View style={styles.content}>{children}</View>
-        {input}
+        {/*
+          No extra paddingBottom here — ChatInput wrapper already has spacing[1].
+          insets.bottom fills the home-indicator gap so background is seamless.
+        */}
+        <View style={[styles.inputArea, { backgroundColor: colors.background }]}>
+          {input}
+        </View>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-  },
-  kav: {
-    flex: 1,
-  },
-  content: {
-    flex: 1,
-  },
+  root: { flex: 1 },
+  kav: { flex: 1 },
+  content: { flex: 1 },
+  inputArea: {},
 });

@@ -6,6 +6,7 @@
  * Sorumlulukları:
  *  1. App açılışında mevcut session'ı restore et
  *  2. Supabase onAuthStateChange listener'ı → RTK dispatch
+ *     (SIGNED_OUT: sadece Redux’ta gerçekten oturum varken reset/nav — açılış gürültüsünde atla)
  *  3. Token süresi dolduysa proaktif refresh (background interval)
  *  4. 401 interceptor sinyalini dinle → refresh → retry
  *  5. Login / register / logout / Google OAuth methodlarını dışa aç
@@ -25,21 +26,22 @@ import {
   setGuest,
   setLoading,
   setUnauthenticated,
-  logout as logoutAction,
 } from '@/store/slices/authSlice';
+import { resetAfterLogout } from '@/store';
 import {
   signInWithEmail,
   signUpWithEmail,
   signInWithGoogle,
-  signInAnonymously,
   signOut,
   getCurrentSession,
   refreshSession,
   resetPassword,
   updatePassword,
   isTokenExpired,
+  mapSupabaseSession,
   AppSession,
 } from '@/services/authService';
+import { establishAnonymousSession } from '@/store/thunks/authThunks';
 import { supabase } from '@/services/supabase';
 import { clearSession } from '@/services/authService';
 import { mmkvStorage, STORAGE_KEYS } from '@/lib/mmkv';
@@ -68,10 +70,10 @@ type SupabaseAuthApi = {
     fullName: string,
   ) => Promise<AuthResult<AppSession | null>>;
   loginWithGoogle: () => Promise<AuthResult<AppSession>>;
-  logout: () => Promise<void>;
+  logout: () => void;
   forgotPassword: (email: string) => Promise<AuthResult<void>>;
   changePassword: (newPassword: string) => Promise<AuthResult<void>>;
-  continueAsGuest: () => void;
+  continueAsGuest: () => Promise<void>;
   skipWithAnonymousLogin: () => Promise<void>;
 };
 
@@ -102,6 +104,11 @@ function useSupabaseAuthState(): SupabaseAuthApi {
   const { accessToken, refreshToken, expiresAt, status } = useAppSelector((s) => s.auth);
   const refreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isRefreshingRef = useRef(false);
+  /** SIGNED_OUT anında güncel auth.status (idle iken gelen gürültüyü yok saymak için) */
+  const authStatusRef = useRef(status);
+  useEffect(() => {
+    authStatusRef.current = status;
+  }, [status]);
 
   // -------------------------------------------------------------------------
   // Helpers
@@ -140,6 +147,17 @@ function useSupabaseAuthState(): SupabaseAuthApi {
   );
 
   // -------------------------------------------------------------------------
+  // Background refresh interval — stop önce (tryRefreshToken buna bağlı)
+  // -------------------------------------------------------------------------
+
+  const stopRefreshInterval = useCallback(() => {
+    if (refreshIntervalRef.current) {
+      clearInterval(refreshIntervalRef.current);
+      refreshIntervalRef.current = null;
+    }
+  }, []);
+
+  // -------------------------------------------------------------------------
   // Proactive token refresh
   // -------------------------------------------------------------------------
 
@@ -153,14 +171,18 @@ function useSupabaseAuthState(): SupabaseAuthApi {
       if (result.ok) {
         dispatchRefreshedTokens(result.data);
       } else if (result.code === 'REFRESH_FAILED') {
-        // Refresh token da geçersiz → oturumu kapat
-        dispatch(logoutAction());
+        stopRefreshInterval();
+        authMutex.reset();
+        void clearSession();
+        dispatch(resetAfterLogout());
+        setErrorReportingUser(null);
         toast.error('Oturumunuzun süresi doldu, tekrar giriş yapın.');
+        router.replace('/(auth)/welcome');
       }
     } finally {
       isRefreshingRef.current = false;
     }
-  }, [expiresAt, dispatch, dispatchRefreshedTokens]);
+  }, [expiresAt, dispatch, dispatchRefreshedTokens, stopRefreshInterval]);
 
   // Stable ref — AppState listener'ın her token refresh'te yeniden kayıt olmasını önler
   const tryRefreshTokenRef = useRef(tryRefreshToken);
@@ -168,21 +190,10 @@ function useSupabaseAuthState(): SupabaseAuthApi {
     tryRefreshTokenRef.current = tryRefreshToken;
   }, [tryRefreshToken]);
 
-  // -------------------------------------------------------------------------
-  // Background refresh interval — app açıkken periyodik kontrol
-  // -------------------------------------------------------------------------
-
   const startRefreshInterval = useCallback(() => {
     if (refreshIntervalRef.current) clearInterval(refreshIntervalRef.current);
     refreshIntervalRef.current = setInterval(tryRefreshToken, REFRESH_CHECK_INTERVAL_MS);
   }, [tryRefreshToken]);
-
-  const stopRefreshInterval = useCallback(() => {
-    if (refreshIntervalRef.current) {
-      clearInterval(refreshIntervalRef.current);
-      refreshIntervalRef.current = null;
-    }
-  }, []);
 
   // -------------------------------------------------------------------------
   // SESSION_EXPIRED event (api.ts interceptor'dan gelir)
@@ -193,7 +204,8 @@ function useSupabaseAuthState(): SupabaseAuthApi {
     const unsub = authEventEmitter.on(AUTH_EVENTS.SESSION_EXPIRED, () => {
       stopRefreshInterval();
       authMutex.reset();
-      dispatch(logoutAction());
+      void clearSession();
+      dispatch(resetAfterLogout());
       setErrorReportingUser(null);
       toast.error('Oturumunuzun süresi doldu, tekrar giriş yapın.');
       router.replace('/(auth)/welcome');
@@ -227,20 +239,7 @@ function useSupabaseAuthState(): SupabaseAuthApi {
           switch (event) {
             case 'SIGNED_IN':
               if (session) {
-                dispatchSession({
-                  user: {
-                    id: session.user.id,
-                    email: session.user.email ?? '',
-                    name:
-                      (session.user.user_metadata?.full_name as string) ??
-                      session.user.email?.split('@')[0] ??
-                      '',
-                    avatarUrl: session.user.user_metadata?.avatar_url as string | undefined,
-                  },
-                  accessToken: session.access_token,
-                  refreshToken: session.refresh_token,
-                  expiresAt: session.expires_at ?? Math.floor(Date.now() / 1000) + 3600,
-                });
+                dispatchSession(mapSupabaseSession(session));
                 startRefreshInterval();
               }
               break;
@@ -248,30 +247,25 @@ function useSupabaseAuthState(): SupabaseAuthApi {
             case 'TOKEN_REFRESHED':
             case 'USER_UPDATED':
               if (session) {
-                dispatchSession({
-                  user: {
-                    id: session.user.id,
-                    email: session.user.email ?? '',
-                    name:
-                      (session.user.user_metadata?.full_name as string) ??
-                      session.user.email?.split('@')[0] ??
-                      '',
-                    avatarUrl: session.user.user_metadata?.avatar_url as string | undefined,
-                  },
-                  accessToken: session.access_token,
-                  refreshToken: session.refresh_token,
-                  expiresAt: session.expires_at ?? Math.floor(Date.now() / 1000) + 3600,
-                });
+                dispatchSession(mapSupabaseSession(session));
                 // startRefreshInterval burada çağrılmaz — SIGNED_IN'de bir kez başlatıldı
               }
               break;
 
-            case 'SIGNED_OUT':
+            case 'SIGNED_OUT': {
               stopRefreshInterval();
+              const hadUserSession =
+                authStatusRef.current === 'authenticated' ||
+                authStatusRef.current === 'guest';
+              if (!hadUserSession) {
+                break;
+              }
               await clearSession();
-              dispatch(logoutAction());
+              dispatch(resetAfterLogout());
               setErrorReportingUser(null);
+              router.replace('/(auth)/welcome');
               break;
+            }
 
             case 'PASSWORD_RECOVERY':
               // Deep link ile şifre sıfırlama sayfasına yönlendirme
@@ -361,11 +355,12 @@ function useSupabaseAuthState(): SupabaseAuthApi {
     return result;
   }, [dispatch]);
 
-  const logout = useCallback(async () => {
+  const logout = useCallback(() => {
     stopRefreshInterval();
-    await signOut();
-    dispatch(logoutAction());
+    dispatch(resetAfterLogout());
     setErrorReportingUser(null);
+    router.replace('/(auth)/welcome');
+    void signOut();
   }, [dispatch, stopRefreshInterval]);
 
   const forgotPassword = useCallback(async (email: string) => {
@@ -377,23 +372,35 @@ function useSupabaseAuthState(): SupabaseAuthApi {
   }, []);
 
   const skipWithAnonymousLogin = useCallback(async (): Promise<void> => {
-    dispatch(setLoading(true));
-    const result = await signInAnonymously();
-    if (result.ok) {
+    try {
+      const session = await dispatch(establishAnonymousSession()).unwrap();
       mmkvStorage.setBoolean(STORAGE_KEYS.ONBOARDING_DONE, true);
-      dispatchSession(result.data);
       startRefreshInterval();
-    } else {
-      // Network yok veya anon disabled → local guest fallback
+      setErrorReportingUser({
+        id: session.user.id,
+        email: session.user.email,
+        username: session.user.name,
+      });
+    } catch {
       mmkvStorage.setBoolean(STORAGE_KEYS.ONBOARDING_DONE, true);
-      dispatch(setGuest());
+      setErrorReportingUser(null);
     }
-  }, [dispatch, dispatchSession, startRefreshInterval]);
+  }, [dispatch, startRefreshInterval]);
 
-  const continueAsGuest = useCallback(() => {
-    dispatch(setGuest());
-    setErrorReportingUser(null);
-  }, [dispatch]);
+  const continueAsGuest = useCallback(async (): Promise<void> => {
+    try {
+      const session = await dispatch(establishAnonymousSession()).unwrap();
+      startRefreshInterval();
+      setErrorReportingUser({
+        id: session.user.id,
+        email: session.user.email,
+        username: session.user.name,
+      });
+    } catch {
+      toast.error('Misafir girişi şu an yapılamadı. Bağlantınızı kontrol edin.');
+      setErrorReportingUser(null);
+    }
+  }, [dispatch, startRefreshInterval]);
 
   return {
     // State

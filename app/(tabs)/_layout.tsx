@@ -1,60 +1,57 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
 import { View, StyleSheet, Platform } from 'react-native';
+import { BlurView } from 'expo-blur';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { PostNavigationEnterFade } from '@/components/PostNavigationEnterFade';
 import { TabBarItem } from '@/molecules/TabBarItem';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
-import { spacing } from '@/constants/spacing';
+import { usePushNotifications } from '@/hooks/usePushNotifications';
 
 export default function TabLayout() {
-  const { colors } = useTheme();
-  const { t } = useI18n();
-
   return (
-    <Tabs
-      screenOptions={{ headerShown: false }}
-      tabBar={(props) => {
-        const { state, navigation } = props;
-
-        return (
-          <View
-            style={[
-              styles.tabBar,
-              {
-                backgroundColor: colors.tabBarBg,
-                borderTopColor: colors.tabBarBorder,
-              },
-            ]}
-          >
-            <TabBarItem
-              label={t('home.title')}
-              icon="sparkles-outline"
-              iconFocused="sparkles"
-              isFocused={state.index === 0}
-              onPress={() => navigation.navigate('index')}
-            />
-            <TabBarItem
-              label={t('settings.title')}
-              icon="settings-outline"
-              iconFocused="settings"
-              isFocused={state.index === 1}
-              onPress={() => navigation.navigate('settings')}
-            />
-          </View>
-        );
-      }}
-    >
-      <Tabs.Screen name="index" />
-      <Tabs.Screen name="settings" />
-    </Tabs>
+    <PostNavigationEnterFade>
+      {/* En basit yol: web'de push tarafını tamamen devre dışı bırak. */}
+      {Platform.OS !== 'web' ? <NativePushNotificationsBootstrap /> : null}
+      <Tabs
+        screenOptions={{
+          headerShown: false,
+          tabBarStyle: { display: 'none' }, // Tab bar gizli
+        }}
+      >
+        <Tabs.Screen name="index" />
+        <Tabs.Screen name="settings" />
+      </Tabs>
+    </PostNavigationEnterFade>
   );
 }
 
+function NativePushNotificationsBootstrap() {
+  usePushNotifications();
+  return null;
+}
+
 const styles = StyleSheet.create({
-  tabBar: {
+  host: {
+    backgroundColor: 'transparent',
+    width: '100%',
+  },
+  surface: {
+    overflow: 'hidden',
+    minHeight: 64,
+    borderTopWidth: 0.5,
+    borderTopColor: 'rgba(0,0,0,0.1)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  row: {
     flexDirection: 'row',
-    borderTopWidth: 1,
-    paddingBottom: Platform.OS === 'ios' ? spacing[6] : spacing[2],
-    paddingTop: spacing[2],
+    alignItems: 'stretch',
+    minHeight: 56,
+    zIndex: 1,
   },
 });

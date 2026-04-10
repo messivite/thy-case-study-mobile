@@ -7,7 +7,15 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { I18nextProvider } from 'react-i18next';
 import { Toaster } from 'sonner-native';
 import { Stack } from 'expo-router';
-import { StyleSheet } from 'react-native';
+import { Platform, StyleSheet } from 'react-native';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
+import { useFonts } from 'expo-font';
+import {
+  Inter_400Regular,
+  Inter_500Medium,
+  Inter_600SemiBold,
+  Inter_700Bold,
+} from '@expo-google-fonts/inter';
 
 import { store } from '@/store';
 import { queryClient } from '@/services/queryClient';
@@ -16,25 +24,43 @@ import '@/i18n'; // init side effect
 import { SupabaseAuthProvider } from '@/hooks/useSupabaseAuth';
 import { AppErrorBoundary } from '@/components/AppErrorBoundary';
 import { initErrorReporting } from '@/services/errorReporting';
+import { ensureWebViewportRootStyle } from '@/lib/webViewport';
 
 // Sentry native köprüsü her build'de bir kez init (DSN yok / dev'de enabled:false)
 initErrorReporting();
+ensureWebViewportRootStyle();
 
 function RootLayout() {
+  // Global font load: direct web route refresh (e.g. /auth/welcome) also gets Inter.
+  const [fontsLoaded] = useFonts({
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+    Inter_700Bold,
+  });
+
   return (
-    <GestureHandlerRootView style={styles.root}>
-      <AppErrorBoundary>
-        <SafeAreaProvider>
-          <Provider store={store}>
-            <QueryClientProvider client={queryClient}>
-              <I18nextProvider i18n={i18n}>
+    <GestureHandlerRootView
+      style={[styles.root, Platform.OS === 'web' && styles.rootWeb]}
+    >
+      <KeyboardProvider
+        statusBarTranslucent={Platform.OS === 'android'}
+        navigationBarTranslucent={Platform.OS === 'android'}
+        preserveEdgeToEdge={Platform.OS === 'android'}
+      >
+      <SafeAreaProvider>
+        <Provider store={store}>
+          <QueryClientProvider client={queryClient}>
+            <I18nextProvider i18n={i18n}>
+              <AppErrorBoundary>
                 {/* AuthProvider: Supabase listener + token refresh burada başlar */}
-                <AuthProvider />
-              </I18nextProvider>
-            </QueryClientProvider>
-          </Provider>
-        </SafeAreaProvider>
-      </AppErrorBoundary>
+                {fontsLoaded ? <AuthProvider /> : null}
+              </AppErrorBoundary>
+            </I18nextProvider>
+          </QueryClientProvider>
+        </Provider>
+      </SafeAreaProvider>
+      </KeyboardProvider>
     </GestureHandlerRootView>
   );
 }
@@ -50,19 +76,37 @@ export default RootLayout;
 function AuthProvider() {
   return (
     <SupabaseAuthProvider>
-      <StatusBar style="auto" />
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="index" />
-        <Stack.Screen name="(onboarding)" />
+      <StatusBar
+        style="auto"
+        translucent
+        backgroundColor="transparent"
+      />
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          contentStyle: [
+            { backgroundColor: '#FFFFFF' },
+            Platform.OS === 'web' && styles.stackContentWeb,
+          ],
+        }}
+      >
+        <Stack.Screen name="index" options={{ animation: 'none' }} />
+        <Stack.Screen
+          name="(onboarding)"
+          options={{
+            animation: 'none',
+            gestureEnabled: false,
+          }}
+        />
         <Stack.Screen name="(auth)" />
         <Stack.Screen
           name="(tabs)"
           options={{
-            presentation: 'formSheet',
-            contentStyle: { backgroundColor: 'transparent' },
-            sheetAllowedDetents: [1],
-            sheetGrabberVisible: false,
-            gestureEnabled: false,
+            // Tam ekran kök uygulama — welcome/auth sonrası modal sheet değil kart geçişi
+            presentation: 'card',
+            animation: 'default',
+            gestureEnabled: true,
+            contentStyle: { backgroundColor: '#FFFFFF' },
           }}
         />
         <Stack.Screen
@@ -73,7 +117,19 @@ function AuthProvider() {
             sheetGrabberVisible: true,
             sheetCornerRadius: 20,
             gestureEnabled: true,
-            contentStyle: { backgroundColor: 'transparent' },
+            // Opaque + flex: sheet içinde WebView / loader alanı doğru yükseklik alsın (transparent layout çökertiyordu)
+            contentStyle: { flex: 1, backgroundColor: '#FFFFFF' },
+          }}
+        />
+        <Stack.Screen
+          name="settings-sheet"
+          options={{
+            presentation: 'formSheet',
+            sheetAllowedDetents: [1.0],
+            sheetGrabberVisible: true,
+            sheetCornerRadius: 20,
+            gestureEnabled: true,
+            contentStyle: { flex: 1, backgroundColor: '#FFFFFF' },
           }}
         />
       </Stack>
@@ -89,5 +145,16 @@ function AuthProvider() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
+  },
+  /** Web: kök yükseklik zinciri — ensureWebViewportRootStyle ile birlikte */
+  rootWeb: {
+    height: '100%',
+    width: '100%',
+  },
+  stackContentWeb: {
+    flex: 1,
+    minHeight: '100%',
+    height: '100%',
+    width: '100%',
   },
 });

@@ -1,23 +1,25 @@
-import React, { useState, useCallback } from 'react';
-import { TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useState, useCallback, useMemo } from 'react';
+import { TouchableOpacity, StyleSheet, View } from 'react-native';
+import { router } from 'expo-router';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { runOnJS } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { toast } from 'sonner-native';
 import { ChatLayout } from '@/templates/ChatLayout';
 import { MessageList } from '@/organisms/MessageList';
 import { ChatInput } from '@/organisms/ChatInput';
 import { AppHeader } from '@/organisms/AppHeader';
 import { ModelSelector } from '@/molecules/ModelSelector';
-import { ModelBadge } from '@/atoms/Badge';
+import { Avatar } from '@/atoms/Avatar';
 import { useChatSession } from '@/hooks/useChatSession';
-import { useTheme } from '@/hooks/useTheme';
-import { useHaptics } from '@/hooks/useHaptics';
+import { useAuth } from '@/hooks/useAuth';
 import { useI18n } from '@/hooks/useI18n';
 import { palette } from '@/constants/colors';
+import { ChatHistoryDrawer } from '@/organisms/ChatHistoryDrawer';
+import { WelcomeQuickAction } from '@/organisms/HomeWelcomePanel';
 
 export default function HomeScreen() {
-  const { colors } = useTheme();
-  const haptics = useHaptics();
+  const { user, isGuest } = useAuth();
   const { t } = useI18n();
   const {
     messages,
@@ -25,7 +27,6 @@ export default function HomeScreen() {
     isTyping,
     sendMessage,
     changeModel,
-    startNewChat,
     likeMessage,
     fetchNextPage,
     hasNextPage,
@@ -33,6 +34,23 @@ export default function HomeScreen() {
   } = useChatSession();
 
   const [modelSelectorVisible, setModelSelectorVisible] = useState(false);
+  const [drawerVisible, setDrawerVisible] = useState(false);
+
+  // Sol kenardan sağa swipe → drawer aç
+  const openDrawer = useCallback(() => setDrawerVisible(true), []);
+  const openDrawerGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .activeOffsetX([15, 999])
+        .failOffsetY([-12, 12])
+        .onEnd((e) => {
+          'worklet';
+          if (e.translationX > 40 && e.velocityX > 0) {
+            runOnJS(openDrawer)();
+          }
+        }),
+    [openDrawer],
+  );
 
   const handleSend = useCallback(
     (text: string, attachments: import('@/types/chat.types').Attachment[]) => {
@@ -41,47 +59,96 @@ export default function HomeScreen() {
     [sendMessage],
   );
 
-  const handleNewChat = () => {
-    haptics.medium();
-    startNewChat();
-  };
-
   const handleLoadMore = useCallback(() => {
     fetchNextPage();
   }, [fetchNextPage]);
 
+  const quickActions = useMemo<WelcomeQuickAction[]>(
+    () => [
+      {
+        id: 'image',
+        label: `🖼️ ${t('assistant.quickActionImage')}`,
+        prompt: t('assistant.quickActionImagePrompt'),
+      },
+      {
+        id: 'music',
+        label: `🎸 ${t('assistant.quickActionMusic')}`,
+        prompt: t('assistant.quickActionMusicPrompt'),
+      },
+      {
+        id: 'energy',
+        label: `✨ ${t('assistant.quickActionEnergy')}`,
+        prompt: t('assistant.quickActionEnergyPrompt'),
+      },
+      {
+        id: 'video',
+        label: `🎥 ${t('assistant.quickActionVideo')}`,
+        prompt: t('assistant.quickActionVideoPrompt'),
+      },
+    ],
+    [t],
+  );
+
+  const displayName = useMemo(() => {
+    if (isGuest) return t('settings.guest');
+    const raw = user?.name?.trim();
+    if (!raw) return t('settings.guest');
+    return raw.split(' ')[0];
+  }, [isGuest, user?.name, t]);
+
+  const handleQuickActionPress = useCallback(
+    (action: WelcomeQuickAction) => {
+      handleSend(action.prompt, []);
+    },
+    [handleSend],
+  );
+
   const header = (
     <AppHeader
-      title={t('home.headerTitle')}
+      title={t('assistant.title')}
       leftContent={
         <TouchableOpacity
-          style={styles.modelBadgeBtn}
-          onPress={() => setModelSelectorVisible(true)}
+          style={styles.menuBtn}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          onPress={() => setDrawerVisible(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Sohbet geçmişi menüsü"
         >
-          <ModelBadge modelId={selectedModel} />
-          <Ionicons name="chevron-down" size={14} color={palette.white} style={{ marginLeft: 4 }} />
+          <Ionicons name="menu" size={24} color={palette.white} />
         </TouchableOpacity>
       }
-      rightIcons={[
-        {
-          name: 'add-circle-outline',
-          onPress: handleNewChat,
-          accessibilityLabel: 'Yeni sohbet',
-        },
-      ]}
+      rightContent={
+        <TouchableOpacity
+          onPress={() => router.push('/settings-sheet')}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel="Profil"
+          style={styles.avatarBtn}
+        >
+          <Avatar
+            uri={user?.avatarUrl}
+            name={isGuest ? 'G' : (user?.name ?? 'U')}
+            width={30}
+            height={30}
+          />
+        </TouchableOpacity>
+      }
+      subtitle={undefined}
     />
   );
 
   return (
-    <>
-      <SafeAreaView style={{ backgroundColor: palette.primary }} edges={['top']} />
+    <GestureDetector gesture={openDrawerGesture}>
+      <View style={styles.root}>
       <ChatLayout
         header={header}
         input={
           <ChatInput
             onSend={handleSend}
+            onStop={() => {/* TODO: stream abort */}}
             onModelSelectorPress={() => setModelSelectorVisible(true)}
             selectedModel={selectedModel}
+            isStreaming={isTyping}
             placeholder={t('assistant.placeholder')}
           />
         }
@@ -93,7 +160,12 @@ export default function HomeScreen() {
           onLoadMore={handleLoadMore}
           hasMore={hasNextPage}
           isLoadingMore={isFetchingNextPage}
+          welcomeGreeting={t('assistant.welcomeGreeting', { name: displayName })}
+          welcomeQuestion={t('assistant.welcomeQuestion')}
+          quickActions={quickActions}
+          onQuickActionPress={handleQuickActionPress}
         />
+
       </ChatLayout>
 
       <ModelSelector
@@ -105,13 +177,29 @@ export default function HomeScreen() {
         }}
         onClose={() => setModelSelectorVisible(false)}
       />
-    </>
+
+      <ChatHistoryDrawer
+        visible={drawerVisible}
+        onClose={() => setDrawerVisible(false)}
+      />
+      </View>
+    </GestureDetector>
   );
 }
 
 const styles = StyleSheet.create({
-  modelBadgeBtn: {
-    flexDirection: 'row',
+  root: {
+    flex: 1,
+  },
+  /** AppHeader satırı scale(48); layout şişmesin, dokunma hitSlop ile kalır. */
+  menuBtn: {
+    width: 44,
+    height: 44,
     alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarBtn: {
+    borderRadius: 999,
+    overflow: 'hidden',
   },
 });

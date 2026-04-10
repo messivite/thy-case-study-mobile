@@ -14,7 +14,15 @@
  */
 
 import React from 'react';
-import { View, StyleSheet, TouchableOpacity, ViewStyle } from 'react-native';
+import {
+  View,
+  StyleSheet,
+  TouchableOpacity,
+  ViewStyle,
+  Platform,
+  useWindowDimensions,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -24,6 +32,9 @@ import { palette } from '@/constants/colors';
 import { spacing } from '@/constants/spacing';
 import { scale } from '@/lib/responsive';
 import { fontFamily } from '@/constants/typography';
+
+/** Safe area altındaki bar — tüm ekranlarda aynı yükseklik (tab geçişinde zıplama olmasın). */
+const HEADER_ROW_HEIGHT = scale(48);
 
 // ---------------------------------------------------------------------------
 // Types
@@ -43,8 +54,11 @@ export interface AppHeaderProps {
   isBack?: boolean;
   onBack?: () => void;
   leftContent?: React.ReactNode;
+  rightContent?: React.ReactNode;
   rightIcons?: HeaderIcon[];
   style?: ViewStyle;
+  /** Sheet gibi alanlarda üst safe area zaten veriliyorsa kapatılabilir. */
+  safeAreaTop?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -57,10 +71,19 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   isBack = false,
   onBack,
   leftContent,
+  rightContent,
   rightIcons,
   style,
+  safeAreaTop = true,
 }) => {
   const haptics = useHaptics();
+  const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
+  const webScale = Platform.OS === 'web'
+    ? Math.min(windowWidth > 0 ? windowWidth : 390, 390) / 390
+    : 1;
+  const s = (n: number) => Math.round(n * webScale);
+  const rowHeight = Platform.OS === 'web' ? s(48) : HEADER_ROW_HEIGHT;
 
   const handleBack = () => {
     haptics.light();
@@ -71,32 +94,42 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
     }
   };
 
+  const sideLeftStyle = [styles.sideSlot, styles.sideSlotLeft, Platform.OS === 'web' && { width: s(72) }];
+  const sideRightStyle = [styles.sideSlot, styles.sideSlotRight, Platform.OS === 'web' && { width: s(72) }];
+
   const renderLeft = () => {
-    if (leftContent) return <View style={styles.side}>{leftContent}</View>;
+    if (leftContent) return <View style={sideLeftStyle}>{leftContent}</View>;
     if (isBack) {
       return (
-        <TouchableOpacity
-          onPress={handleBack}
-          style={styles.backBtn}
-          activeOpacity={0.75}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          accessibilityLabel="Geri"
-          accessibilityRole="button"
-        >
-          <View style={styles.backCircle}>
-            <Ionicons name="arrow-back" size={scale(18)} color={palette.white} />
-          </View>
-        </TouchableOpacity>
+        <View style={sideLeftStyle}>
+          <TouchableOpacity
+            onPress={handleBack}
+            style={styles.backBtn}
+            activeOpacity={0.75}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityLabel="Geri"
+            accessibilityRole="button"
+          >
+            <View style={[styles.backCircle, Platform.OS === 'web' && { width: s(34), height: s(34) }]}>
+              <Ionicons name="arrow-back" size={Platform.OS === 'web' ? s(18) : scale(18)} color={palette.white} />
+            </View>
+          </TouchableOpacity>
+        </View>
       );
     }
-    return <View style={styles.side} />;
+    return <View style={sideLeftStyle} />;
   };
 
   const renderRight = () => {
-    if (!rightIcons || rightIcons.length === 0) return <View style={styles.side} />;
+    if (rightContent) {
+      return <View style={[...sideRightStyle, styles.rightRow]}>{rightContent}</View>;
+    }
+    if (!rightIcons || rightIcons.length === 0) {
+      return <View style={sideRightStyle} />;
+    }
 
     return (
-      <View style={[styles.side, styles.rightRow]}>
+      <View style={[...sideRightStyle, styles.rightRow]}>
         {rightIcons.map((icon, i) => (
           <TouchableOpacity
             key={i}
@@ -107,10 +140,15 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
             accessibilityLabel={icon.accessibilityLabel}
             accessibilityRole="button"
           >
-            <Ionicons name={icon.name} size={scale(22)} color={palette.white} />
+            <Ionicons name={icon.name} size={Platform.OS === 'web' ? s(22) : scale(22)} color={palette.white} />
             {icon.badge !== undefined && icon.badge > 0 && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>
+              <View
+                style={[
+                  styles.badge,
+                  Platform.OS === 'web' && { minWidth: s(16), height: s(16) },
+                ]}
+              >
+                <Text style={[styles.badgeText, Platform.OS === 'web' && { fontSize: s(9), lineHeight: s(12) }]}>
                   {icon.badge > 99 ? '99+' : String(icon.badge)}
                 </Text>
               </View>
@@ -123,24 +161,28 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
 
   return (
     <LinearGradient
-      colors={['#E81932', '#C0102A']}
+      colors={[palette.primary, palette.primaryDark]}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
-      style={[styles.container, style]}
+      collapsable={false}
+      style={[
+        styles.gradientOuter,
+        {
+          paddingTop: safeAreaTop ? insets.top : 0,
+        },
+        style,
+      ]}
     >
-      {/* Sol */}
-      {renderLeft()}
-
-      {/* Orta */}
-      <View style={styles.centerBlock}>
-        <Text style={styles.title} numberOfLines={1}>{title}</Text>
-        {subtitle ? (
-          <Text style={styles.subtitle} numberOfLines={1}>{subtitle}</Text>
-        ) : null}
+      <View style={[styles.row, { height: rowHeight }]}>
+        {renderLeft()}
+        <View style={styles.centerBlock}>
+          <Text style={[styles.title, Platform.OS === 'web' && { fontSize: s(16) }]} numberOfLines={1}>{title}</Text>
+          {subtitle ? (
+            <Text style={[styles.subtitle, Platform.OS === 'web' && { fontSize: s(11) }]} numberOfLines={1}>{subtitle}</Text>
+          ) : null}
+        </View>
+        {renderRight()}
       </View>
-
-      {/* Sağ */}
-      {renderRight()}
     </LinearGradient>
   );
 };
@@ -150,18 +192,25 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
 // ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  gradientOuter: {
     paddingHorizontal: spacing[4],
-    paddingVertical: spacing[3],
-    minHeight: scale(56),
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.12)',
   },
-  side: {
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  sideSlot: {
     width: scale(72),
+    height: '100%',
+    justifyContent: 'center',
+  },
+  sideSlotLeft: {
     alignItems: 'flex-start',
+  },
+  sideSlotRight: {
+    alignItems: 'flex-end',
   },
   rightRow: {
     flexDirection: 'row',
@@ -171,6 +220,7 @@ const styles = StyleSheet.create({
   },
   centerBlock: {
     flex: 1,
+    minWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
   },

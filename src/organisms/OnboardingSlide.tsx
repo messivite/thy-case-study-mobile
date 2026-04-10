@@ -1,13 +1,13 @@
-import React from 'react';
+import React, { memo, useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { MotiView } from 'moti';
+import { MotiView } from '@/lib/motiView';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/atoms/Text';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import { palette } from '@/constants/colors';
 import { radius, spacing } from '@/constants/spacing';
-import { scale, verticalScale, screen } from '@/lib/responsive';
+import { verticalScale, DESIGN_BASE_WIDTH } from '@/lib/responsive';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -24,6 +24,8 @@ interface OnboardingSlideProps {
   slide: SlideData;
   index: number;
   isActive: boolean;
+  /** Slide genişliği (web’de sütun; native’de ekran genişliği) */
+  slideWidth: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -52,43 +54,60 @@ export const ONBOARDING_SLIDES: SlideData[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// Responsive constants
-// ---------------------------------------------------------------------------
-
-const ICON_WRAP_SIZE = scale(148);
-const ICON_SIZE = scale(68);
-
-// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
-export const OnboardingSlide: React.FC<OnboardingSlideProps> = ({ slide, isActive }) => {
+const ICON_SPRING_TRANSITION = { type: 'spring' as const, damping: 18 };
+const TEXT_ENTER_TRANSITION = { type: 'timing' as const, duration: 350, delay: 100 };
+
+export const OnboardingSlide = memo<OnboardingSlideProps>(function OnboardingSlide({
+  slide,
+  isActive,
+  slideWidth,
+}) {
   const { colors } = useTheme();
   const { t } = useI18n();
 
+  const { iconWrapSize, iconSize } = useMemo(() => {
+    const ratio = slideWidth / DESIGN_BASE_WIDTH;
+    return {
+      iconWrapSize: Math.round(148 * ratio),
+      iconSize: Math.round(68 * ratio),
+    };
+  }, [slideWidth]);
+
+  const iconWrapStyle = useMemo(
+    () => [styles.iconWrap, { width: iconWrapSize, height: iconWrapSize }],
+    [iconWrapSize],
+  );
+
+  const iconInnerStyle = useMemo(
+    () => [styles.iconInner, { backgroundColor: `${slide.color}14` }],
+    [slide.color],
+  );
+
+  const iconAnimate = useMemo(
+    () => ({ opacity: isActive ? 1 : 0.5, scale: isActive ? 1 : 0.9 }),
+    [isActive],
+  );
+
   return (
-    <View style={styles.slide}>
+    <View style={[styles.slide, { width: slideWidth }]}>
       <MotiView
         from={{ opacity: 0, scale: 0.7 }}
-        animate={{ opacity: isActive ? 1 : 0.5, scale: isActive ? 1 : 0.9 }}
-        transition={{ type: 'spring', damping: 18 }}
-        style={[
-          styles.iconWrap,
-          {
-            width: ICON_WRAP_SIZE,
-            height: ICON_WRAP_SIZE,
-          },
-        ]}
+        animate={iconAnimate}
+        transition={ICON_SPRING_TRANSITION}
+        style={iconWrapStyle}
       >
-        <View style={[styles.iconInner, { backgroundColor: slide.color + '14' }]}>
-          <Ionicons name={slide.icon} size={ICON_SIZE} color={slide.color} />
+        <View style={iconInnerStyle}>
+          <Ionicons name={slide.icon} size={iconSize} color={slide.color} />
         </View>
       </MotiView>
 
       <MotiView
         from={{ opacity: 0, translateY: 16 }}
         animate={{ opacity: 1, translateY: 0 }}
-        transition={{ type: 'timing', duration: 350, delay: 100 }}
+        transition={TEXT_ENTER_TRANSITION}
         style={styles.textWrap}
       >
         <Text variant="h2" align="center" style={styles.title}>
@@ -100,7 +119,7 @@ export const OnboardingSlide: React.FC<OnboardingSlideProps> = ({ slide, isActiv
       </MotiView>
     </View>
   );
-};
+});
 
 // ---------------------------------------------------------------------------
 // Styles
@@ -108,7 +127,6 @@ export const OnboardingSlide: React.FC<OnboardingSlideProps> = ({ slide, isActiv
 
 const styles = StyleSheet.create({
   slide: {
-    width: screen.width,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing[8],
