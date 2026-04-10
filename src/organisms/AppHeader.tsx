@@ -22,6 +22,7 @@ import {
   Platform,
   useWindowDimensions,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -50,6 +51,7 @@ export interface AppHeaderProps {
   isBack?: boolean;
   onBack?: () => void;
   leftContent?: React.ReactNode;
+  rightContent?: React.ReactNode;
   rightIcons?: HeaderIcon[];
   style?: ViewStyle;
 }
@@ -64,10 +66,12 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   isBack = false,
   onBack,
   leftContent,
+  rightContent,
   rightIcons,
   style,
 }) => {
   const haptics = useHaptics();
+  const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const webScale = Platform.OS === 'web'
     ? Math.min(windowWidth > 0 ? windowWidth : 390, 390) / 390
@@ -105,6 +109,9 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   };
 
   const renderRight = () => {
+    if (rightContent) {
+      return <View style={[styles.side, styles.rightRow, Platform.OS === 'web' && { width: s(72) }]}>{rightContent}</View>;
+    }
     if (!rightIcons || rightIcons.length === 0) {
       return <View style={[styles.side, Platform.OS === 'web' && { width: s(72) }]} />;
     }
@@ -142,12 +149,16 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
 
   return (
     <LinearGradient
-      colors={['#E81932', '#C0102A']}
+      colors={[palette.primary, palette.primaryDark]}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
       style={[
         styles.container,
-        Platform.OS === 'web' && { minHeight: s(56) },
+        Platform.OS === 'web' && { minHeight: s(50) },
+        {
+          paddingTop: insets.top,
+          paddingBottom: 0,
+        },
         style,
       ]}
     >
@@ -177,8 +188,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing[4],
-    paddingVertical: spacing[3],
-    minHeight: scale(56),
+    minHeight: scale(50),
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.12)',
   },

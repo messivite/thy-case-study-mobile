@@ -15,7 +15,7 @@ export const ChatLayout: React.FC<Props> = ({ header, children, input }) => {
   return (
     <SafeAreaView
       style={[styles.safe, { backgroundColor: colors.background }]}
-      edges={['top']}
+      edges={['left', 'right', 'bottom']}
     >
       {header}
       <KeyboardAvoidingView

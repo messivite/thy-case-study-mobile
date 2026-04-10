@@ -1,24 +1,20 @@
 import React, { useState, useCallback } from 'react';
 import { TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { toast } from 'sonner-native';
 import { ChatLayout } from '@/templates/ChatLayout';
 import { MessageList } from '@/organisms/MessageList';
 import { ChatInput } from '@/organisms/ChatInput';
 import { AppHeader } from '@/organisms/AppHeader';
 import { ModelSelector } from '@/molecules/ModelSelector';
-import { ModelBadge } from '@/atoms/Badge';
+import { Avatar } from '@/atoms/Avatar';
 import { useChatSession } from '@/hooks/useChatSession';
-import { useTheme } from '@/hooks/useTheme';
-import { useHaptics } from '@/hooks/useHaptics';
+import { useAuth } from '@/hooks/useAuth';
 import { useI18n } from '@/hooks/useI18n';
 import { palette } from '@/constants/colors';
-import { store } from '@/store';
 
 export default function HomeScreen() {
-  const { colors } = useTheme();
-  const haptics = useHaptics();
+  const { user, isGuest } = useAuth();
   const { t } = useI18n();
   const {
     messages,
@@ -26,7 +22,6 @@ export default function HomeScreen() {
     isTyping,
     sendMessage,
     changeModel,
-    startNewChat,
     likeMessage,
     fetchNextPage,
     hasNextPage,
@@ -42,54 +37,49 @@ export default function HomeScreen() {
     [sendMessage],
   );
 
-  const handleNewChat = () => {
-    haptics.medium();
-    startNewChat();
-  };
-
   const handleLoadMore = useCallback(() => {
     fetchNextPage();
   }, [fetchNextPage]);
 
   const header = (
     <AppHeader
-      title={t('home.headerTitle')}
+      title={t('assistant.title')}
       leftContent={
         <TouchableOpacity
-          style={styles.modelBadgeBtn}
-          onPress={() => setModelSelectorVisible(true)}
+          style={styles.menuBtn}
+          onPress={() => {
+            // Drawer/chat history akışı bir sonraki adımda bağlanacak.
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="Sohbet geçmişi menüsü"
         >
-          <ModelBadge modelId={selectedModel} />
-          <Ionicons name="chevron-down" size={14} color={palette.white} style={{ marginLeft: 4 }} />
+          <Ionicons name="menu" size={24} color={palette.white} />
         </TouchableOpacity>
       }
-      rightIcons={[
-        ...( __DEV__
-          ? [
-              {
-                name: 'bug-outline' as const,
-                onPress: () => {
-                  console.log('[dev] Redux auth + full state', {
-                    auth: store.getState().auth,
-                    full: store.getState(),
-                  });
-                },
-                accessibilityLabel: 'Debug: log store',
-              },
-            ]
-          : []),
-        {
-          name: 'add-circle-outline',
-          onPress: handleNewChat,
-          accessibilityLabel: 'Yeni sohbet',
-        },
-      ]}
+      rightContent={
+        <TouchableOpacity
+          onPress={() => {
+            // Profil/drawer aksiyonu sonraki adımda bağlanacak.
+          }}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel="Profil"
+          style={styles.avatarBtn}
+        >
+          <Avatar
+            uri={user?.avatarUrl}
+            name={isGuest ? 'G' : (user?.name ?? 'U')}
+            width={30}
+            height={30}
+          />
+        </TouchableOpacity>
+      }
+      subtitle={undefined}
     />
   );
 
   return (
     <>
-      <SafeAreaView style={{ backgroundColor: palette.primary }} edges={['top']} />
       <ChatLayout
         header={header}
         input={
@@ -125,8 +115,14 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  modelBadgeBtn: {
-    flexDirection: 'row',
+  menuBtn: {
+    width: 50,
+    height: 50,
     alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarBtn: {
+    borderRadius: 999,
+    overflow: 'hidden',
   },
 });

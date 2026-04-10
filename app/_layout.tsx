@@ -78,7 +78,11 @@ export default RootLayout;
 function AuthProvider() {
   return (
     <SupabaseAuthProvider>
-      <StatusBar style="auto" />
+      <StatusBar
+        style="auto"
+        translucent
+        backgroundColor="transparent"
+      />
       <Stack
         screenOptions={{
           headerShown: false,
