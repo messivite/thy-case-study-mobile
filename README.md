@@ -248,18 +248,8 @@ Not: Dev test için `npm run ios` + `npm start` akışı yeterli olur.
 
 ### Sıradakiler
 
-- [ ] E2E test kapsamı
-- [ ] Gelişmiş hata izleme (Sentry vb.)
 - [ ] Performans ölçüm ve optimizasyon turu
 - [ ] Dokümantasyon genişletme (API sözleşmeleri, ekran bazlı rehber)
-
----
-
-## Katkı ve Notlar
-
-- Geliştirme sırasında küçük ve anlamlı commitler tercih edilir.
-- Büyük değişikliklerde PR açıklamasında test adımları yazılmalıdır.
-- README ve roadmap bölümleri her yeni milestone'da güncellenmelidir.
 
 ---
 
