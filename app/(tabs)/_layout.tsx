@@ -10,88 +10,26 @@ import { useI18n } from '@/hooks/useI18n';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 
 export default function TabLayout() {
-  const { t } = useI18n();
-  const { isDark } = useTheme();
-  const insets = useSafeAreaInsets();
-  usePushNotifications();
-
-  const bottomPad = Math.max(insets.bottom, 8);
-
   return (
     <PostNavigationEnterFade>
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarStyle: {
-          backgroundColor: 'transparent',
-          borderTopWidth: 0,
-          elevation: 0,
-          shadowOpacity: 0,
-        },
-      }}
-      tabBar={(props) => {
-        const { state, navigation } = props;
-
-        return (
-          <View style={styles.host}>
-            <View style={[styles.surface, { paddingBottom: bottomPad }]}>
-              {Platform.OS === 'ios' ? (
-                <>
-                  <BlurView
-                    intensity={isDark ? 44 : 52}
-                    tint={isDark ? 'dark' : 'light'}
-                    style={StyleSheet.absoluteFill}
-                  />
-                  <View
-                    pointerEvents="none"
-                    style={[
-                      StyleSheet.absoluteFill,
-                      {
-                        backgroundColor: isDark
-                          ? 'rgba(20,20,34,0.86)'
-                          : 'rgba(255,255,255,0.88)',
-                      },
-                    ]}
-                  />
-                </>
-              ) : (
-                <View
-                  style={[
-                    StyleSheet.absoluteFill,
-                    {
-                      backgroundColor: isDark
-                        ? 'rgba(24,24,36,0.97)'
-                        : 'rgba(255,255,255,0.97)',
-                    },
-                  ]}
-                />
-              )}
-              <View style={styles.row}>
-                <TabBarItem
-                  label={t('assistant.title')}
-                  icon="sparkles-outline"
-                  iconFocused="sparkles"
-                  isFocused={state.index === 0}
-                  onPress={() => navigation.navigate('index')}
-                />
-                <TabBarItem
-                  label={t('settings.title')}
-                  icon="settings-outline"
-                  iconFocused="settings"
-                  isFocused={state.index === 1}
-                  onPress={() => navigation.navigate('settings')}
-                />
-              </View>
-            </View>
-          </View>
-        );
-      }}
-    >
-      <Tabs.Screen name="index" />
-      <Tabs.Screen name="settings" />
-    </Tabs>
+      {/* En basit yol: web'de push tarafını tamamen devre dışı bırak. */}
+      {Platform.OS !== 'web' ? <NativePushNotificationsBootstrap /> : null}
+      <Tabs
+        screenOptions={{
+          headerShown: false,
+          tabBarStyle: { display: 'none' }, // Tab bar gizli
+        }}
+      >
+        <Tabs.Screen name="index" />
+        <Tabs.Screen name="settings" />
+      </Tabs>
     </PostNavigationEnterFade>
   );
+}
+
+function NativePushNotificationsBootstrap() {
+  usePushNotifications();
+  return null;
 }
 
 const styles = StyleSheet.create({

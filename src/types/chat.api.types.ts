@@ -171,3 +171,44 @@ export type PaginatedMessagesResponse = {
   nextCursor: string | null;
   hasMore: boolean;
 };
+
+// ---------------------------------------------------------------------------
+// GET /api/chats/search — Sohbet arama (full-text)
+// ---------------------------------------------------------------------------
+
+/** Arama sonucundaki highlight aralığı */
+export type SearchHighlight = {
+  field: 'title' | 'matchedContent';
+  start: number;
+  end: number;
+};
+
+/** Tek bir arama sonucu öğesi */
+export type ChatSearchResultItem = {
+  sessionId: string;
+  title: string;
+  sessionCreatedAt: string;
+  sessionUpdatedAt: string;
+  lastMessageAt: string;
+  titleMatched: boolean;
+  matchedMessageId: string | null;
+  matchedRole: 'user' | 'assistant' | null;
+  matchedContent: string | null;
+  matchedAt: string | null;
+  highlights: SearchHighlight[];
+};
+
+/** GET /api/chats/search response modeli */
+export type ChatSearchResponse = {
+  totalCount: number;
+  hasNext: boolean;
+  nextCursor: string | null;
+  items: ChatSearchResultItem[];
+};
+
+/** GET /api/chats/search query parametreleri */
+export type ChatSearchParams = {
+  q: string;
+  limit?: number;
+  cursor?: string;
+};

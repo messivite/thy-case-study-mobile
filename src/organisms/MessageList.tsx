@@ -6,6 +6,7 @@ import { Message } from '@/types/chat.types';
 import { MessageBubble } from '@/molecules/MessageBubble';
 import { TypingIndicator } from '@/molecules/TypingIndicator';
 import { Text } from '@/atoms/Text';
+import { HomeWelcomePanel, WelcomeQuickAction } from '@/organisms/HomeWelcomePanel';
 import { useTheme } from '@/hooks/useTheme';
 import { spacing } from '@/constants/spacing';
 import { useI18n } from '@/hooks/useI18n';
@@ -20,6 +21,10 @@ type Props = {
   onLoadMore?: () => void;
   hasMore?: boolean;
   isLoadingMore?: boolean;
+  welcomeGreeting?: string;
+  welcomeQuestion?: string;
+  quickActions?: WelcomeQuickAction[];
+  onQuickActionPress?: (action: WelcomeQuickAction) => void;
 };
 
 export const MessageList: React.FC<Props> = ({
@@ -30,6 +35,10 @@ export const MessageList: React.FC<Props> = ({
   onLoadMore,
   hasMore = false,
   isLoadingMore = false,
+  welcomeGreeting,
+  welcomeQuestion,
+  quickActions = [],
+  onQuickActionPress,
 }) => {
   const { colors } = useTheme();
   const { t, currentLanguage } = useI18n();
@@ -112,6 +121,16 @@ export const MessageList: React.FC<Props> = ({
   }, [isLoadingMore, colors, t]);
 
   if (messages.length === 0 && !isTyping) {
+    if (quickActions.length > 0 && welcomeGreeting && welcomeQuestion && onQuickActionPress) {
+      return (
+        <HomeWelcomePanel
+          greeting={welcomeGreeting}
+          question={welcomeQuestion}
+          quickActions={quickActions}
+          onQuickActionPress={onQuickActionPress}
+        />
+      );
+    }
     return (
       <View style={styles.emptyState}>
         <Text variant="h4" align="center" color={colors.text}>

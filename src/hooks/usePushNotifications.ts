@@ -7,7 +7,6 @@ import { useEffect } from 'react';
 import { AppState, Platform } from 'react-native';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
-import * as Notifications from 'expo-notifications';
 import { registerPushToken } from '@/api/notification.api';
 import { mmkvStorage, STORAGE_KEYS } from '@/lib/mmkv';
 import { canDeliverPushNotifications } from '@/lib/notificationPermission';
@@ -24,6 +23,7 @@ function resolveExpoProjectId(): string | undefined {
 
 async function ensureAndroidDefaultChannel(): Promise<void> {
   if (Platform.OS !== 'android') return;
+  const Notifications = await import('expo-notifications');
   await Notifications.setNotificationChannelAsync(ANDROID_DEFAULT_CHANNEL_ID, {
     name: 'default',
     importance: Notifications.AndroidImportance.DEFAULT,
@@ -35,7 +35,7 @@ export function usePushNotifications(): void {
     if (Platform.OS === 'web' || !Device.isDevice) return;
 
     let cancelled = false;
-    const subs: Notifications.Subscription[] = [];
+    const subs: Array<{ remove: () => void }> = [];
 
     const cleanupListeners = () => {
       subs.forEach((s) => s.remove());
@@ -43,6 +43,7 @@ export function usePushNotifications(): void {
     };
 
     const sync = async () => {
+      const Notifications = await import('expo-notifications');
       try {
         await ensureAndroidDefaultChannel();
       } catch {

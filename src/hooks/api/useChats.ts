@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useInfiniteQuery, useQueryClient, InfiniteData, UseQueryOptions } from '@tanstack/react-query';
-import { getChats, getChat, createChat, sendMessage, streamChat, syncChat, getChatMessages } from '@/api/chat.api';
+import { getChats, getChat, createChat, sendMessage, streamChat, syncChat, getChatMessages, searchChats } from '@/api/chat.api';
 import { getMockChatsPage, MockChatsPage } from '@/data/mockChats';
 import {
+  ChatSearchResponse,
   CreateChatRequest,
   CreateChatResponse,
   GetChatsResponse,
@@ -21,6 +22,7 @@ export const CHAT_QUERY_KEYS = {
   chatsList: ['chats', 'list'] as const,
   chat: (chatId: string) => ['chats', chatId] as const,
   messages: (chatId: string) => ['chats', chatId, 'messages'] as const,
+  search: (q: string) => ['chats', 'search', q] as const,
 };
 
 /**
@@ -227,4 +229,28 @@ export const useInfiniteMessagesQuery = (chatId: string) =>
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     enabled: !!chatId,
+  });
+
+/**
+ * GET /api/chats/search?q=xxx&limit=20&cursor=xxx
+ * Sohbet başlıkları ve mesaj içerikleri üzerinde full-text arama.
+ * Infinite scroll destekli. En az 2 karakter girilmeden tetiklenmez.
+ *
+ * staleTime: 60s — aynı sorgu kısa sürede tekrar gelirse cache kullan
+ * gcTime: 5dk — kullanıcı farklı sorgu girip geri gelirse sonuçlar bellekte kalsın
+ *
+ * Kullanım:
+ *   const { data, fetchNextPage, hasNextPage, isFetchingNextPage } = useSearchChatsQuery('thy');
+ *   const results = data?.pages.flatMap(p => p.items) ?? [];
+ */
+export const useSearchChatsQuery = (q: string, limit: number = 20) =>
+  useInfiniteQuery<ChatSearchResponse, Error>({
+    queryKey: CHAT_QUERY_KEYS.search(q),
+    queryFn: ({ pageParam }) =>
+      searchChats({ q, limit, cursor: pageParam as string | undefined }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    enabled: q.trim().length >= 2,
+    staleTime: 60_000,       // 60 sn — aynı sorgu cache'den gelir
+    gcTime: 5 * 60_000,      // 5 dk — farklı sorguya geçince bellekte kalır
   });

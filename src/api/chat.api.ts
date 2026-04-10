@@ -1,6 +1,8 @@
 import { privateApi } from '@/services/api';
 import { supabase } from '@/services/supabase';
 import {
+  ChatSearchParams,
+  ChatSearchResponse,
   CreateChatRequest,
   CreateChatResponse,
   GetChatsResponse,
@@ -180,6 +182,24 @@ export const syncChat = async (
     `/api/chats/${chatId}/sync`,
     payload,
   );
+  return data;
+};
+
+/**
+ * GET /api/chats/search?q=xxx&limit=20&cursor=xxx
+ * Sohbet başlıkları ve mesaj içerikleri üzerinde full-text arama yapar.
+ * Infinite scroll için cursor tabanlı sayfalama destekler.
+ */
+export const searchChats = async (params: ChatSearchParams): Promise<ChatSearchResponse> => {
+  const queryParams: Record<string, string | number> = {
+    q: params.q,
+    limit: params.limit ?? 20,
+  };
+  if (params.cursor) queryParams.cursor = params.cursor;
+
+  const { data } = await privateApi.get<ChatSearchResponse>('/api/chats/search', {
+    params: queryParams,
+  });
   return data;
 };
 

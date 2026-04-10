@@ -15,6 +15,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useI18n } from '@/hooks/useI18n';
 import { palette } from '@/constants/colors';
 import { ChatHistoryDrawer } from '@/organisms/ChatHistoryDrawer';
+import { WelcomeQuickAction } from '@/organisms/HomeWelcomePanel';
 
 export default function HomeScreen() {
   const { user, isGuest } = useAuth();
@@ -61,6 +62,46 @@ export default function HomeScreen() {
     fetchNextPage();
   }, [fetchNextPage]);
 
+  const quickActions = useMemo<WelcomeQuickAction[]>(
+    () => [
+      {
+        id: 'image',
+        label: `🖼️ ${t('assistant.quickActionImage')}`,
+        prompt: t('assistant.quickActionImagePrompt'),
+      },
+      {
+        id: 'music',
+        label: `🎸 ${t('assistant.quickActionMusic')}`,
+        prompt: t('assistant.quickActionMusicPrompt'),
+      },
+      {
+        id: 'energy',
+        label: `✨ ${t('assistant.quickActionEnergy')}`,
+        prompt: t('assistant.quickActionEnergyPrompt'),
+      },
+      {
+        id: 'video',
+        label: `🎥 ${t('assistant.quickActionVideo')}`,
+        prompt: t('assistant.quickActionVideoPrompt'),
+      },
+    ],
+    [t],
+  );
+
+  const displayName = useMemo(() => {
+    if (isGuest) return t('settings.guest');
+    const raw = user?.name?.trim();
+    if (!raw) return t('settings.guest');
+    return raw.split(' ')[0];
+  }, [isGuest, user?.name, t]);
+
+  const handleQuickActionPress = useCallback(
+    (action: WelcomeQuickAction) => {
+      handleSend(action.prompt, []);
+    },
+    [handleSend],
+  );
+
   const header = (
     <AppHeader
       title={t('assistant.title')}
@@ -105,8 +146,10 @@ export default function HomeScreen() {
         input={
           <ChatInput
             onSend={handleSend}
+            onStop={() => {/* TODO: stream abort */}}
             onModelSelectorPress={() => setModelSelectorVisible(true)}
             selectedModel={selectedModel}
+            isStreaming={isTyping}
             placeholder={t('assistant.placeholder')}
           />
         }
@@ -118,6 +161,10 @@ export default function HomeScreen() {
           onLoadMore={handleLoadMore}
           hasMore={hasNextPage}
           isLoadingMore={isFetchingNextPage}
+          welcomeGreeting={t('assistant.welcomeGreeting', { name: displayName })}
+          welcomeQuestion={t('assistant.welcomeQuestion')}
+          quickActions={quickActions}
+          onQuickActionPress={handleQuickActionPress}
         />
       </ChatLayout>
 

@@ -261,3 +261,14 @@ Not: Dev test için `npm run ios` + `npm start` akışı yeterli olur.
 - Büyük değişikliklerde PR açıklamasında test adımları yazılmalıdır.
 - README ve roadmap bölümleri her yeni milestone'da güncellenmelidir.
 
+---
+
+## TODOS
+
+- [ ] Web Push için service worker kaydı ekle (`navigator.serviceWorker.register`).
+- [ ] Web'de notification izin akışını ekle (`Notification.requestPermission`).
+- [ ] `PushManager.subscribe` ile web subscription al (VAPID public key ile).
+- [ ] Subscription bilgisini backend'e gönder ve kullanıcı ile eşle.
+- [ ] Service worker içinde `push` ve `notificationclick` eventlerini handle et.
+- [ ] `pushsubscriptionchange` ile subscription yenileme akışını ekle.
+
