@@ -62,7 +62,8 @@ export const palette = {
   onboardingGradientLocations: [0, 0.18, 0.42, 0.63, 0.78, 0.90, 1] as readonly [number, number, number, number, number, number, number],
   onboardingGradientHeight: '92%' as const,
   onboardingBg: '#FFFFFF',
-  onboardingDotInactive: '#9CA3AF',
+  /** Onboarding V2 pagination — pasif nokta (gray900 ile tema siyahı) */
+  onboardingDotInactive: '#1C1C1C',
 } as const;
 
 export type ThemeColors = {

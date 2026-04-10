@@ -25,10 +25,10 @@ import Animated, {
   withRepeat,
   withSequence,
   withTiming,
-  withSpring,
   cancelAnimation,
   Easing,
   interpolate,
+  interpolateColor,
   Extrapolation,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
@@ -47,6 +47,10 @@ import { scale } from '@/lib/responsive';
 // ---------------------------------------------------------------------------
 
 const { width: W } = Dimensions.get('window');
+/** JS thread'de hesaplanır — useAnimatedStyle worklet içinde scale() çağrılamaz (native crash). */
+const SLIDE_INACTIVE_TRANSLATE_Y = scale(20);
+const PAGINATION_DOT_NARROW = scale(10);
+const PAGINATION_DOT_WIDE = scale(40);
 const TOTAL_SLIDES = 4;
 
 // ---------------------------------------------------------------------------
@@ -151,7 +155,7 @@ const SlideCard = memo<{
     const ty = interpolate(
       offset,
       [-1, 0, 1],
-      [scale(20), 0, scale(20)],
+      [SLIDE_INACTIVE_TRANSLATE_Y, 0, SLIDE_INACTIVE_TRANSLATE_Y],
       Extrapolation.CLAMP,
     );
 
@@ -170,6 +174,8 @@ const SlideCard = memo<{
         overlayIcons={slide.overlayIcons}
         selectorLabel={t(slide.selectorLabelKey)}
         selectorDotColor={slide.selectorDotColor}
+        showSelectorChevrons={index === 1}
+        selectorLeading={index === 1 ? 'ai' : 'pulse'}
       />
     </Animated.View>
   );
@@ -250,8 +256,13 @@ const circleStyles = StyleSheet.create({
 // Pagination
 // ---------------------------------------------------------------------------
 
+const PAGINATION_TIMING = {
+  duration: 320,
+  easing: Easing.inOut(Easing.cubic),
+} as const;
+
 const PaginationDot = memo<{ isActive: boolean }>(({ isActive }) => {
-  const width = useSharedValue(isActive ? scale(40) : scale(10));
+  const progress = useSharedValue(isActive ? 1 : 0);
   const isMountedRef = useRef(false);
 
   useEffect(() => {
@@ -259,24 +270,27 @@ const PaginationDot = memo<{ isActive: boolean }>(({ isActive }) => {
       isMountedRef.current = true;
       return;
     }
-    width.value = withSpring(isActive ? scale(40) : scale(10), {
-      damping: 20,
-      stiffness: 200,
-    });
-    return () => { cancelAnimation(width); };
+    progress.value = withTiming(isActive ? 1 : 0, PAGINATION_TIMING);
+    return () => {
+      cancelAnimation(progress);
+    };
   }, [isActive]);
 
-  const dotAnim = useAnimatedStyle(() => ({ width: width.value }));
+  const dotAnim = useAnimatedStyle(() => {
+    const w = interpolate(
+      progress.value,
+      [0, 1],
+      [PAGINATION_DOT_NARROW, PAGINATION_DOT_WIDE],
+    );
+    const bg = interpolateColor(
+      progress.value,
+      [0, 1],
+      [palette.onboardingDotInactive, palette.onboardingActiveDot],
+    );
+    return { width: w, backgroundColor: bg };
+  });
 
-  return (
-    <Animated.View
-      style={[
-        paginStyles.dot,
-        dotAnim,
-        { backgroundColor: isActive ? palette.onboardingActiveDot : palette.onboardingDotInactive },
-      ]}
-    />
-  );
+  return <Animated.View style={[paginStyles.dot, dotAnim]} />;
 });
 
 const Pagination = memo<{ total: number; activeIndex: number }>(({ total, activeIndex }) => (
@@ -292,7 +306,7 @@ const paginStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: scale(7),
+    gap: 10,
   },
   dot: {
     height: scale(10),
@@ -355,17 +369,15 @@ const BackButtonFade = memo<{ isFirst: boolean; onBack: () => void }>(({ isFirst
 
 const BottomSection = memo<{
   activeIndex: number;
-  total: number;
   onNext: () => void;
   onBack: () => void;
-}>(({ activeIndex, total, onNext, onBack }) => {
+}>(({ activeIndex, onNext, onBack }) => {
   const { t } = useI18n();
-  const isLast = activeIndex === total - 1;
+  const isLast = activeIndex === TOTAL_SLIDES - 1;
   const isFirst = activeIndex === 0;
 
   return (
     <View style={bottomStyles.container}>
-      <Pagination total={total} activeIndex={activeIndex} />
       <View style={bottomStyles.buttonRow}>
         <BackButtonFade isFirst={isFirst} onBack={onBack} />
         <GradientButton
@@ -383,8 +395,7 @@ const bottomStyles = StyleSheet.create({
   container: {
     paddingHorizontal: spacing[5],
     paddingBottom: spacing[8],
-    paddingTop: spacing[2],
-    gap: spacing[3],
+    alignItems: 'stretch',
     backgroundColor: 'transparent',
   },
   buttonRow: {
@@ -482,33 +493,38 @@ export const OnboardingDeckV2: React.FC<OnboardingDeckV2Props> = ({
           </View>
         </View>
 
-        {/* Card scroll alanı */}
-        <View style={mainStyles.cardArea}>
-          <Animated.ScrollView
-            ref={scrollRef}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            bounces={false}
-            scrollEventThrottle={1}
-            onScroll={scrollHandler}
-            onMomentumScrollEnd={handleMomentumEnd}
-            style={mainStyles.scrollView}
-          >
-            {V2_SLIDES.map((slide, i) => (
-              <SlideCard
-                key={i}
-                slide={slide}
-                index={i}
-                scrollX={scrollX}
-              />
-            ))}
-          </Animated.ScrollView>
+        {/* Kart + pagination — altta 20px ile butonlardan ayrılır */}
+        <View style={mainStyles.deckWithDots}>
+          <View style={mainStyles.cardArea}>
+            <Animated.ScrollView
+              ref={scrollRef}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              bounces={false}
+              scrollEventThrottle={1}
+              onScroll={scrollHandler}
+              onMomentumScrollEnd={handleMomentumEnd}
+              style={mainStyles.scrollView}
+              contentContainerStyle={mainStyles.scrollContent}
+            >
+              {V2_SLIDES.map((slide, i) => (
+                <SlideCard
+                  key={i}
+                  slide={slide}
+                  index={i}
+                  scrollX={scrollX}
+                />
+              ))}
+            </Animated.ScrollView>
+          </View>
+          <View style={mainStyles.paginationStrip}>
+            <Pagination total={TOTAL_SLIDES} activeIndex={activeIndex} />
+          </View>
         </View>
 
         <BottomSection
           activeIndex={activeIndex}
-          total={TOTAL_SLIDES}
           onNext={handleNext}
           onBack={handleBack}
         />
@@ -542,18 +558,32 @@ const mainStyles = StyleSheet.create({
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[2],
   },
+  deckWithDots: {
+    flex: 1,
+  },
   cardArea: {
     flex: 1,
-    justifyContent: 'flex-end',
+  },
+  paginationStrip: {
+    paddingTop: 10,
+    paddingBottom: 32,
+    width: '100%',
+    alignItems: 'center',
   },
   scrollView: {
-    flexGrow: 0,
+    flex: 1,
   },
-  // Her kartın sarmalayıcısı — ScrollView içinde W genişliğinde
+  scrollContent: {
+    flexGrow: 1,
+    alignItems: 'flex-end',
+  },
+  // Tam yükseklik + alta hizalı — kart 2 satır başlıkta yukarı doğru büyür
   slideWrapper: {
     width: W,
+    height: '100%',
+    justifyContent: 'flex-end',
     paddingHorizontal: spacing[4],
-    paddingBottom: spacing[2],
+    paddingBottom: 0,
   },
   header: {
     flexDirection: 'row',
