@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import { TouchableOpacity, StyleSheet, View } from 'react-native';
+import { router } from 'expo-router';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
@@ -118,9 +119,7 @@ export default function HomeScreen() {
       }
       rightContent={
         <TouchableOpacity
-          onPress={() => {
-            // Profil/drawer aksiyonu sonraki adımda bağlanacak.
-          }}
+          onPress={() => router.push('/settings-sheet')}
           activeOpacity={0.85}
           accessibilityRole="button"
           accessibilityLabel="Profil"
@@ -166,6 +165,7 @@ export default function HomeScreen() {
           quickActions={quickActions}
           onQuickActionPress={handleQuickActionPress}
         />
+
       </ChatLayout>
 
       <ModelSelector

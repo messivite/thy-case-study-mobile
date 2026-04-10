@@ -67,8 +67,8 @@ import { useTheme } from '@/hooks/useTheme';
 import { useHaptics } from '@/hooks/useHaptics';
 import { useI18n } from '@/hooks/useI18n';
 import { useInfiniteChatsQuery, useSearchChatsQuery, CHAT_QUERY_KEYS } from '@/hooks/api/useChats';
-import { ChatListItem, ChatSearchResultItem } from '@/types/chat.api.types';
-import { MockChatsPage } from '@/data/mockChats';
+import { ChatListItem, ChatSearchResultItem, PaginatedChatsResponse } from '@/types/chat.api.types';
+import { realmService } from '@/services/realm';
 import { palette } from '@/constants/colors';
 import { radius, shadow, spacing } from '@/constants/spacing';
 import { scale, verticalScale } from '@/lib/responsive';
@@ -383,7 +383,6 @@ const SearchOverlay = React.memo(({
           <FlashList
             data={searchResults}
             keyExtractor={(item) => item.sessionId}
-            estimatedItemSize={ITEM_HEIGHT}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.listContent}
             onEndReachedThreshold={0.2}
@@ -435,7 +434,6 @@ const SearchOverlay = React.memo(({
           <FlashList
             data={recentSearches}
             keyExtractor={(item) => item}
-            estimatedItemSize={48}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.listContent}
             ListHeaderComponent={
@@ -545,9 +543,16 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
   } = useInfiniteChatsQuery();
 
   const chats = useMemo(
-    () => (data?.pages.flatMap((p) => p.items) ?? []).filter((c) => !deletedIds.has(c.id)),
+    () => (data?.pages.flatMap((p) => p.items ?? []) ?? []).filter((c) => c?.id && !deletedIds.has(c.id)),
     [data, deletedIds],
   );
+
+  // Session listesi API'den gelince Realm'e kaydet
+  useEffect(() => {
+    if (!data) return;
+    const allItems = data.pages.flatMap((p) => p.items ?? []).filter((c) => c?.id);
+    if (allItems.length > 0) realmService.saveSessions(allItems);
+  }, [data]);
 
   const extraData = useMemo(() => ({ deletedIds, colors }), [deletedIds, colors]);
 
@@ -708,7 +713,7 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
 
   const optimisticRemove = useCallback(
     (chatId: string) => {
-      type IC = InfiniteData<MockChatsPage>;
+      type IC = InfiniteData<PaginatedChatsResponse>;
       const previous = queryClient.getQueryData<IC>(CHAT_QUERY_KEYS.chatsList);
 
       setDeletedIds((prev) => new Set([...prev, chatId]));
@@ -719,7 +724,7 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
           ...old,
           pages: old.pages.map((page) => ({
             ...page,
-            items: page.items.filter((c) => c.id !== chatId),
+            items: (page.items ?? []).filter((c) => c.id !== chatId),
           })),
         };
       });
@@ -741,6 +746,7 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
     const { id } = contextMenu.chat;
     setContextMenu(null);
     const rollback = optimisticRemove(id);
+    realmService.clearSessionMessages(id);
     // TODO: deleteChat(id).catch(() => rollback());
     void rollback;
   }, [contextMenu, optimisticRemove]);
@@ -851,7 +857,6 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
               <FlashList
                 data={chats}
                 keyExtractor={(item) => item.id}
-                estimatedItemSize={ITEM_HEIGHT}
                 renderItem={renderItem}
                 extraData={extraData}
                 showsVerticalScrollIndicator={false}

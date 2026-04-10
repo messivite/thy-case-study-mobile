@@ -7,6 +7,7 @@ import {
   CreateChatResponse,
   GetChatsResponse,
   GetChatResponse,
+  GetMessagesParams,
   NonStreamChatRequest,
   NonStreamChatResponse,
   PaginatedChatsResponse,
@@ -133,16 +134,16 @@ export const getChats = async (): Promise<GetChatsResponse> => {
 };
 
 /**
- * GET /api/chats?limit=X&offset=Y
- * Sayfalanmış chat listesini döner. Infinite scroll için kullanılır.
+ * GET /api/chats?limit=X&cursor=Y
+ * Cursor tabanlı sayfalanmış chat listesini döner. Infinite scroll için kullanılır.
  */
 export const getPaginatedChats = async (
-  limit: number = 10,
-  offset: number = 0,
+  limit: number = 20,
+  cursor?: string,
 ): Promise<PaginatedChatsResponse> => {
-  const { data } = await privateApi.get<PaginatedChatsResponse>('/api/chats', {
-    params: { limit, offset },
-  });
+  const params: Record<string, string | number> = { limit };
+  if (cursor) params.cursor = cursor;
+  const { data } = await privateApi.get<PaginatedChatsResponse>('/api/chats', { params });
   return data;
 };
 
@@ -204,20 +205,23 @@ export const searchChats = async (params: ChatSearchParams): Promise<ChatSearchR
 };
 
 /**
- * GET /api/chats/:chatId/messages?cursor=xxx&limit=20
- * Chat mesajlarını paginated olarak döner (infinite scroll).
+ * GET /api/chats/:chatId/messages?limit=20&direction=older&cursor=xxx
+ * Chat mesajlarını paginated olarak döner. direction: 'older' | 'newer'
+ * İlk yükleme: direction=older (son mesajlara doğru)
+ * Yukarı kaydır: direction=older&cursor=OLDER_CURSOR
+ * Yeni mesajları çek: direction=newer&cursor=NEWEST_VISIBLE_CURSOR
  */
 export const getChatMessages = async (
   chatId: string,
-  cursor?: string,
-  limit: number = 20,
+  params: GetMessagesParams = {},
 ): Promise<PaginatedMessagesResponse> => {
-  const params: Record<string, string | number> = { limit };
-  if (cursor) params.cursor = cursor;
+  const { limit = 20, cursor, direction = 'older' } = params;
+  const qp: Record<string, string | number> = { limit, direction };
+  if (cursor) qp.cursor = cursor;
 
   const { data } = await privateApi.get<PaginatedMessagesResponse>(
     `/api/chats/${chatId}/messages`,
-    { params },
+    { params: qp },
   );
   return data;
 };

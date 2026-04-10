@@ -1,17 +1,10 @@
 /**
  * ChatInput — Gemini-style expandable chat input
  *
- * Layout:
- *   ┌──────────────────────────────────────────┐
- *   │  placeholder text            [↗ expand]  │  ← collapsed / single line
- *   ├──────────────────────────────────────────┤
- *   │  [+]  [model]   input text...   [send/stop]│ ← toolbar row
- *   └──────────────────────────────────────────┘
- *
- * - Input auto-grows up to MAX_LINES, then scrolls
- * - ↗ button → expand to full-height modal overlay
- * - send button: THYIcon (thy-loading used as brand mark) → red gradient + stop on isStreaming
- * - isStreaming prop: parent passes true while AI is responding
+ * - Input auto-grows with text (no fixed height prop → no bounce loop)
+ * - MAX_LINES cap via maxHeight on container
+ * - ↗ expand → full-height modal overlay
+ * - send: THYIcon brand mark; isStreaming: red gradient + stop icon
  */
 
 import React, { useState, useCallback, useRef } from 'react';
@@ -56,12 +49,12 @@ import { scale as scaleSize } from '@/lib/responsive';
 // ---------------------------------------------------------------------------
 
 const LINE_HEIGHT = 22;
-const MIN_HEIGHT = 48;
-const MAX_LINES = 5;
-const MAX_HEIGHT = LINE_HEIGHT * MAX_LINES + 24; // ~134px
+const MIN_INPUT_HEIGHT = 22; // single line
+const MAX_LINES = 3;
+const MAX_INPUT_HEIGHT = LINE_HEIGHT * MAX_LINES;
 
 // ---------------------------------------------------------------------------
-// SendButton — THYIcon or red-gradient stop
+// SendButton
 // ---------------------------------------------------------------------------
 
 const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
@@ -75,51 +68,41 @@ interface SendButtonProps {
 
 const SendButton: React.FC<SendButtonProps> = ({ canSend, isStreaming, onSend, onStop }) => {
   const haptics = useHaptics();
-  const scale = useSharedValue(1);
+  const pressScale = useSharedValue(1);
 
   const animStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
+    transform: [{ scale: pressScale.value }],
   }));
-
-  const handlePressIn = () => {
-    scale.value = withSpring(0.85, { damping: 12, stiffness: 200 });
-  };
-  const handlePressOut = () => {
-    scale.value = withSpring(1, { damping: 12, stiffness: 200 });
-  };
-  const handlePress = () => {
-    haptics.medium();
-    if (isStreaming) onStop();
-    else if (canSend) onSend();
-  };
 
   const SIZE = scaleSize(36);
 
   return (
     <AnimatedTouchable
-      onPress={handlePress}
-      onPressIn={handlePressIn}
-      onPressOut={handlePressOut}
+      onPress={() => {
+        haptics.medium();
+        if (isStreaming) onStop();
+        else if (canSend) onSend();
+      }}
+      onPressIn={() => { pressScale.value = withSpring(0.85, { damping: 12, stiffness: 200 }); }}
+      onPressOut={() => { pressScale.value = withSpring(1, { damping: 12, stiffness: 200 }); }}
       disabled={!isStreaming && !canSend}
       activeOpacity={1}
       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       style={[{ width: SIZE, height: SIZE, borderRadius: SIZE / 2, overflow: 'hidden' }, animStyle]}
     >
       {isStreaming ? (
-        // Red gradient circle with white stop square
         <LinearGradient
           colors={[palette.primaryLight, palette.primary]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
-          style={[StyleSheet.absoluteFill, styles.sendCenter]}
+          style={[StyleSheet.absoluteFill, centerStyle]}
         >
-          <Ionicons name="stop" size={scaleSize(16)} color={palette.white} />
+          <Ionicons name="stop" size={scaleSize(15)} color={palette.white} />
         </LinearGradient>
       ) : (
-        // THY icon send — opacity fades when disabled
         <View
           style={[
-            styles.sendCenter,
+            centerStyle,
             {
               width: SIZE,
               height: SIZE,
@@ -130,8 +113,8 @@ const SendButton: React.FC<SendButtonProps> = ({ canSend, isStreaming, onSend, o
         >
           <THYIcon
             name="thy-loading"
-            width={SIZE - scaleSize(8)}
-            height={SIZE - scaleSize(8)}
+            width={SIZE - scaleSize(10)}
+            height={SIZE - scaleSize(10)}
             fill={palette.white}
             fillSecondary={canSend ? palette.primary : palette.gray200}
           />
@@ -141,8 +124,19 @@ const SendButton: React.FC<SendButtonProps> = ({ canSend, isStreaming, onSend, o
   );
 };
 
+const centerStyle = { alignItems: 'center' as const, justifyContent: 'center' as const };
+
+// Gemini-style soft shadow — no harsh border, depth comes from shadow
+const cardShadow = {
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: -2 },
+  shadowOpacity: 0.08,
+  shadowRadius: 20,
+  elevation: 12,
+};
+
 // ---------------------------------------------------------------------------
-// ExpandedInputModal — full-height compose overlay
+// ExpandedInputModal
 // ---------------------------------------------------------------------------
 
 interface ExpandedInputModalProps {
@@ -158,24 +152,11 @@ interface ExpandedInputModalProps {
 }
 
 const ExpandedInputModal: React.FC<ExpandedInputModalProps> = ({
-  visible,
-  value,
-  onChange,
-  onClose,
-  onSend,
-  canSend,
-  isStreaming,
-  onStop,
-  placeholder,
+  visible, value, onChange, onClose, onSend, canSend, isStreaming, onStop, placeholder,
 }) => {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const inputRef = useRef<TextInput>(null);
-
-  const handleSendAndClose = () => {
-    onSend();
-    onClose();
-  };
 
   return (
     <Modal
@@ -200,10 +181,7 @@ const ExpandedInputModal: React.FC<ExpandedInputModalProps> = ({
             },
           ]}
         >
-          {/* Grab bar */}
           <View style={[styles.grabBar, { backgroundColor: colors.border }]} />
-
-          {/* Text area */}
           <TextInput
             ref={inputRef}
             style={[
@@ -218,16 +196,14 @@ const ExpandedInputModal: React.FC<ExpandedInputModalProps> = ({
             autoCorrect={false}
             textAlignVertical="top"
           />
-
-          {/* Bottom row */}
           <View style={styles.expandedRow}>
-            <TouchableOpacity onPress={onClose} style={styles.expandedClose}>
+            <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
             <SendButton
               canSend={canSend}
               isStreaming={isStreaming}
-              onSend={handleSendAndClose}
+              onSend={() => { onSend(); onClose(); }}
               onStop={onStop}
             />
           </View>
@@ -265,23 +241,32 @@ export const ChatInput: React.FC<Props> = ({
   const insets = useSafeAreaInsets();
 
   const [text, setText] = useState('');
-  const [inputHeight, setInputHeight] = useState(MIN_HEIGHT);
+  const [lineCount, setLineCount] = useState(1);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [pickerVisible, setPickerVisible] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
   const focusProgress = useSharedValue(0);
+  const expandOpacity = useSharedValue(0);
+  const expandVisible = lineCount > 2;
+
+  // expand icon sadece 2 satırı geçince görünür
+  React.useEffect(() => {
+    expandOpacity.value = withTiming(expandVisible ? 1 : 0, { duration: 180 });
+  }, [expandVisible, expandOpacity]);
+
+  const expandAnimStyle = useAnimatedStyle(() => ({
+    opacity: expandOpacity.value,
+    pointerEvents: expandOpacity.value > 0.5 ? 'auto' : 'none',
+  }));
 
   const containerBorderStyle = useAnimatedStyle(() => ({
     borderColor: interpolateColor(
       focusProgress.value,
       [0, 1],
-      [colors.border, colors.primary + '88'],
+      ['rgba(0,0,0,0.06)', colors.primary + '55'],
     ),
   }));
-
-  const handleFocus = () => (focusProgress.value = withTiming(1, { duration: 200 }));
-  const handleBlur = () => (focusProgress.value = withTiming(0, { duration: 200 }));
 
   // --- Attachment helpers ---
 
@@ -321,10 +306,8 @@ export const ChatInput: React.FC<Props> = ({
     addAttachment({
       id, type: 'image',
       name: asset.fileName ?? `photo_${Date.now()}.jpg`,
-      uri: asset.uri,
-      mimeType: asset.mimeType ?? 'image/jpeg',
-      size: asset.fileSize,
-      width: asset.width, height: asset.height,
+      uri: asset.uri, mimeType: asset.mimeType ?? 'image/jpeg',
+      size: asset.fileSize, width: asset.width, height: asset.height,
       status: 'uploading', progress: 0,
     });
     simulateUpload(id);
@@ -345,10 +328,8 @@ export const ChatInput: React.FC<Props> = ({
       addAttachment({
         id, type: 'image',
         name: asset.fileName ?? `image_${Date.now()}.jpg`,
-        uri: asset.uri,
-        mimeType: asset.mimeType ?? 'image/jpeg',
-        size: asset.fileSize,
-        width: asset.width, height: asset.height,
+        uri: asset.uri, mimeType: asset.mimeType ?? 'image/jpeg',
+        size: asset.fileSize, width: asset.width, height: asset.height,
         status: 'uploading', progress: 0,
       });
       simulateUpload(id);
@@ -366,10 +347,8 @@ export const ChatInput: React.FC<Props> = ({
     addAttachment({
       id, type: isPDF ? 'pdf' : 'file',
       name: asset.name ?? `file_${Date.now()}`,
-      uri: asset.uri,
-      mimeType: asset.mimeType ?? 'application/octet-stream',
-      size: asset.size,
-      status: 'uploading', progress: 0,
+      uri: asset.uri, mimeType: asset.mimeType ?? 'application/octet-stream',
+      size: asset.size, status: 'uploading', progress: 0,
     });
     simulateUpload(id);
   }, []);
@@ -378,14 +357,13 @@ export const ChatInput: React.FC<Props> = ({
 
   const handleSend = useCallback(() => {
     const trimmed = text.trim();
-    const hasContent = trimmed.length > 0 || attachments.length > 0;
-    if (!hasContent || disabled) return;
+    if ((!trimmed && attachments.length === 0) || disabled) return;
     if (attachments.some((a) => a.status === 'uploading')) return;
     haptics.medium();
     onSend(trimmed, attachments);
     setText('');
     setAttachments([]);
-    setInputHeight(MIN_HEIGHT);
+    setLineCount(1);
   }, [text, attachments, disabled, onSend, haptics]);
 
   const handleStop = useCallback(() => {
@@ -402,18 +380,9 @@ export const ChatInput: React.FC<Props> = ({
   const hasAttachments = attachments.length > 0;
   const imageAttachments = attachments.filter((a) => a.type === 'image');
   const fileAttachments = attachments.filter((a) => a.type !== 'image');
-  const clampedHeight = Math.max(MIN_HEIGHT, Math.min(inputHeight, MAX_HEIGHT));
 
   return (
-    <View
-      style={[
-        styles.wrapper,
-        {
-          backgroundColor: colors.background,
-          paddingBottom: Math.max(insets.bottom, spacing[3]),
-        },
-      ]}
-    >
+    <View style={[styles.wrapper, { backgroundColor: colors.background }]}>
       {/* Attachment previews */}
       {hasAttachments && (
         <MotiView
@@ -429,22 +398,12 @@ export const ChatInput: React.FC<Props> = ({
               contentContainerStyle={styles.imagePreviewRow}
             >
               {imageAttachments.map((att) => (
-                <AttachmentPreview
-                  key={att.id}
-                  attachment={att}
-                  isInput
-                  onRemove={() => removeAttachment(att.id)}
-                />
+                <AttachmentPreview key={att.id} attachment={att} isInput onRemove={() => removeAttachment(att.id)} />
               ))}
             </ScrollView>
           )}
           {fileAttachments.map((att) => (
-            <AttachmentPreview
-              key={att.id}
-              attachment={att}
-              isInput
-              onRemove={() => removeAttachment(att.id)}
-            />
+            <AttachmentPreview key={att.id} attachment={att} isInput onRemove={() => removeAttachment(att.id)} />
           ))}
         </MotiView>
       )}
@@ -453,53 +412,50 @@ export const ChatInput: React.FC<Props> = ({
       <Animated.View
         style={[
           styles.card,
-          { backgroundColor: colors.inputBg, borderColor: colors.border },
-          shadow.sm,
+          { backgroundColor: colors.inputBg, paddingBottom: insets.bottom },
+          cardShadow,
           containerBorderStyle,
         ]}
       >
-        {/* Expand button — top right corner */}
-        <TouchableOpacity
-          style={styles.expandBtn}
-          onPress={() => { haptics.light(); setExpanded(true); }}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Ionicons name="expand-outline" size={scaleSize(16)} color={colors.textSecondary} />
-        </TouchableOpacity>
+        {/* Expand — top right, animates in after 2 lines */}
+        <Animated.View style={[styles.expandBtn, expandAnimStyle]} pointerEvents={expandVisible ? 'auto' : 'none'}>
+          <TouchableOpacity
+            onPress={() => { haptics.light(); setExpanded(true); }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="expand-outline" size={scaleSize(16)} color={colors.textSecondary} />
+          </TouchableOpacity>
+        </Animated.View>
 
-        {/* Text area */}
+        {/* Text input — minHeight/maxHeight drives growth, no explicit height prop */}
         <TextInput
           style={[
             styles.input,
-            {
-              color: colors.text,
-              fontFamily: fontFamily.regular,
-              fontSize: fontSize.base,
-              height: clampedHeight,
-            },
+            { color: colors.text, fontFamily: fontFamily.regular, fontSize: fontSize.base },
           ]}
           placeholder={placeholder}
           placeholderTextColor={colors.textSecondary}
           multiline
           value={text}
           onChangeText={setText}
-          onFocus={handleFocus}
-          onBlur={handleBlur}
-          onContentSizeChange={(e) =>
-            setInputHeight(e.nativeEvent.contentSize.height + 16)
-          }
+          onFocus={() => (focusProgress.value = withTiming(1, { duration: 200 }))}
+          onBlur={() => (focusProgress.value = withTiming(0, { duration: 200 }))}
+          onContentSizeChange={(e) => {
+            const lines = Math.round(e.nativeEvent.contentSize.height / LINE_HEIGHT);
+            setLineCount(Math.max(1, lines));
+          }}
           returnKeyType="default"
           editable={!disabled && !isStreaming}
           textAlignVertical="top"
-          scrollEnabled={inputHeight > MAX_HEIGHT}
+          scrollEnabled
         />
 
         {/* Bottom toolbar */}
         <View style={styles.toolbar}>
-          {/* Left: + attach + model */}
           <View style={styles.toolbarLeft}>
+            {/* Attach */}
             <TouchableOpacity
-              style={styles.toolbarBtn}
+              style={styles.iconBtn}
               onPress={() => { haptics.light(); setPickerVisible(true); }}
               disabled={disabled}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -516,20 +472,20 @@ export const ChatInput: React.FC<Props> = ({
               )}
             </TouchableOpacity>
 
+            {/* Model */}
             <TouchableOpacity
-              style={styles.modelBtn}
+              style={styles.iconBtn}
               onPress={onModelSelectorPress}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <Ionicons
                 name={(model?.icon as any) ?? 'flash-outline'}
-                size={scaleSize(16)}
+                size={scaleSize(17)}
                 color={model?.color ?? colors.primary}
               />
             </TouchableOpacity>
           </View>
 
-          {/* Right: send / stop */}
           <SendButton
             canSend={canSend}
             isStreaming={isStreaming}
@@ -539,7 +495,6 @@ export const ChatInput: React.FC<Props> = ({
         </View>
       </Animated.View>
 
-      {/* Picker sheet */}
       <AttachmentPickerSheet
         visible={pickerVisible}
         onClose={() => setPickerVisible(false)}
@@ -548,7 +503,6 @@ export const ChatInput: React.FC<Props> = ({
         onDocument={handleDocument}
       />
 
-      {/* Expanded compose modal */}
       <ExpandedInputModal
         visible={expanded}
         value={text}
@@ -570,26 +524,26 @@ export const ChatInput: React.FC<Props> = ({
 
 const styles = StyleSheet.create({
   wrapper: {
-    paddingHorizontal: spacing[3],
+    paddingHorizontal: 0,
     paddingTop: spacing[2],
+    paddingBottom: 0,
     gap: spacing[2],
   },
-  previewArea: {
-    gap: spacing[2],
-  },
+  previewArea: { gap: spacing[2] },
   imagePreviewRow: {
     flexDirection: 'row',
     gap: spacing[2],
     paddingVertical: spacing[1],
   },
-  // Main card
   card: {
-    borderRadius: radius['2xl'],
-    borderWidth: 1,
+    borderTopLeftRadius: radius['2xl'],
+    borderTopRightRadius: radius['2xl'],
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: spacing[4],
     paddingTop: spacing[3],
-    paddingBottom: spacing[2],
-    gap: spacing[1],
+    // paddingBottom is set dynamically with insets.bottom
     position: 'relative',
   },
   expandBtn: {
@@ -599,37 +553,31 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   input: {
+    minHeight: MIN_INPUT_HEIGHT,
+    maxHeight: MAX_INPUT_HEIGHT,
     paddingTop: 0,
-    paddingBottom: spacing[1],
-    paddingRight: scaleSize(24), // space for expand icon
+    paddingBottom: spacing[2],
+    paddingRight: spacing[3] + scaleSize(16) + spacing[2],
     lineHeight: LINE_HEIGHT,
     includeFontPadding: false,
   },
-  // Toolbar
   toolbar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: spacing[1],
+    marginTop: spacing[1],
   },
   toolbarLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing[1],
+    gap: spacing[2],
   },
-  toolbarBtn: {
-    width: scaleSize(36),
-    height: scaleSize(36),
+  iconBtn: {
+    width: scaleSize(34),
+    height: scaleSize(34),
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
-  },
-  modelBtn: {
-    width: scaleSize(32),
-    height: scaleSize(32),
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radius.full,
   },
   badge: {
     position: 'absolute',
@@ -645,10 +593,6 @@ const styles = StyleSheet.create({
     color: palette.white,
     fontSize: 9,
     fontFamily: fontFamily.bold,
-  },
-  sendCenter: {
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   // Expanded modal
   expandedBg: {
@@ -684,11 +628,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingTop: spacing[2],
-  },
-  expandedClose: {
-    width: scaleSize(36),
-    height: scaleSize(36),
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 });

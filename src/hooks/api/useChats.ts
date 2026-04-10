@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useInfiniteQuery, useQueryClient, InfiniteData, UseQueryOptions } from '@tanstack/react-query';
-import { getChats, getChat, createChat, sendMessage, streamChat, syncChat, getChatMessages, searchChats } from '@/api/chat.api';
-import { getMockChatsPage, MockChatsPage } from '@/data/mockChats';
+import { useMemo } from 'react';
+import { getChats, getChat, createChat, sendMessage, streamChat, syncChat, getChatMessages, getPaginatedChats, searchChats } from '@/api/chat.api';
 import {
   ChatSearchResponse,
   CreateChatRequest,
@@ -9,6 +9,7 @@ import {
   GetChatResponse,
   NonStreamChatRequest,
   NonStreamChatResponse,
+  PaginatedChatsResponse,
   PaginatedMessagesResponse,
   StreamChatCallbacks,
   StreamChatRequest,
@@ -16,6 +17,7 @@ import {
   SyncChatResponse,
   ChatMessage,
 } from '@/types/chat.api.types';
+import { realmService } from '@/services/realm';
 
 export const CHAT_QUERY_KEYS = {
   chats: ['chats'] as const,
@@ -43,23 +45,32 @@ export const useGetChatsQuery = (
   });
 
 /**
- * GET /api/chats — Infinite scroll (paginated) versiyonu
- *
- * Şu an mock data kullanır. API entegrasyon aşamasında sadece
- * queryFn içindeki getMockChatsPage → getChats(cursor) ile değiştirilir.
+ * GET /api/chats?limit=20&cursor=X — Infinite scroll (cursor tabanlı)
+ * initialData: Realm cache'inden beslenir, anlık görünüm sağlar.
+ * staleTime: 2dk — dolunca arka planda API refresh atar.
  *
  * Kullanım:
  *   const { data, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteChatsQuery();
  *   const allChats = data?.pages.flatMap(p => p.items) ?? [];
  */
-export const useInfiniteChatsQuery = () =>
-  useInfiniteQuery<MockChatsPage, Error>({
+export const useInfiniteChatsQuery = () => {
+  // Realm'i render sırasında değil, useMemo ile lazy oku
+  const cached = useMemo(() => realmService.getSessions(), []);
+
+  return useInfiniteQuery<PaginatedChatsResponse, Error>({
     queryKey: CHAT_QUERY_KEYS.chatsList,
-    queryFn: ({ pageParam }) => getMockChatsPage(pageParam as string | undefined),
+    queryFn: ({ pageParam }) => getPaginatedChats(20, pageParam as string | undefined),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-    staleTime: Infinity,
+    initialData: cached.items.length > 0 ? {
+      pages: [{ totalCount: cached.items.length, hasNext: false, nextCursor: null, items: cached.items }],
+      pageParams: [undefined],
+    } : undefined,
+    initialDataUpdatedAt: cached.syncedAt,
+    staleTime: 2 * 60_000,
+    gcTime: 10 * 60_000,
   });
+};
 
 /**
  * POST /api/chats
@@ -214,22 +225,34 @@ export const useSyncChatMutation = (chatId: string) =>
   });
 
 /**
- * GET /api/chats/:chatId/messages (paginated)
- * Infinite scroll ile mesajları sayfa sayfa çeker.
+ * GET /api/chats/:chatId/messages?direction=older&cursor=X — Infinite scroll
+ * initialData: Realm cache'inden beslenir.
+ * staleTime: 30sn — aktif chat daha sık değişir.
  *
  * Kullanım:
  *   const { data, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteMessagesQuery(chatId);
  *   const allMessages = data?.pages.flatMap(p => p.messages) ?? [];
  */
-export const useInfiniteMessagesQuery = (chatId: string) =>
-  useInfiniteQuery<PaginatedMessagesResponse, Error>({
-    queryKey: CHAT_QUERY_KEYS.messages(chatId),
+export const useInfiniteMessagesQuery = (sessionId: string) => {
+  // Realm'i render sırasında değil, useMemo ile lazy oku
+  const cached = useMemo(() => realmService.getMessages(sessionId), [sessionId]);
+
+  return useInfiniteQuery<PaginatedMessagesResponse, Error>({
+    queryKey: CHAT_QUERY_KEYS.messages(sessionId),
     queryFn: ({ pageParam }) =>
-      getChatMessages(chatId, pageParam as string | undefined),
+      getChatMessages(sessionId, { limit: 20, cursor: pageParam as string | undefined, direction: 'older' }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-    enabled: !!chatId,
+    initialData: cached.messages.length > 0 ? {
+      pages: [{ messages: cached.messages, nextCursor: null, hasMore: false }],
+      pageParams: [undefined],
+    } : undefined,
+    initialDataUpdatedAt: cached.syncedAt,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    enabled: !!sessionId,
   });
+};
 
 /**
  * GET /api/chats/search?q=xxx&limit=20&cursor=xxx

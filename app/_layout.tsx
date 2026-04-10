@@ -39,8 +39,6 @@ function RootLayout() {
     Inter_700Bold,
   });
 
-  if (!fontsLoaded) return null;
-
   return (
     <GestureHandlerRootView
       style={[styles.root, Platform.OS === 'web' && styles.rootWeb]}
@@ -50,18 +48,18 @@ function RootLayout() {
         navigationBarTranslucent={Platform.OS === 'android'}
         preserveEdgeToEdge={Platform.OS === 'android'}
       >
-      <AppErrorBoundary>
-        <SafeAreaProvider>
-          <Provider store={store}>
-            <QueryClientProvider client={queryClient}>
-              <I18nextProvider i18n={i18n}>
+      <SafeAreaProvider>
+        <Provider store={store}>
+          <QueryClientProvider client={queryClient}>
+            <I18nextProvider i18n={i18n}>
+              <AppErrorBoundary>
                 {/* AuthProvider: Supabase listener + token refresh burada başlar */}
-                <AuthProvider />
-              </I18nextProvider>
-            </QueryClientProvider>
-          </Provider>
-        </SafeAreaProvider>
-      </AppErrorBoundary>
+                {fontsLoaded ? <AuthProvider /> : null}
+              </AppErrorBoundary>
+            </I18nextProvider>
+          </QueryClientProvider>
+        </Provider>
+      </SafeAreaProvider>
       </KeyboardProvider>
     </GestureHandlerRootView>
   );
@@ -120,6 +118,17 @@ function AuthProvider() {
             sheetCornerRadius: 20,
             gestureEnabled: true,
             // Opaque + flex: sheet içinde WebView / loader alanı doğru yükseklik alsın (transparent layout çökertiyordu)
+            contentStyle: { flex: 1, backgroundColor: '#FFFFFF' },
+          }}
+        />
+        <Stack.Screen
+          name="settings-sheet"
+          options={{
+            presentation: 'formSheet',
+            sheetAllowedDetents: [1.0],
+            sheetGrabberVisible: true,
+            sheetCornerRadius: 20,
+            gestureEnabled: true,
             contentStyle: { flex: 1, backgroundColor: '#FFFFFF' },
           }}
         />

@@ -191,7 +191,17 @@ export default function SettingsScreen() {
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]} edges={['left', 'right', 'bottom']}>
-      <AppHeader title={t('settings.title')} />
+      <AppHeader
+        title={t('settings.title')}
+        safeAreaTop={false}
+        rightIcons={[
+          {
+            name: 'close',
+            onPress: () => router.back(),
+            accessibilityLabel: t('common.close'),
+          },
+        ]}
+      />
 
       <ScrollView
         style={{ flex: 1 }}

@@ -309,7 +309,7 @@ export default function WebViewModal() {
   if (!safeUrl) {
     return (
       <View style={[styles.root, { paddingBottom: insets.bottom }]}>
-        <AppHeader title="Hata" isBack onBack={handleClose} />
+        <AppHeader title="Hata" isBack onBack={handleClose} safeAreaTop={false} />
         <View style={styles.centered}>
           <Text style={styles.errorText}>URL parametresi eksik.</Text>
         </View>
@@ -335,6 +335,7 @@ export default function WebViewModal() {
         title={headerTitle}
         subtitle={currentUrl !== safeUrl ? extractHost(currentUrl) : undefined}
         isBack
+        safeAreaTop={false}
         onBack={handleClose}
         rightIcons={[
           {

@@ -31,15 +31,21 @@ export type ChatListItem = AIProviderInfo & {
 export type GetChatsResponse = ChatListItem[];
 
 // ---------------------------------------------------------------------------
-// GET /api/chats?limit=X&offset=Y — Paginated chats
+// GET /api/chats?limit=X&cursor=Y — Paginated chats (cursor tabanlı)
 // ---------------------------------------------------------------------------
 
-/** Paginated chat listesi response modeli */
+/** GET /api/chats query parametreleri */
+export type GetChatsParams = {
+  limit?: number;
+  cursor?: string;
+};
+
+/** Paginated chat listesi response modeli — search ile aynı cursor yapısı */
 export type PaginatedChatsResponse = {
-  chats: ChatListItem[];
-  nextOffset: number | null;
-  hasMore: boolean;
-  total: number;
+  totalCount: number;
+  hasNext: boolean;
+  nextCursor: string | null;
+  items: ChatListItem[];
 };
 
 // ---------------------------------------------------------------------------
@@ -162,8 +168,15 @@ export type SyncChatResponse = {
 };
 
 // ---------------------------------------------------------------------------
-// GET /api/chats/:chatId/messages — Paginated Messages
+// GET /api/chats/:chatId/messages — Paginated Messages (direction tabanlı)
 // ---------------------------------------------------------------------------
+
+/** GET /api/chats/:chatId/messages query parametreleri */
+export type GetMessagesParams = {
+  limit?: number;
+  cursor?: string;
+  direction?: 'older' | 'newer';
+};
 
 /** Paginated mesaj listesi response modeli */
 export type PaginatedMessagesResponse = {

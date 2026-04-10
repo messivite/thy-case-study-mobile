@@ -57,6 +57,8 @@ export interface AppHeaderProps {
   rightContent?: React.ReactNode;
   rightIcons?: HeaderIcon[];
   style?: ViewStyle;
+  /** Sheet gibi alanlarda üst safe area zaten veriliyorsa kapatılabilir. */
+  safeAreaTop?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -72,6 +74,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   rightContent,
   rightIcons,
   style,
+  safeAreaTop = true,
 }) => {
   const haptics = useHaptics();
   const insets = useSafeAreaInsets();
@@ -164,7 +167,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
       style={[
         styles.gradientOuter,
         {
-          paddingTop: insets.top,
+          paddingTop: safeAreaTop ? insets.top : 0,
         },
         style,
       ]}
