@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Pressable, StyleSheet, View, Platform } from 'react-native';
 import Animated, {
   Easing,
@@ -22,6 +22,9 @@ type Props = {
 };
 
 const RIPPLE_MS = 320;
+const TAB_ICON_ANIM_MS = 220;
+const TAB_ICON_ACTIVE_SCALE = 1;
+const TAB_ICON_INACTIVE_SCALE = 0.88;
 
 /** Ekran ref. — nötr gri ikon/etiket (#8E8E93 civarı) */
 const INACTIVE_TINT = '#8E8E93';
@@ -38,11 +41,28 @@ export const TabBarItem: React.FC<Props> = ({
 
   const rippleScale = useSharedValue(0);
   const rippleOpacity = useSharedValue(0);
+  const iconScale = useSharedValue(
+    isFocused ? TAB_ICON_ACTIVE_SCALE : TAB_ICON_INACTIVE_SCALE,
+  );
 
   const rippleStyle = useAnimatedStyle(() => ({
     transform: [{ scale: rippleScale.value }],
     opacity: rippleOpacity.value,
   }));
+
+  const iconAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: iconScale.value }],
+  }));
+
+  useEffect(() => {
+    iconScale.value = withTiming(
+      isFocused ? TAB_ICON_ACTIVE_SCALE : TAB_ICON_INACTIVE_SCALE,
+      {
+        duration: TAB_ICON_ANIM_MS,
+        easing: Easing.out(Easing.cubic),
+      },
+    );
+  }, [isFocused, iconScale]);
 
   const triggerRipple = () => {
     rippleScale.value = 0;
@@ -92,11 +112,13 @@ export const TabBarItem: React.FC<Props> = ({
           />
         )}
         <View style={styles.content}>
-          <Ionicons
-            name={isFocused ? iconFocused : icon}
-            size={24}
-            color={isFocused ? activeColor : inactiveColor}
-          />
+          <Animated.View style={iconAnimStyle}>
+            <Ionicons
+              name={isFocused ? iconFocused : icon}
+              size={24}
+              color={isFocused ? activeColor : inactiveColor}
+            />
+          </Animated.View>
           <Text
             style={[
               styles.label,
@@ -123,7 +145,8 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: spacing[2],
+    paddingTop: spacing[2] + 2,
+    paddingBottom: spacing[2] - 2,
     minHeight: 52,
     position: 'relative',
     overflow: 'hidden',
@@ -140,7 +163,7 @@ const styles = StyleSheet.create({
   content: {
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    gap: 3,
     zIndex: 1,
   },
   label: {

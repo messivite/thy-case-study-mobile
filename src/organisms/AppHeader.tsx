@@ -14,7 +14,14 @@
  */
 
 import React from 'react';
-import { View, StyleSheet, TouchableOpacity, ViewStyle } from 'react-native';
+import {
+  View,
+  StyleSheet,
+  TouchableOpacity,
+  ViewStyle,
+  Platform,
+  useWindowDimensions,
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -61,6 +68,11 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   style,
 }) => {
   const haptics = useHaptics();
+  const { width: windowWidth } = useWindowDimensions();
+  const webScale = Platform.OS === 'web'
+    ? Math.min(windowWidth > 0 ? windowWidth : 390, 390) / 390
+    : 1;
+  const s = (n: number) => Math.round(n * webScale);
 
   const handleBack = () => {
     haptics.light();
@@ -72,7 +84,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   };
 
   const renderLeft = () => {
-    if (leftContent) return <View style={styles.side}>{leftContent}</View>;
+    if (leftContent) return <View style={[styles.side, Platform.OS === 'web' && { width: s(72) }]}>{leftContent}</View>;
     if (isBack) {
       return (
         <TouchableOpacity
@@ -83,20 +95,22 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
           accessibilityLabel="Geri"
           accessibilityRole="button"
         >
-          <View style={styles.backCircle}>
-            <Ionicons name="arrow-back" size={scale(18)} color={palette.white} />
+          <View style={[styles.backCircle, Platform.OS === 'web' && { width: s(34), height: s(34) }]}>
+            <Ionicons name="arrow-back" size={Platform.OS === 'web' ? s(18) : scale(18)} color={palette.white} />
           </View>
         </TouchableOpacity>
       );
     }
-    return <View style={styles.side} />;
+    return <View style={[styles.side, Platform.OS === 'web' && { width: s(72) }]} />;
   };
 
   const renderRight = () => {
-    if (!rightIcons || rightIcons.length === 0) return <View style={styles.side} />;
+    if (!rightIcons || rightIcons.length === 0) {
+      return <View style={[styles.side, Platform.OS === 'web' && { width: s(72) }]} />;
+    }
 
     return (
-      <View style={[styles.side, styles.rightRow]}>
+      <View style={[styles.side, styles.rightRow, Platform.OS === 'web' && { width: s(72) }]}>
         {rightIcons.map((icon, i) => (
           <TouchableOpacity
             key={i}
@@ -107,10 +121,15 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
             accessibilityLabel={icon.accessibilityLabel}
             accessibilityRole="button"
           >
-            <Ionicons name={icon.name} size={scale(22)} color={palette.white} />
+            <Ionicons name={icon.name} size={Platform.OS === 'web' ? s(22) : scale(22)} color={palette.white} />
             {icon.badge !== undefined && icon.badge > 0 && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>
+              <View
+                style={[
+                  styles.badge,
+                  Platform.OS === 'web' && { minWidth: s(16), height: s(16) },
+                ]}
+              >
+                <Text style={[styles.badgeText, Platform.OS === 'web' && { fontSize: s(9), lineHeight: s(12) }]}>
                   {icon.badge > 99 ? '99+' : String(icon.badge)}
                 </Text>
               </View>
@@ -126,16 +145,20 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
       colors={['#E81932', '#C0102A']}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
-      style={[styles.container, style]}
+      style={[
+        styles.container,
+        Platform.OS === 'web' && { minHeight: s(56) },
+        style,
+      ]}
     >
       {/* Sol */}
       {renderLeft()}
 
       {/* Orta */}
       <View style={styles.centerBlock}>
-        <Text style={styles.title} numberOfLines={1}>{title}</Text>
+        <Text style={[styles.title, Platform.OS === 'web' && { fontSize: s(16) }]} numberOfLines={1}>{title}</Text>
         {subtitle ? (
-          <Text style={styles.subtitle} numberOfLines={1}>{subtitle}</Text>
+          <Text style={[styles.subtitle, Platform.OS === 'web' && { fontSize: s(11) }]} numberOfLines={1}>{subtitle}</Text>
         ) : null}
       </View>
 

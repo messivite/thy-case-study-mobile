@@ -5,7 +5,6 @@ import { FlashList, FlashListRef } from '@shopify/flash-list';
 import { Message } from '@/types/chat.types';
 import { MessageBubble } from '@/molecules/MessageBubble';
 import { TypingIndicator } from '@/molecules/TypingIndicator';
-import { AnimatedEmptyState } from '@/molecules/AnimatedEmptyState';
 import { Text } from '@/atoms/Text';
 import { useTheme } from '@/hooks/useTheme';
 import { spacing } from '@/constants/spacing';
@@ -113,7 +112,16 @@ export const MessageList: React.FC<Props> = ({
   }, [isLoadingMore, colors, t]);
 
   if (messages.length === 0 && !isTyping) {
-    return <AnimatedEmptyState />;
+    return (
+      <View style={styles.emptyState}>
+        <Text variant="h4" align="center" color={colors.text}>
+          {t('assistant.emptyTitle')}
+        </Text>
+        <Text variant="body" align="center" color={colors.textSecondary} style={styles.emptySubtitle}>
+          {t('assistant.emptySubtitle')}
+        </Text>
+      </View>
+    );
   }
 
   return (
@@ -151,5 +159,15 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginLeft: spacing[2],
+  },
+  emptyState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing[8],
+    gap: spacing[2],
+  },
+  emptySubtitle: {
+    marginTop: spacing[1],
   },
 });

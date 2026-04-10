@@ -56,6 +56,7 @@ import {
 } from '@/constants/welcomeScreen';
 import { fontFamily } from '@/constants/typography';
 import { scale, DESIGN_BASE_WIDTH } from '@/lib/responsive';
+import { openExternalLink } from '@/lib/openExternalLink';
 import {
   welcomeLoginSchema,
   type WelcomeLoginFormValues,
@@ -209,12 +210,16 @@ export default function WelcomeScreen() {
   };
 
   const openInfoSite = () => {
-    router.push({
-      pathname: '/webview-modal',
-      params: {
-        url: WELCOME_INFO_SITE_URL,
-        title: t('auth.infoSiteWebTitle'),
-      },
+    openExternalLink({
+      url: WELCOME_INFO_SITE_URL,
+      openInApp: () =>
+        router.push({
+          pathname: '/webview-modal',
+          params: {
+            url: WELCOME_INFO_SITE_URL,
+            title: t('auth.infoSiteWebTitle'),
+          },
+        }),
     });
   };
 

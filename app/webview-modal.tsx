@@ -59,7 +59,7 @@ type WebViewModalParams = {
 // THY Logo Pulse — yükleme sırasında gösterilir
 // ---------------------------------------------------------------------------
 
-const LogoLoader: React.FC = () => {
+const LogoLoader: React.FC<{ uiScale?: (n: number) => number }> = ({ uiScale }) => {
   const outerScale = useSharedValue(1);
   const innerScale = useSharedValue(1);
   const opacity = useSharedValue(0.6);
@@ -108,12 +108,18 @@ const LogoLoader: React.FC = () => {
   return (
     <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)} style={loaderStyles.container}>
       {/* Dış halka */}
-      <Animated.View style={[loaderStyles.ring, outerStyle]} />
+      <Animated.View
+        style={[
+          loaderStyles.ring,
+          uiScale && { width: uiScale(100), height: uiScale(100) },
+          outerStyle,
+        ]}
+      />
       {/* Logo */}
       <Animated.View style={[loaderStyles.logoWrap, innerStyle]}>
         <Image
           source={require('../assets/svg/compact-logo.png')}
-          style={loaderStyles.logo}
+          style={[loaderStyles.logo, uiScale && { width: uiScale(64), height: uiScale(64) }]}
           resizeMode="contain"
         />
       </Animated.View>
@@ -153,14 +159,21 @@ const loaderStyles = StyleSheet.create({
 // Error view
 // ---------------------------------------------------------------------------
 
-const ErrorView: React.FC<{ onRetry: () => void }> = ({ onRetry }) => (
+const ErrorView: React.FC<{ onRetry: () => void; uiScale?: (n: number) => number }> = ({ onRetry, uiScale }) => (
   <Animated.View entering={FadeIn.duration(200)} style={errorStyles.container}>
-    <Ionicons name="wifi-outline" size={scale(48)} color={palette.gray300} />
-    <Text style={errorStyles.title}>Sayfa yüklenemedi</Text>
-    <Text style={errorStyles.sub}>Bağlantınızı kontrol edip tekrar deneyin.</Text>
+    <Ionicons name="wifi-outline" size={uiScale ? uiScale(48) : scale(48)} color={palette.gray300} />
+    <Text style={[errorStyles.title, uiScale && { fontSize: uiScale(17) }]}>Sayfa yüklenemedi</Text>
+    <Text style={[errorStyles.sub, uiScale && { fontSize: uiScale(13), lineHeight: uiScale(20) }]}>
+      Bağlantınızı kontrol edip tekrar deneyin.
+    </Text>
     <TouchableOpacity onPress={onRetry} style={errorStyles.btn} activeOpacity={0.8}>
-      <Ionicons name="refresh-outline" size={scale(16)} color={palette.white} style={{ marginRight: 6 }} />
-      <Text style={errorStyles.btnText}>Tekrar Dene</Text>
+      <Ionicons
+        name="refresh-outline"
+        size={uiScale ? uiScale(16) : scale(16)}
+        color={palette.white}
+        style={{ marginRight: 6 }}
+      />
+      <Text style={[errorStyles.btnText, uiScale && { fontSize: uiScale(14) }]}>Tekrar Dene</Text>
     </TouchableOpacity>
   </Animated.View>
 );
@@ -259,7 +272,7 @@ function extractHost(url: string): string {
 
 export default function WebViewModal() {
   const insets = useSafeAreaInsets();
-  const { height: windowHeight } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const { url, title } = useLocalSearchParams<WebViewModalParams>();
 
   const webViewRef = useRef<WebView>(null);
@@ -270,6 +283,10 @@ export default function WebViewModal() {
 
   const safeUrl = url ?? '';
   const headerTitle = title ?? extractHost(safeUrl);
+  const webScale = Platform.OS === 'web'
+    ? Math.min(windowWidth > 0 ? windowWidth : 390, 390) / 390
+    : 1;
+  const uiScale = (n: number) => Math.round(n * webScale);
 
   const handleClose = useCallback(() => {
     router.back();
@@ -352,11 +369,13 @@ export default function WebViewModal() {
 
         {showLoadingOverlay ? (
           <View style={styles.loadingOverlay} pointerEvents="none">
-            <LogoLoader />
+            <LogoLoader uiScale={Platform.OS === 'web' ? uiScale : undefined} />
           </View>
         ) : null}
 
-        {hasError ? <ErrorView onRetry={handleRetry} /> : null}
+        {hasError ? (
+          <ErrorView onRetry={handleRetry} uiScale={Platform.OS === 'web' ? uiScale : undefined} />
+        ) : null}
       </View>
     </View>
   );

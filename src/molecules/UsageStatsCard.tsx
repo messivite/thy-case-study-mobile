@@ -55,7 +55,7 @@ const ProgressRow: React.FC<ProgressRowProps> = ({ label, used, limit, delayMs =
         <Text variant="label" color="rgba(255,255,255,0.94)" style={styles.rowLabel}>
           {label}
         </Text>
-        <Text variant="caption" color="rgba(255,255,255,0.88)">
+        <Text variant="micro" color="rgba(255,255,255,0.88)">
           {used}/{limit} · %{percent}
         </Text>
       </View>

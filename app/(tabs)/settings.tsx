@@ -19,6 +19,7 @@ import { setTheme, setNotifications, setStreaming } from '@/store/slices/setting
 import { spacing, radius } from '@/constants/spacing';
 import { palette } from '@/constants/colors';
 import { fontFamily } from '@/constants/typography';
+import { openExternalLink } from '@/lib/openExternalLink';
 
 export default function SettingsScreen() {
   const { colors, isDark } = useTheme();
@@ -244,10 +245,15 @@ export default function SettingsScreen() {
                 label: t('settings.support'),
                 icon: 'help-circle-outline',
                 iconColor: palette.geminiBlue,
-                onPress: () => router.push({
-                  pathname: '/webview-modal',
-                  params: { url: 'https://www.turkishairlines.com', title: 'Destek' },
-                }),
+                onPress: () =>
+                  openExternalLink({
+                    url: 'https://www.turkishairlines.com',
+                    openInApp: () =>
+                      router.push({
+                        pathname: '/webview-modal',
+                        params: { url: 'https://www.turkishairlines.com', title: 'Destek' },
+                      }),
+                  }),
               },
             ]}
           />
