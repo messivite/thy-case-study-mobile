@@ -8,6 +8,7 @@ import Animated, {
   withSequence,
   cancelAnimation,
   Easing,
+  runOnJS,
 } from 'react-native-reanimated';
 import * as SplashScreen from 'expo-splash-screen';
 import { palette } from '@/constants/colors';
@@ -33,8 +34,13 @@ export function AppSplashScreen({
       duration: 480,
       easing: Easing.in(Easing.cubic),
     });
-    logoOpacity.value = withTiming(0, { duration: 320 });
-    setTimeout(onSplashFinished, 500);
+    // Opacity bitince hemen yönlendir — setTimeout ile beyaz boş ekran kalmasın
+    logoOpacity.value = withTiming(0, { duration: 320 }, (finished) => {
+      'worklet';
+      if (finished) {
+        runOnJS(onSplashFinished)();
+      }
+    });
   };
 
   useEffect(() => {

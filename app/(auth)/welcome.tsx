@@ -3,8 +3,8 @@
  *
  * Onboarding bittikten sonra gösterilen ilk auth ekranı.
  * Ekran görüntüsündeki tasarımı referans alır:
- *   - Üst %45: açık mavi-gri gradient hero (uçak ikonu, başlık, alt başlık)
- *   - Alt: form alanı (beyaz kart yok — gradient ile devam), giriş, Google, linkler
+ *   - Arka plan: açık gökyüzü LinearGradient
+ *   - Üst: hero (logo, başlık); alt: form, giriş, Google, linkler
  *
  * Animasyon: Tek seferlik mount fade-in, sallantı/spring yok.
  */
@@ -53,7 +53,7 @@ import {
 /** Daha alçak hero → form alanı yukarı, tek ekranda sabit layout */
 const HERO_RATIO = 0.30;
 
-/** Tam ekran dikey gökyüzü → açık ton (referans: üst #B6D8E4, alt #F0F7F9) */
+/** Tam ekran dikey gökyüzü → açık ton (üst #B6D8E4, alt #F0F7F9) */
 const WELCOME_SKY_GRADIENT = ['#B6D8E4', '#C9E4ED', '#E0F0F5', '#F0F7F9'] as const;
 const WELCOME_SKY_LOCATIONS = [0, 0.32, 0.68, 1] as const;
 

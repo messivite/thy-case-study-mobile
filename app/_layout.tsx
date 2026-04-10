@@ -58,9 +58,20 @@ function AuthProvider() {
   return (
     <SupabaseAuthProvider>
       <StatusBar style="auto" />
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="index" />
-        <Stack.Screen name="(onboarding)" />
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: '#FFFFFF' },
+        }}
+      >
+        <Stack.Screen name="index" options={{ animation: 'none' }} />
+        <Stack.Screen
+          name="(onboarding)"
+          options={{
+            animation: 'none',
+            gestureEnabled: false,
+          }}
+        />
         <Stack.Screen name="(auth)" />
         <Stack.Screen
           name="(tabs)"
