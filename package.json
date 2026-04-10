@@ -1,6 +1,6 @@
 {
   "name": "thy-case-study-mobile",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "main": "index.ts",
   "scripts": {
     "start": "expo start --dev-client",
@@ -12,7 +12,10 @@
     "web": "expo start --web",
     "test": "jest",
     "test:ci": "jest --ci --coverage --maxWorkers=2",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "version:patch": "npm version patch --no-git-tag-version",
+    "version:minor": "npm version minor --no-git-tag-version",
+    "version:major": "npm version major --no-git-tag-version"
   },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",
