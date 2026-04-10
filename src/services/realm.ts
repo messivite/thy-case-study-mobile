@@ -14,6 +14,7 @@ export class RealmSession extends Realm.Object<RealmSession> {
   provider!: string;
   model!: string;
   lastMessageAt!: string;
+  lastMessagePreview!: string;
   syncedAt!: number;
 
   static schema: Realm.ObjectSchema = {
@@ -25,6 +26,7 @@ export class RealmSession extends Realm.Object<RealmSession> {
       provider: 'string',
       model: 'string',
       lastMessageAt: 'string',
+      lastMessagePreview: { type: 'string', default: '' },
       syncedAt: 'int',
     },
   };
@@ -73,7 +75,16 @@ export const openRealm = (): Promise<Realm> => {
 
   _realmPromise = Realm.open({
     schema: [RealmSession, RealmMessage],
-    schemaVersion: 1,
+    schemaVersion: 2,
+    onMigration: (_oldRealm: Realm, newRealm: Realm) => {
+      // v1 → v2: lastMessagePreview alani eklendi, mevcutlara bos string ver
+      const sessions = newRealm.objects('RealmSession');
+      for (const s of sessions) {
+        if ((s as unknown as RealmSession).lastMessagePreview === undefined) {
+          (s as unknown as RealmSession).lastMessagePreview = '';
+        }
+      }
+    },
   }).then((realm) => {
     _realm = realm;
     _realmPromise = null;

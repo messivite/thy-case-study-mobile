@@ -29,7 +29,6 @@ import {
 } from '@/hooks/api/useChats';
 import { useWhoIAm } from '@/hooks/useWhoIAm';
 import { ChatListItem, ChatSearchResultItem } from '@/types/chat.api.types';
-import { realmService } from '@/services/realm';
 
 export type ChatHistoryData = {
   // Session listesi
@@ -82,14 +81,6 @@ export function useChatHistory(searchQuery: string): ChatHistoryData {
     () => searchQuery_.data?.pages.flatMap((p) => p.items) ?? [],
     [searchQuery_.data],
   );
-
-  // ── Realm'den hizli initial search sonuclari ─────────────────────────────
-  // Arama inputu focus'a geldigi anda (sorgu henuz bos/kisa) realm'den
-  // tum sessionlari dondur ki liste bos gozukmesin.
-  const realmSessions = useMemo(() => {
-    if (searchQuery.trim().length >= 2) return [];
-    return realmService.getSessions().items;
-  }, [searchQuery]);
 
   return {
     sessions,

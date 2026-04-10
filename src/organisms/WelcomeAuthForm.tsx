@@ -190,7 +190,7 @@ export function WelcomeAuthForm({
           <View style={styles.passwordHeader}>
             <Text style={[styles.fieldLabel, webScaled?.fieldLabel]}>{t('auth.password')}</Text>
             <TouchableOpacity
-              onPress={() => {}}
+              onPress={() => router.push('/(auth)/forgotpassword')}
               hitSlop={{ top: 8, bottom: 8, left: 12, right: 4 }}
               disabled={anyPending}
               accessibilityState={{ disabled: anyPending }}

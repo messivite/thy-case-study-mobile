@@ -85,6 +85,8 @@ export default function LoginScreen() {
             color={colors.primary}
             variant="label"
             style={styles.forgotBtn}
+            onPress={() => router.push('/(auth)/forgotpassword')}
+            hapticType="light"
           />
 
           <Button

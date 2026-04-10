@@ -2,7 +2,7 @@ import { Redirect, Stack, useSegments } from 'expo-router';
 import { Platform, StyleSheet } from 'react-native';
 import { useAuth } from '@/hooks/useAuth';
 
-const AUTH_LANDING_SEGMENTS = new Set(['welcome', 'login', 'register']);
+const AUTH_LANDING_SEGMENTS = new Set(['welcome', 'login', 'register', 'forgotpassword']);
 
 export default function AuthLayout() {
   const { status } = useAuth();

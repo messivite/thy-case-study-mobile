@@ -68,6 +68,7 @@ import { useHaptics } from '@/hooks/useHaptics';
 import { useI18n } from '@/hooks/useI18n';
 import { CHAT_QUERY_KEYS } from '@/hooks/api/useChats';
 import { useChatHistory } from '@/hooks/useChatHistory';
+import { realmService } from '@/services/realm';
 import { ChatListItem, ChatSearchResultItem, PaginatedChatsResponse } from '@/types/chat.api.types';
 import { palette } from '@/constants/colors';
 import { radius, shadow, spacing } from '@/constants/spacing';
@@ -96,21 +97,11 @@ type ContextMenuState = {
 // Constants
 // ---------------------------------------------------------------------------
 
-const ITEM_HEIGHT = 108;
 const SPRING_CONFIG = { damping: 28, stiffness: 300, mass: 0.8 } as const;
 const CLOSE_THRESHOLD = 80;
 const SWIPE_VELOCITY_THRESHOLD = 600;
 const CONTEXT_MENU_WIDTH = 200;
 const CONTEXT_MENU_HEIGHT = 108;
-const MAX_RECENT_SEARCHES = 10;
-
-const MOCK_RECENT_SEARCHES: string[] = [
-  'İstanbul uçuş saatleri',
-  'Bagaj kuralları',
-  'Miles&Smiles puan',
-  'Vize gereksinimleri',
-  'Online check-in',
-];
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -318,44 +309,113 @@ const ContextMenuOverlay = React.memo(({
 
 interface SearchOverlayProps {
   query: string;
-  recentSearches: string[];
   isSearching: boolean;
   isFetchingNext: boolean;
   hasNext: boolean;
   searchResults: ChatSearchResultItem[];
+  focusInitialSessions: ChatListItem[];
   topOffset: number;
   onLoadMore: () => void;
-  onSelectRecent: (term: string) => void;
-  onClearRecent: (term: string) => void;
   onSelectResult: (item: ChatSearchResultItem) => void;
+  onSelectSession: (item: ChatListItem) => void;
   textColor: string;
   textSecondary: string;
   borderColor: string;
   backgroundColor: string;
-  isDark: boolean;
   t: (k: string, opts?: Record<string, string>) => string;
 }
 
 const SearchOverlay = React.memo(({
   query,
-  recentSearches,
   isSearching,
   isFetchingNext,
   hasNext,
   searchResults,
+  focusInitialSessions,
   topOffset,
   onLoadMore,
-  onSelectRecent,
-  onClearRecent,
   onSelectResult,
+  onSelectSession,
   textColor,
   textSecondary,
   borderColor,
   backgroundColor,
-  isDark,
   t,
 }: SearchOverlayProps) => {
-  const hasQuery = query.trim().length > 0;
+  const trimmedQuery = query.trim();
+  const isApiQuery = trimmedQuery.length >= 2;
+  const isTyping = trimmedQuery.length === 1;
+
+  const renderSearchResult = useCallback(({ item }: { item: ChatSearchResultItem }) => (
+    <TouchableOpacity
+      style={[styles.item, { borderBottomColor: borderColor + 'AA' }]}
+      onPress={() => onSelectResult(item)}
+      activeOpacity={0.7}
+    >
+      <View style={[styles.providerAvatar, { backgroundColor: palette.primary + '1A' }]}>
+        <Ionicons name="search" size={scale(14)} color={palette.primary} />
+      </View>
+      <View style={styles.itemContent}>
+        <View style={styles.itemTitleRow}>
+          <Text style={[styles.itemTitle, { color: textColor }]} numberOfLines={1}>
+            {item.title}
+          </Text>
+          <Text style={[styles.itemTime, { color: textSecondary }]}>
+            {getRelativeTime(item.lastMessageAt)}
+          </Text>
+        </View>
+        {item.matchedContent ? (
+          <Text style={[styles.itemPreview, { color: textSecondary }]} numberOfLines={2}>
+            {item.matchedContent}
+          </Text>
+        ) : null}
+      </View>
+    </TouchableOpacity>
+  ), [borderColor, textColor, textSecondary, onSelectResult]);
+
+  const renderRecentSession = useCallback(({ item }: { item: ChatListItem }) => {
+    const providerColor = getProviderColor(item.provider);
+    return (
+      <TouchableOpacity
+        style={[styles.item, { borderBottomColor: borderColor + 'AA' }]}
+        onPress={() => onSelectSession(item)}
+        activeOpacity={0.7}
+      >
+        <View style={[styles.providerAvatar, { backgroundColor: providerColor + '1A' }]}>
+          <Ionicons name={getProviderIcon(item.provider)} size={scale(16)} color={providerColor} />
+        </View>
+        <View style={styles.itemContent}>
+          <View style={styles.itemTitleRow}>
+            <Text style={[styles.itemTitle, { color: textColor }]} numberOfLines={1}>
+              {item.title}
+            </Text>
+            <Text style={[styles.itemTime, { color: textSecondary }]}>
+              {getRelativeTime(item.updatedAt)}
+            </Text>
+          </View>
+          <Text style={[styles.itemPreview, { color: textSecondary }]} numberOfLines={1}>
+            {item.lastMessagePreview || item.model}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    );
+  }, [borderColor, textColor, textSecondary, onSelectSession]);
+
+  const searchFooter = useMemo(() => {
+    if (isFetchingNext) return <View style={styles.footerLoader}><Spinner size="small" color={palette.primary} /></View>;
+    if (!hasNext && searchResults.length > 0) return (
+      <View style={styles.footerLoader}>
+        <Text style={[styles.searchHint, { color: textSecondary }]}>Tüm sonuçlar gösterildi</Text>
+      </View>
+    );
+    return null;
+  }, [isFetchingNext, hasNext, searchResults.length, textSecondary]);
+
+  const recentHeader = useMemo(() => (
+    <Text style={[styles.sectionTitle, { color: textSecondary }]}>
+      {t('chatHistory.recentSection')}
+    </Text>
+  ), [textSecondary, t]);
 
   return (
     <Animated.View
@@ -363,8 +423,8 @@ const SearchOverlay = React.memo(({
       entering={FadeIn.duration(180)}
       exiting={FadeOut.duration(140)}
     >
-      {hasQuery ? (
-        // --- Arama sonuçları ---
+      {isApiQuery ? (
+        // --- API arama sonuçları (>= 2 karakter) ---
         isSearching ? (
           <View style={styles.searchLoading}>
             <ActivityThyLoading mode="float" size={48} />
@@ -376,89 +436,50 @@ const SearchOverlay = React.memo(({
               Sonuç bulunamadı
             </Text>
             <Text style={[styles.searchHint, { color: textSecondary }]}>
-              "{query}" için eşleşme yok
+              "{trimmedQuery}" için eşleşme yok
             </Text>
           </View>
         ) : (
-          <FlashList
-            data={searchResults}
-            keyExtractor={(item) => item.sessionId}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.listContent}
-            onEndReachedThreshold={0.2}
-            onEndReached={() => { if (hasNext && !isFetchingNext) onLoadMore(); }}
-            ListFooterComponent={
-              isFetchingNext ? (
-                <View style={styles.footerLoader}>
-                  <Spinner size="small" color={palette.primary} />
-                </View>
-              ) : null
-            }
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={[styles.item, { borderBottomColor: borderColor + 'AA' }]}
-                onPress={() => onSelectResult(item)}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.providerAvatar, { backgroundColor: palette.primary + '1A' }]}>
-                  <Ionicons name="search" size={scale(14)} color={palette.primary} />
-                </View>
-                <View style={styles.itemContent}>
-                  <View style={styles.itemTitleRow}>
-                    <Text style={[styles.itemTitle, { color: textColor }]} numberOfLines={1}>
-                      {item.title}
-                    </Text>
-                    <Text style={[styles.itemTime, { color: textSecondary }]}>
-                      {getRelativeTime(item.lastMessageAt)}
-                    </Text>
-                  </View>
-                  {item.matchedContent && (
-                    <Text style={[styles.itemPreview, { color: textSecondary }]} numberOfLines={2}>
-                      {item.matchedContent}
-                    </Text>
-                  )}
-                </View>
-              </TouchableOpacity>
-            )}
-          />
+          <View style={styles.overlayList}>
+            <FlashList
+              data={searchResults}
+              keyExtractor={(item) => item.sessionId}
+              renderItem={renderSearchResult}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.listContent}
+              onEndReachedThreshold={0.3}
+              onEndReached={() => { if (hasNext && !isFetchingNext) onLoadMore(); }}
+              ListFooterComponent={searchFooter}
+            />
+          </View>
         )
+      ) : isTyping ? (
+        // --- 1 karakter: bekle ---
+        <View style={styles.searchLoading}>
+          <Text style={[styles.searchHint, { color: textSecondary }]}>
+            Aramak için en az 2 karakter girin
+          </Text>
+        </View>
+      ) : focusInitialSessions.length === 0 ? (
+        // --- Boş query + Realm boş ---
+        <View style={styles.searchLoading}>
+          <Ionicons name="chatbubbles-outline" size={40} color={palette.gray300} />
+          <Text style={[styles.searchHint, { color: textSecondary, marginTop: spacing[3] }]}>
+            Henüz sohbet bulunmuyor
+          </Text>
+        </View>
       ) : (
-        // --- Son aramalar ---
-        recentSearches.length === 0 ? (
-          <View style={styles.searchLoading}>
-            <Text style={[styles.searchHint, { color: textSecondary }]}>
-              {t('chatHistory.noRecentSearches')}
-            </Text>
-          </View>
-        ) : (
+        // --- Boş query: Realm'den son 20 session ---
+        <View style={styles.overlayList}>
           <FlashList
-            data={recentSearches}
-            keyExtractor={(item) => item}
+            data={focusInitialSessions}
+            keyExtractor={(item) => item.id}
+            renderItem={renderRecentSession}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.listContent}
-            ListHeaderComponent={
-              <Text style={[styles.sectionTitle, { color: textSecondary }]}>{t('chatHistory.recentSection')}</Text>
-            }
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={[styles.recentItem, { borderBottomColor: borderColor + '55' }]}
-                onPress={() => onSelectRecent(item)}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="time-outline" size={scale(15)} color={textSecondary} style={styles.recentIcon} />
-                <Text style={[styles.recentText, { color: textColor }]} numberOfLines={1}>
-                  {item}
-                </Text>
-                <TouchableOpacity
-                  onPress={() => onClearRecent(item)}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Ionicons name="close" size={scale(14)} color={textSecondary} />
-                </TouchableOpacity>
-              </TouchableOpacity>
-            )}
+            ListHeaderComponent={recentHeader}
           />
-        )
+        </View>
       )}
     </Animated.View>
   );
@@ -479,7 +500,7 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
   const haptics = useHaptics();
   const queryClient = useQueryClient();
   const insets = useSafeAreaInsets();
-  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const { width: windowWidth } = useWindowDimensions();
 
   const DRAWER_WIDTH = windowWidth * 0.85;
 
@@ -509,7 +530,6 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
   const [searchFocused, setSearchFocused] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
-  const [recentSearches, setRecentSearches] = useState<string[]>(MOCK_RECENT_SEARCHES);
   const searchInputRef = useRef<SearchInputRef>(null);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -532,6 +552,14 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
     searchFetchNextPage: searchFetchNext,
     searchHasNextPage: searchHasNext,
   } = useChatHistory(debouncedQuery);
+
+  // Search focus'a gelince Realm'den canlı oku — drawer zaten açık, Realm hazır olur
+  const [focusInitialSessions, setFocusInitialSessions] = useState<ChatListItem[]>([]);
+  useEffect(() => {
+    if (searchFocused) {
+      setFocusInitialSessions(realmService.getSessions().items);
+    }
+  }, [searchFocused]);
 
   const chats = useMemo(
     () => sessions.filter((c) => c?.id && !deletedIds.has(c.id)),
@@ -641,23 +669,7 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
     }, 400);
   }, []);
 
-  const handleSelectRecent = useCallback((term: string) => {
-    setSearchQuery(term);
-    handleSearchChange(term);
-  }, [handleSearchChange]);
-
-  const handleClearRecent = useCallback((term: string) => {
-    setRecentSearches((prev) => prev.filter((t) => t !== term));
-  }, []);
-
   const handleSelectSearchResult = useCallback((item: ChatSearchResultItem) => {
-    // Arama geçmişine ekle
-    if (searchQuery.trim()) {
-      setRecentSearches((prev) => {
-        const filtered = prev.filter((t) => t !== searchQuery.trim());
-        return [searchQuery.trim(), ...filtered].slice(0, MAX_RECENT_SEARCHES);
-      });
-    }
     searchInputRef.current?.blur();
     setSearchFocused(false);
     setSearchQuery('');
@@ -673,7 +685,7 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
       lastMessagePreview: item.matchedContent ?? '',
     });
     onClose();
-  }, [searchQuery, onSelectChat, onClose]);
+  }, [onSelectChat, onClose]);
 
   // ---------------------------------------------------------------------------
   // Chat handlers
@@ -872,21 +884,19 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
           {searchFocused && (
             <SearchOverlay
               query={searchQuery}
-              recentSearches={recentSearches}
               isSearching={isSearching}
               isFetchingNext={isSearchFetchingNext}
               hasNext={searchHasNext ?? false}
               searchResults={searchResults}
+              focusInitialSessions={focusInitialSessions}
               topOffset={fixedAreaHeight}
               onLoadMore={searchFetchNext}
-              onSelectRecent={handleSelectRecent}
-              onClearRecent={handleClearRecent}
               onSelectResult={handleSelectSearchResult}
+              onSelectSession={handleSelectChat}
               textColor={colors.text}
               textSecondary={colors.textSecondary}
               borderColor={colors.border}
               backgroundColor={colors.background}
-              isDark={isDark}
               t={t}
             />
           )}
@@ -1092,21 +1102,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[3],
   },
-  recentItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing[4],
-    paddingVertical: spacing[3],
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  recentIcon: {
-    marginRight: spacing[3],
-  },
-  recentText: {
-    flex: 1,
-    fontFamily: fontFamily.regular,
-    fontSize: scale(13),
-  },
   searchLoading: {
     flex: 1,
     alignItems: 'center',
@@ -1117,5 +1112,8 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.regular,
     fontSize: scale(13),
     textAlign: 'center',
+  },
+  overlayList: {
+    flex: 1,
   },
 });
