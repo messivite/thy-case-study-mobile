@@ -3,6 +3,7 @@ import { Tabs } from 'expo-router';
 import { View, StyleSheet, Platform } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { PostNavigationEnterFade } from '@/components/PostNavigationEnterFade';
 import { TabBarItem } from '@/molecules/TabBarItem';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
@@ -17,6 +18,7 @@ export default function TabLayout() {
   const bottomPad = Math.max(insets.bottom, Platform.OS === 'ios' ? 10 : 8);
 
   return (
+    <PostNavigationEnterFade>
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -117,6 +119,7 @@ export default function TabLayout() {
       <Tabs.Screen name="index" />
       <Tabs.Screen name="settings" />
     </Tabs>
+    </PostNavigationEnterFade>
   );
 }
 

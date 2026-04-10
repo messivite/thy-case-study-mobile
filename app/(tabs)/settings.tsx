@@ -37,10 +37,9 @@ export default function SettingsScreen() {
       {
         text: t('settings.logout'),
         style: 'destructive',
-        onPress: async () => {
-          await logout();
+        onPress: () => {
+          logout();
           toast.success(t('toast.logoutSuccess'));
-          router.replace('/(auth)/welcome');
         },
       },
     ]);

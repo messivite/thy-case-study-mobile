@@ -8,14 +8,7 @@ import React, {
   Suspense,
   lazy,
 } from 'react';
-import {
-  View,
-  StyleSheet,
-  FlatList,
-  InteractionManager,
-  type ListRenderItemInfo,
-  type ViewStyle,
-} from 'react-native';
+import { View, StyleSheet, FlatList, type ListRenderItemInfo, type ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import Animated, {
@@ -27,6 +20,7 @@ import Animated, {
   cancelAnimation,
   Easing,
 } from 'react-native-reanimated';
+import { PostNavigationEnterFade } from '@/components/PostNavigationEnterFade';
 import { Button } from '@/atoms/Button';
 import { TextButton } from '@/atoms/TextButton';
 import { Logo } from '@/atoms/Logo';
@@ -54,32 +48,6 @@ const OnboardingDeckV2Lazy = lazy(() =>
 const SKIP_HIT_SLOP = { top: 8, bottom: 8, left: 24, right: 24 } as const;
 
 const SLIDE_PAGE_WIDTH = screen.width;
-
-/**
- * İlk mount’ta safe area + FlatList ölçümü bazen bir frame kaydırıyor; kısa fade ile maskelenir.
- */
-function OnboardingMountFade({ children }: { children: React.ReactNode }) {
-  const opacity = useSharedValue(0);
-
-  useEffect(() => {
-    const task = InteractionManager.runAfterInteractions(() => {
-      requestAnimationFrame(() => {
-        opacity.value = withTiming(1, {
-          duration: 180,
-          easing: Easing.out(Easing.cubic),
-        });
-      });
-    });
-    return () => task.cancel();
-  }, [opacity]);
-
-  const fadeStyle = useAnimatedStyle(() => ({
-    flex: 1,
-    opacity: opacity.value,
-  }));
-
-  return <Animated.View style={fadeStyle}>{children}</Animated.View>;
-}
 
 // ---------------------------------------------------------------------------
 // Animated background circle
@@ -213,16 +181,16 @@ export default function OnboardingScreen() {
   if (devConfig.onboardingV2Enabled) {
     return (
       <Suspense fallback={v2Fallback}>
-        <OnboardingMountFade>
+        <PostNavigationEnterFade>
           <OnboardingDeckV2Lazy onComplete={handleComplete} onSkip={handleSkip} />
-        </OnboardingMountFade>
+        </PostNavigationEnterFade>
       </Suspense>
     );
   }
 
   return (
     <SafeAreaView style={safeAreaStyle}>
-      <OnboardingMountFade>
+      <PostNavigationEnterFade>
       {/* Animated background circles */}
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
         <BgCircle
@@ -287,7 +255,7 @@ export default function OnboardingScreen() {
           hitSlop={SKIP_HIT_SLOP}
         />
       </View>
-      </OnboardingMountFade>
+      </PostNavigationEnterFade>
     </SafeAreaView>
   );
 }

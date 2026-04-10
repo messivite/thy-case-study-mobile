@@ -49,7 +49,7 @@ export default function SplashPage() {
     }
     const sessionResult = await getCurrentSession();
     if (sessionResult.ok && sessionResult.data) {
-      schedulePostSplashNavigation(() => router.push('/(tabs)'));
+      schedulePostSplashNavigation(() => router.replace('/(tabs)'));
     } else {
       schedulePostSplashNavigation(() => router.replace('/(auth)/welcome'));
     }

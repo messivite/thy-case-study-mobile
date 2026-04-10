@@ -8,7 +8,7 @@
  *   401      → authMutex.refresh() çağrılır (mutex: tek refresh, concurrent korumalı)
  *              → Başarılı: RTK store güncellenir (event ile), istek retry edilir
  *              → Başarısız: SESSION_EXPIRED event yayınlanır → useSupabaseAuth dinler
- *                           → logout dispatch → router.replace('/(auth)/welcome')
+ *                           → resetAfterLogout + router.replace('/(auth)/welcome')
  *
  * _retry flag: Sonsuz döngüyü önler. Bir istek en fazla 1 kez retry edilir.
  */

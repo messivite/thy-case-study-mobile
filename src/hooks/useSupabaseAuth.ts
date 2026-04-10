@@ -5,7 +5,8 @@
  *
  * Sorumlulukları:
  *  1. App açılışında mevcut session'ı restore et
- *  2. Supabase onAuthStateChange listener'ı → RTK dispatch
+ *  2. Supabase onAuthStateChange listener'ı → RTK dispatch (SIGNED_OUT’ta reset/nav yok;
+ *     açılışta SDK gürültüsü + çıkış optimistic path ile çakışmasın diye)
  *  3. Token süresi dolduysa proaktif refresh (background interval)
  *  4. 401 interceptor sinyalini dinle → refresh → retry
  *  5. Login / register / logout / Google OAuth methodlarını dışa aç
@@ -25,8 +26,8 @@ import {
   setGuest,
   setLoading,
   setUnauthenticated,
-  logout as logoutAction,
 } from '@/store/slices/authSlice';
+import { resetAfterLogout } from '@/store';
 import {
   signInWithEmail,
   signUpWithEmail,
@@ -69,7 +70,7 @@ type SupabaseAuthApi = {
     fullName: string,
   ) => Promise<AuthResult<AppSession | null>>;
   loginWithGoogle: () => Promise<AuthResult<AppSession>>;
-  logout: () => Promise<void>;
+  logout: () => void;
   forgotPassword: (email: string) => Promise<AuthResult<void>>;
   changePassword: (newPassword: string) => Promise<AuthResult<void>>;
   continueAsGuest: () => Promise<void>;
@@ -141,6 +142,17 @@ function useSupabaseAuthState(): SupabaseAuthApi {
   );
 
   // -------------------------------------------------------------------------
+  // Background refresh interval — stop önce (tryRefreshToken buna bağlı)
+  // -------------------------------------------------------------------------
+
+  const stopRefreshInterval = useCallback(() => {
+    if (refreshIntervalRef.current) {
+      clearInterval(refreshIntervalRef.current);
+      refreshIntervalRef.current = null;
+    }
+  }, []);
+
+  // -------------------------------------------------------------------------
   // Proactive token refresh
   // -------------------------------------------------------------------------
 
@@ -154,14 +166,18 @@ function useSupabaseAuthState(): SupabaseAuthApi {
       if (result.ok) {
         dispatchRefreshedTokens(result.data);
       } else if (result.code === 'REFRESH_FAILED') {
-        // Refresh token da geçersiz → oturumu kapat
-        dispatch(logoutAction());
+        stopRefreshInterval();
+        authMutex.reset();
+        void clearSession();
+        dispatch(resetAfterLogout());
+        setErrorReportingUser(null);
         toast.error('Oturumunuzun süresi doldu, tekrar giriş yapın.');
+        router.replace('/(auth)/welcome');
       }
     } finally {
       isRefreshingRef.current = false;
     }
-  }, [expiresAt, dispatch, dispatchRefreshedTokens]);
+  }, [expiresAt, dispatch, dispatchRefreshedTokens, stopRefreshInterval]);
 
   // Stable ref — AppState listener'ın her token refresh'te yeniden kayıt olmasını önler
   const tryRefreshTokenRef = useRef(tryRefreshToken);
@@ -169,21 +185,10 @@ function useSupabaseAuthState(): SupabaseAuthApi {
     tryRefreshTokenRef.current = tryRefreshToken;
   }, [tryRefreshToken]);
 
-  // -------------------------------------------------------------------------
-  // Background refresh interval — app açıkken periyodik kontrol
-  // -------------------------------------------------------------------------
-
   const startRefreshInterval = useCallback(() => {
     if (refreshIntervalRef.current) clearInterval(refreshIntervalRef.current);
     refreshIntervalRef.current = setInterval(tryRefreshToken, REFRESH_CHECK_INTERVAL_MS);
   }, [tryRefreshToken]);
-
-  const stopRefreshInterval = useCallback(() => {
-    if (refreshIntervalRef.current) {
-      clearInterval(refreshIntervalRef.current);
-      refreshIntervalRef.current = null;
-    }
-  }, []);
 
   // -------------------------------------------------------------------------
   // SESSION_EXPIRED event (api.ts interceptor'dan gelir)
@@ -194,7 +199,8 @@ function useSupabaseAuthState(): SupabaseAuthApi {
     const unsub = authEventEmitter.on(AUTH_EVENTS.SESSION_EXPIRED, () => {
       stopRefreshInterval();
       authMutex.reset();
-      dispatch(logoutAction());
+      void clearSession();
+      dispatch(resetAfterLogout());
       setErrorReportingUser(null);
       toast.error('Oturumunuzun süresi doldu, tekrar giriş yapın.');
       router.replace('/(auth)/welcome');
@@ -242,10 +248,9 @@ function useSupabaseAuthState(): SupabaseAuthApi {
               break;
 
             case 'SIGNED_OUT':
+              // Çıkış / oturum düşmesi: reset + navigate sadece manuel logout, SESSION_EXPIRED, REFRESH_FAILED.
+              // SIGNED_OUT açılışta da tetiklenebiliyor; burada state veya route’a dokunma.
               stopRefreshInterval();
-              await clearSession();
-              dispatch(logoutAction());
-              setErrorReportingUser(null);
               break;
 
             case 'PASSWORD_RECOVERY':
@@ -336,11 +341,12 @@ function useSupabaseAuthState(): SupabaseAuthApi {
     return result;
   }, [dispatch]);
 
-  const logout = useCallback(async () => {
+  const logout = useCallback(() => {
     stopRefreshInterval();
-    await signOut();
-    dispatch(logoutAction());
+    dispatch(resetAfterLogout());
     setErrorReportingUser(null);
+    router.replace('/(auth)/welcome');
+    void signOut();
   }, [dispatch, stopRefreshInterval]);
 
   const forgotPassword = useCallback(async (email: string) => {
