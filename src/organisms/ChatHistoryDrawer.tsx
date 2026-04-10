@@ -3,10 +3,11 @@
  *
  * Soldan kayan drawer — sohbet geçmişini listeler.
  * Reanimated + GestureHandler ile custom implementasyon (drawer lib yok).
- * AppHeader ile fixed başlık, FlashList ile list, uzun basınca context menü.
+ * AppHeader ile fixed başlık, FlashList ile infinite scroll list,
+ * uzun basınca ChatGPT tarzı blur overlay + context menü.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Modal,
   Platform,
@@ -19,6 +20,8 @@ import {
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import Animated, {
+  FadeIn,
+  FadeOut,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
@@ -38,10 +41,12 @@ import { useTheme } from '@/hooks/useTheme';
 import { useHaptics } from '@/hooks/useHaptics';
 import { useInfiniteChatsQuery, CHAT_QUERY_KEYS } from '@/hooks/api/useChats';
 import { ChatListItem } from '@/types/chat.api.types';
+import { MockChatsPage } from '@/data/mockChats';
 import { palette } from '@/constants/colors';
 import { radius, shadow, spacing } from '@/constants/spacing';
 import { scale, verticalScale } from '@/lib/responsive';
 import { fontFamily } from '@/constants/typography';
+import type { InfiniteData } from '@tanstack/react-query';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -55,18 +60,21 @@ export interface ChatHistoryDrawerProps {
 
 type ContextMenuState = {
   chat: ChatListItem;
-  menuY: number;
+  /** Item'ın ekrandaki mutlak Y pozisyonu — BlurOverlay içinde konumlandırma için */
+  pageY: number;
+  pageH: number;
 } | null;
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-const ITEM_HEIGHT = 108; // paddingVertical 8+8, 2 satır preview, chip
+const ITEM_HEIGHT = 108;
 const SPRING_CONFIG = { damping: 28, stiffness: 300, mass: 0.8 } as const;
 const CLOSE_THRESHOLD = 80;
 const SWIPE_VELOCITY_THRESHOLD = 600;
-const MENU_HEIGHT = 104; // ~2 items + divider
+const CONTEXT_MENU_WIDTH = 200;
+const CONTEXT_MENU_HEIGHT = 108; // 2 items × 48px + divider
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -95,39 +103,25 @@ const PROVIDER_COLORS: Record<string, string> = {
   google: palette.geminiBlue,
   anthropic: palette.claudeOrange,
 };
-
-function getProviderColor(provider: string): string {
-  return PROVIDER_COLORS[provider.toLowerCase()] ?? palette.primary;
-}
-
-function getProviderInitial(provider: string): string {
-  const map: Record<string, string> = {
-    openai: 'O',
-    google: 'G',
-    anthropic: 'A',
-  };
-  return map[provider.toLowerCase()] ?? provider.charAt(0).toUpperCase();
-}
-
-// ---------------------------------------------------------------------------
-// Sub-components
-// ---------------------------------------------------------------------------
-
-// Provider icon mapping
 const PROVIDER_ICONS: Record<string, React.ComponentProps<typeof Ionicons>['name']> = {
   openai: 'sparkles',
   google: 'logo-google',
   anthropic: 'planet-outline',
 };
 
-function getProviderIcon(provider: string): React.ComponentProps<typeof Ionicons>['name'] {
-  return PROVIDER_ICONS[provider.toLowerCase()] ?? 'hardware-chip-outline';
+function getProviderColor(p: string) { return PROVIDER_COLORS[p.toLowerCase()] ?? palette.primary; }
+function getProviderIcon(p: string): React.ComponentProps<typeof Ionicons>['name'] {
+  return PROVIDER_ICONS[p.toLowerCase()] ?? 'hardware-chip-outline';
 }
+
+// ---------------------------------------------------------------------------
+// ChatHistoryItem
+// ---------------------------------------------------------------------------
 
 interface ChatHistoryItemProps {
   item: ChatListItem;
   onPress: () => void;
-  onLongPress: (menuY: number) => void;
+  onLongPress: (pageY: number, pageH: number) => void;
   textColor: string;
   textSecondary: string;
   borderColor: string;
@@ -137,86 +131,58 @@ interface ChatHistoryItemProps {
 const ChatHistoryItem = React.memo<ChatHistoryItemProps>(
   ({ item, onPress, onLongPress, textColor, textSecondary, borderColor, isDark }) => {
     const itemRef = useRef<View>(null);
-    const insets = useSafeAreaInsets();
 
     const handleLongPress = useCallback(() => {
       itemRef.current?.measureInWindow((_x, y, _w, h) => {
-        const HEADER_HEIGHT = scale(48) + insets.top;
-        const relativeY = y - HEADER_HEIGHT + h / 2 - MENU_HEIGHT / 2;
-        onLongPress(relativeY);
+        onLongPress(y, h);
       });
-    }, [onLongPress, insets.top]);
+    }, [onLongPress]);
 
     const providerColor = getProviderColor(item.provider);
     const providerIcon = getProviderIcon(item.provider);
 
     return (
-      <TouchableOpacity
-        ref={itemRef}
-        style={[styles.item, { borderBottomColor: borderColor + 'AA' }]}
-        onPress={onPress}
-        onLongPress={handleLongPress}
-        delayLongPress={380}
-        activeOpacity={0.7}
-      >
-        {/* Provider avatar */}
-        <View
-          style={[
-            styles.providerAvatar,
-            { backgroundColor: providerColor + '1A' },
-          ]}
+      <View ref={itemRef}>
+        <TouchableOpacity
+          style={[styles.item, { borderBottomColor: borderColor + 'AA' }]}
+          onPress={onPress}
+          onLongPress={handleLongPress}
+          delayLongPress={350}
+          activeOpacity={0.7}
         >
-          <Ionicons name={providerIcon} size={scale(16)} color={providerColor} />
-        </View>
-
-        {/* Content */}
-        <View style={styles.itemContent}>
-          {/* Title row */}
-          <View style={styles.itemTitleRow}>
-            <Text
-              style={[styles.itemTitle, { color: textColor }]}
-              numberOfLines={1}
-            >
-              {item.title}
-            </Text>
-            <Text style={[styles.itemTime, { color: textSecondary }]}>
-              {getRelativeTime(item.updatedAt)}
-            </Text>
+          <View style={[styles.providerAvatar, { backgroundColor: providerColor + '1A' }]}>
+            <Ionicons name={providerIcon} size={scale(16)} color={providerColor} />
           </View>
 
-          {/* Preview */}
-          <Text
-            style={[styles.itemPreview, { color: textSecondary }]}
-            numberOfLines={2}
-          >
-            {item.lastMessagePreview}
-          </Text>
+          <View style={styles.itemContent}>
+            <View style={styles.itemTitleRow}>
+              <Text style={[styles.itemTitle, { color: textColor }]} numberOfLines={1}>
+                {item.title}
+              </Text>
+              <Text style={[styles.itemTime, { color: textSecondary }]}>
+                {getRelativeTime(item.updatedAt)}
+              </Text>
+            </View>
 
-          {/* Model chip */}
-          <View style={styles.chipRow}>
-            <ModelChip
-              model={item.model}
-              color={providerColor}
-              isDark={isDark}
-            />
+            <Text style={[styles.itemPreview, { color: textSecondary }]} numberOfLines={2}>
+              {item.lastMessagePreview}
+            </Text>
+
+            <View style={styles.chipRow}>
+              <ModelChip model={item.model} color={providerColor} isDark={isDark} />
+            </View>
           </View>
-        </View>
-      </TouchableOpacity>
+        </TouchableOpacity>
+      </View>
     );
   },
 );
 
 // ---------------------------------------------------------------------------
-// Model Chip — liquid glass look
+// ModelChip
 // ---------------------------------------------------------------------------
 
-interface ModelChipProps {
-  model: string;
-  color: string;
-  isDark: boolean;
-}
-
-const ModelChip = ({ model, color, isDark }: ModelChipProps) => (
+const ModelChip = React.memo(({ model, color, isDark }: { model: string; color: string; isDark: boolean }) => (
   <View style={[styles.chip, { borderColor: color + '40' }]}>
     {Platform.OS === 'ios' ? (
       <BlurView
@@ -225,42 +191,23 @@ const ModelChip = ({ model, color, isDark }: ModelChipProps) => (
         style={StyleSheet.absoluteFill}
       />
     ) : (
-      <View
-        style={[
-          StyleSheet.absoluteFill,
-          { backgroundColor: isDark ? color + '18' : color + '12' },
-        ]}
-      />
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? color + '18' : color + '12' }]} />
     )}
     <Ionicons name="hardware-chip-outline" size={scale(11)} color={color} style={styles.chipIcon} />
-    <Text style={[styles.chipText, { color }]} numberOfLines={1}>
-      {model}
-    </Text>
+    <Text style={[styles.chipText, { color }]} numberOfLines={1}>{model}</Text>
   </View>
-);
+));
 
 // ---------------------------------------------------------------------------
-// Empty State
+// EmptyState
 // ---------------------------------------------------------------------------
 
-const EmptyState = ({
-  textColor,
-  textSecondary,
-}: {
-  textColor: string;
-  textSecondary: string;
-}) => (
+const EmptyState = ({ textColor, textSecondary }: { textColor: string; textSecondary: string }) => (
   <View style={styles.emptyContainer}>
     <View style={styles.emptyIconWrap}>
-      <Ionicons
-        name="chatbubbles-outline"
-        size={56}
-        color={palette.gray300}
-      />
+      <Ionicons name="chatbubbles-outline" size={56} color={palette.gray300} />
     </View>
-    <Text style={[styles.emptyTitle, { color: textColor }]}>
-      Henüz sohbet yok
-    </Text>
+    <Text style={[styles.emptyTitle, { color: textColor }]}>Henüz sohbet yok</Text>
     <Text style={[styles.emptySubtitle, { color: textSecondary }]}>
       Asistan ile yeni bir sohbet başlatın.
     </Text>
@@ -268,66 +215,91 @@ const EmptyState = ({
 );
 
 // ---------------------------------------------------------------------------
-// Context Menu
+// ContextMenuOverlay — ChatGPT tarzı tam blur + action menü
 // ---------------------------------------------------------------------------
 
-interface ContextMenuProps {
-  menuY: number;
+interface ContextMenuOverlayProps {
+  contextMenu: NonNullable<ContextMenuState>;
   onDelete: () => void;
   onArchive: () => void;
   onDismiss: () => void;
+  isDark: boolean;
   surfaceColor: string;
   borderColor: string;
   textColor: string;
+  panelWidth: number;
 }
 
-const ContextMenu = ({
-  menuY,
+const ContextMenuOverlay = React.memo(({
+  contextMenu,
   onDelete,
   onArchive,
   onDismiss,
+  isDark,
   surfaceColor,
   borderColor,
   textColor,
-}: ContextMenuProps) => (
-  <>
-    {/* Invisible backdrop */}
-    <Pressable style={StyleSheet.absoluteFill} onPress={onDismiss} />
-    {/* Menu card */}
-    <View
-      style={[
-        styles.contextMenu,
-        {
-          top: menuY,
-          backgroundColor: surfaceColor,
-          borderColor: borderColor,
-        },
-      ]}
+  panelWidth,
+}: ContextMenuOverlayProps) => {
+  const { height: screenHeight } = useWindowDimensions();
+
+  // Menüyü item'ın altında göster, ekrandan taşıyorsa üstünde
+  const menuTop = contextMenu.pageY + contextMenu.pageH + 6;
+  const clampedTop = menuTop + CONTEXT_MENU_HEIGHT > screenHeight
+    ? contextMenu.pageY - CONTEXT_MENU_HEIGHT - 6
+    : menuTop;
+
+  const menuLeft = (panelWidth - CONTEXT_MENU_WIDTH) / 2;
+
+  return (
+    <Animated.View
+      style={StyleSheet.absoluteFill}
+      entering={FadeIn.duration(160)}
+      exiting={FadeOut.duration(140)}
     >
-      <TouchableOpacity
-        style={styles.contextItem}
-        onPress={onDelete}
-        activeOpacity={0.75}
+      {/* Full-panel blur backdrop */}
+      <Pressable style={StyleSheet.absoluteFill} onPress={onDismiss}>
+        {Platform.OS === 'ios' ? (
+          <BlurView
+            intensity={isDark ? 40 : 30}
+            tint={isDark ? 'dark' : 'light'}
+            style={StyleSheet.absoluteFill}
+          />
+        ) : (
+          <View style={[StyleSheet.absoluteFill, styles.androidBlurFallback]} />
+        )}
+      </Pressable>
+
+      {/* Action menu card */}
+      <Animated.View
+        entering={FadeIn.springify().damping(22).stiffness(280)}
+        style={[
+          styles.contextMenu,
+          {
+            top: clampedTop,
+            left: menuLeft,
+            backgroundColor: surfaceColor,
+            borderColor,
+          },
+        ]}
       >
-        <Ionicons name="trash-outline" size={18} color={palette.error} />
-        <Text style={[styles.contextLabel, { color: palette.error }]}>
-          Sil
-        </Text>
-      </TouchableOpacity>
-      <View style={[styles.contextDivider, { backgroundColor: borderColor }]} />
-      <TouchableOpacity
-        style={styles.contextItem}
-        onPress={onArchive}
-        activeOpacity={0.75}
-      >
-        <Ionicons name="archive-outline" size={18} color={textColor} />
-        <Text style={[styles.contextLabel, { color: textColor }]}>
-          Arşivle
-        </Text>
-      </TouchableOpacity>
-    </View>
-  </>
-);
+        {/* Arşivle */}
+        <TouchableOpacity style={styles.contextItem} onPress={onArchive} activeOpacity={0.75}>
+          <Ionicons name="archive-outline" size={18} color={textColor} />
+          <Text style={[styles.contextLabel, { color: textColor }]}>Arşivle</Text>
+        </TouchableOpacity>
+
+        <View style={[styles.contextDivider, { backgroundColor: borderColor }]} />
+
+        {/* Sil — kırmızı, ayrı tutuluyor */}
+        <TouchableOpacity style={styles.contextItem} onPress={onDelete} activeOpacity={0.75}>
+          <Ionicons name="trash-outline" size={18} color={palette.error} />
+          <Text style={[styles.contextLabel, { color: palette.error }]}>Sil</Text>
+        </TouchableOpacity>
+      </Animated.View>
+    </Animated.View>
+  );
+});
 
 // ---------------------------------------------------------------------------
 // Main Component
@@ -348,10 +320,17 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
 
   const translateX = useSharedValue(-DRAWER_WIDTH);
   const overlayOpacity = useSharedValue(0);
+  const drawerWidthSV = useSharedValue(DRAWER_WIDTH);
 
-  // Modal stays mounted through exit animation
+  useEffect(() => { drawerWidthSV.value = DRAWER_WIDTH; }, [DRAWER_WIDTH, drawerWidthSV]);
+
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+
   const [modalVisible, setModalVisible] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
+  // Silinen item ID'leri — FlashList extraData ile re-render tetikler
+  const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
 
   // React Query — infinite scroll
   const {
@@ -364,7 +343,13 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
     refetch,
   } = useInfiniteChatsQuery();
 
-  const chats = data?.pages.flatMap((p) => p.items) ?? [];
+  const chats = useMemo(
+    () => (data?.pages.flatMap((p) => p.items) ?? []).filter((c) => !deletedIds.has(c.id)),
+    [data, deletedIds],
+  );
+
+  // extraData: FlashList'in re-render'ı tetiklemesi için
+  const extraData = useMemo(() => ({ deletedIds, colors }), [deletedIds, colors]);
 
   // ---------------------------------------------------------------------------
   // Open / Close animations
@@ -379,56 +364,54 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
         overlayOpacity.value = withTiming(0.55, { duration: 260 });
       });
     } else {
-      // Exit animation → then unmount Modal
       overlayOpacity.value = withTiming(0, { duration: 200 });
       translateX.value = withTiming(-DRAWER_WIDTH, { duration: 220 }, (done) => {
         if (done) runOnJS(setModalVisible)(false);
       });
-      // Also clear context menu on close
       setContextMenu(null);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
   // ---------------------------------------------------------------------------
-  // Pan gesture — swipe left to close
+  // Pan gesture
   // ---------------------------------------------------------------------------
 
-  const panGesture = Gesture.Pan()
-    .activeOffsetX([-8, 8])
-    .failOffsetY([-15, 15])
-    .onUpdate((e) => {
-      if (e.translationX < 0) {
-        translateX.value = e.translationX;
-        overlayOpacity.value = Math.max(
-          0,
-          0.55 * (1 + e.translationX / DRAWER_WIDTH),
-        );
-      }
-    })
-    .onEnd((e) => {
-      const shouldClose =
-        e.translationX < -CLOSE_THRESHOLD ||
-        e.velocityX < -SWIPE_VELOCITY_THRESHOLD;
-      if (shouldClose) {
-        runOnJS(onClose)();
-      } else {
-        translateX.value = withSpring(0, SPRING_CONFIG);
-        overlayOpacity.value = withTiming(0.55, { duration: 200 });
-      }
-    });
+  const panGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .activeOffsetX([-8, 8])
+        .failOffsetY([-15, 15])
+        .onUpdate((e) => {
+          'worklet';
+          const next = Math.min(0, e.translationX);
+          translateX.value = next;
+          overlayOpacity.value = Math.max(0, 0.55 * (1 + next / drawerWidthSV.value));
+        })
+        .onEnd((e) => {
+          'worklet';
+          const shouldClose =
+            e.translationX < -CLOSE_THRESHOLD ||
+            e.velocityX < -SWIPE_VELOCITY_THRESHOLD;
+          if (shouldClose) {
+            translateX.value = withTiming(-drawerWidthSV.value, { duration: 220 });
+            overlayOpacity.value = withTiming(0, { duration: 200 });
+            runOnJS(onCloseRef.current)();
+          } else {
+            translateX.value = withSpring(0, SPRING_CONFIG);
+            overlayOpacity.value = withTiming(0.55, { duration: 200 });
+          }
+        }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
 
   // ---------------------------------------------------------------------------
   // Animated styles
   // ---------------------------------------------------------------------------
 
-  const overlayAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: overlayOpacity.value,
-  }));
-
-  const panelAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: translateX.value }],
-  }));
+  const overlayAnimatedStyle = useAnimatedStyle(() => ({ opacity: overlayOpacity.value }));
+  const panelAnimatedStyle = useAnimatedStyle(() => ({ transform: [{ translateX: translateX.value }] }));
 
   // ---------------------------------------------------------------------------
   // Handlers
@@ -443,23 +426,24 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
   );
 
   const handleLongPress = useCallback(
-    (chat: ChatListItem, rawMenuY: number) => {
+    (chat: ChatListItem, pageY: number, pageH: number) => {
       haptics.medium();
-      // Clamp so menu never overflows the bottom of the panel
-      const clampedY = Math.min(
-        Math.max(rawMenuY, 8),
-        windowHeight - MENU_HEIGHT - spacing[8],
-      );
-      setContextMenu({ chat, menuY: clampedY });
+      setContextMenu({ chat, pageY, pageH });
     },
-    [haptics, windowHeight],
+    [haptics],
   );
 
-  const removeFromCache = useCallback((chatId: string) => {
-    type InfiniteChats = import('@tanstack/react-query').InfiniteData<import('@/data/mockChats').MockChatsPage>;
-    queryClient.setQueryData<InfiniteChats>(
-      CHAT_QUERY_KEYS.chatsList,
-      (old) => {
+  // Optimistic update helper — cache'den çıkar, hata olursa rollback
+  const optimisticRemove = useCallback(
+    (chatId: string, onRollback?: () => void) => {
+      type IC = InfiniteData<MockChatsPage>;
+      const previous = queryClient.getQueryData<IC>(CHAT_QUERY_KEYS.chatsList);
+
+      // 1. UI'dan anında çıkar (local state ile — FlashList extraData ile algılar)
+      setDeletedIds((prev) => new Set([...prev, chatId]));
+
+      // 2. React Query cache'den de çıkar
+      queryClient.setQueryData<IC>(CHAT_QUERY_KEYS.chatsList, (old) => {
         if (!old) return old;
         return {
           ...old,
@@ -468,21 +452,47 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
             items: page.items.filter((c) => c.id !== chatId),
           })),
         };
-      },
-    );
-  }, [queryClient]);
+      });
+
+      // Rollback fonksiyonu döndür — API hata verirse çağrılır
+      return () => {
+        if (previous) queryClient.setQueryData(CHAT_QUERY_KEYS.chatsList, previous);
+        setDeletedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(chatId);
+          return next;
+        });
+        onRollback?.();
+      };
+    },
+    [queryClient],
+  );
 
   const handleDelete = useCallback(() => {
     if (!contextMenu) return;
-    removeFromCache(contextMenu.chat.id);
+    const { id } = contextMenu.chat;
     setContextMenu(null);
-  }, [contextMenu, removeFromCache]);
+
+    const rollback = optimisticRemove(id);
+
+    // TODO: API entegrasyon — deleteChat(id) gelince buraya ekle
+    // deleteChat(id).catch(() => rollback());
+    //
+    // Şimdilik mock: simulate başarı (rollback örneği için comment out edilebilir)
+    void rollback; // lint'i susturmak için — gerçek API'de .catch'e geçecek
+  }, [contextMenu, optimisticRemove]);
 
   const handleArchive = useCallback(() => {
     if (!contextMenu) return;
-    removeFromCache(contextMenu.chat.id);
+    const { id } = contextMenu.chat;
     setContextMenu(null);
-  }, [contextMenu, removeFromCache]);
+
+    const rollback = optimisticRemove(id);
+
+    // TODO: API entegrasyon — archiveChat(id) gelince buraya ekle
+    // archiveChat(id).catch(() => rollback());
+    void rollback;
+  }, [contextMenu, optimisticRemove]);
 
   // ---------------------------------------------------------------------------
   // Render item
@@ -493,7 +503,7 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
       <ChatHistoryItem
         item={item}
         onPress={() => handleSelectChat(item)}
-        onLongPress={(menuY) => handleLongPress(item, menuY)}
+        onLongPress={(pageY, pageH) => handleLongPress(item, pageY, pageH)}
         textColor={colors.text}
         textSecondary={colors.textSecondary}
         borderColor={colors.border}
@@ -504,20 +514,23 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
   );
 
   // ---------------------------------------------------------------------------
-  // Close button (for AppHeader rightContent)
+  // Close button
   // ---------------------------------------------------------------------------
 
-  const closeButton = (
-    <TouchableOpacity
-      onPress={onClose}
-      style={styles.closeBtn}
-      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-      accessibilityRole="button"
-      accessibilityLabel="Kapat"
-      activeOpacity={0.75}
-    >
-      <Ionicons name="close" size={scale(22)} color={palette.white} />
-    </TouchableOpacity>
+  const closeButton = useMemo(
+    () => (
+      <TouchableOpacity
+        onPress={onClose}
+        style={styles.closeBtn}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        accessibilityRole="button"
+        accessibilityLabel="Kapat"
+        activeOpacity={0.75}
+      >
+        <Ionicons name="close" size={scale(22)} color={palette.white} />
+      </TouchableOpacity>
+    ),
+    [onClose],
   );
 
   // ---------------------------------------------------------------------------
@@ -533,10 +546,7 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
       onRequestClose={onClose}
     >
       {/* Dimmed overlay */}
-      <Animated.View
-        style={[styles.overlay, overlayAnimatedStyle]}
-        pointerEvents="box-none"
-      >
+      <Animated.View style={[styles.overlay, overlayAnimatedStyle]} pointerEvents="box-none">
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
       </Animated.View>
 
@@ -549,30 +559,26 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
             panelAnimatedStyle,
           ]}
         >
-          {/* Fixed header — paddingHorizontal AppHeader default 16'dan 12'ye düşürüldü */}
           <AppHeader
             title="Sohbet Geçmişi"
             rightContent={closeButton}
             style={{ paddingHorizontal: spacing[3], paddingTop: Math.max(0, insets.top - verticalScale(6)) }}
           />
 
-          {/* List area */}
           <View style={styles.listContainer}>
             {isLoading && chats.length === 0 ? (
               <View style={styles.loadingContainer}>
                 <Spinner size="large" color={palette.primary} />
               </View>
             ) : chats.length === 0 ? (
-              <EmptyState
-                textColor={colors.text}
-                textSecondary={colors.textSecondary}
-              />
+              <EmptyState textColor={colors.text} textSecondary={colors.textSecondary} />
             ) : (
               <FlashList
                 data={chats}
                 keyExtractor={(item) => item.id}
                 estimatedItemSize={ITEM_HEIGHT}
                 renderItem={renderItem}
+                extraData={extraData}
                 showsVerticalScrollIndicator={false}
                 onEndReachedThreshold={0.2}
                 onEndReached={() => {
@@ -598,16 +604,18 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
             )}
           </View>
 
-          {/* Context Menu */}
+          {/* ChatGPT tarzı blur overlay + context menu */}
           {contextMenu && (
-            <ContextMenu
-              menuY={contextMenu.menuY}
+            <ContextMenuOverlay
+              contextMenu={contextMenu}
               onDelete={handleDelete}
               onArchive={handleArchive}
               onDismiss={() => setContextMenu(null)}
+              isDark={isDark}
               surfaceColor={colors.surface}
               borderColor={colors.border}
               textColor={colors.text}
+              panelWidth={DRAWER_WIDTH}
             />
           )}
         </Animated.View>
@@ -702,7 +710,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     marginTop: 1,
   },
-  // Model chip
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -745,11 +752,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: scale(20),
   },
-  // Context menu
+  // Context menu overlay
+  androidBlurFallback: {
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
   contextMenu: {
     position: 'absolute',
-    right: spacing[4],
-    width: 160,
+    width: CONTEXT_MENU_WIDTH,
     borderRadius: radius.lg,
     borderWidth: 1,
     overflow: 'hidden',
