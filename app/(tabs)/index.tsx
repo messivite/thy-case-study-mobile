@@ -14,6 +14,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { useHaptics } from '@/hooks/useHaptics';
 import { useI18n } from '@/hooks/useI18n';
 import { palette } from '@/constants/colors';
+import { store } from '@/store';
 
 export default function HomeScreen() {
   const { colors } = useTheme();
@@ -63,6 +64,20 @@ export default function HomeScreen() {
         </TouchableOpacity>
       }
       rightIcons={[
+        ...( __DEV__
+          ? [
+              {
+                name: 'bug-outline' as const,
+                onPress: () => {
+                  console.log('[dev] Redux auth + full state', {
+                    auth: store.getState().auth,
+                    full: store.getState(),
+                  });
+                },
+                accessibilityLabel: 'Debug: log store',
+              },
+            ]
+          : []),
         {
           name: 'add-circle-outline',
           onPress: handleNewChat,

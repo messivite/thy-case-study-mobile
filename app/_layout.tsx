@@ -76,11 +76,11 @@ function AuthProvider() {
         <Stack.Screen
           name="(tabs)"
           options={{
-            presentation: 'formSheet',
-            contentStyle: { backgroundColor: 'transparent' },
-            sheetAllowedDetents: [1],
-            sheetGrabberVisible: false,
-            gestureEnabled: false,
+            // Tam ekran kök uygulama — welcome/auth sonrası modal sheet değil kart geçişi
+            presentation: 'card',
+            animation: 'default',
+            gestureEnabled: true,
+            contentStyle: { backgroundColor: '#FFFFFF' },
           }}
         />
         <Stack.Screen

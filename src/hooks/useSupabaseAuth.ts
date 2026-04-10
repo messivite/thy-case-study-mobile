@@ -31,15 +31,16 @@ import {
   signInWithEmail,
   signUpWithEmail,
   signInWithGoogle,
-  signInAnonymously,
   signOut,
   getCurrentSession,
   refreshSession,
   resetPassword,
   updatePassword,
   isTokenExpired,
+  mapSupabaseSession,
   AppSession,
 } from '@/services/authService';
+import { establishAnonymousSession } from '@/store/thunks/authThunks';
 import { supabase } from '@/services/supabase';
 import { clearSession } from '@/services/authService';
 import { mmkvStorage, STORAGE_KEYS } from '@/lib/mmkv';
@@ -71,7 +72,7 @@ type SupabaseAuthApi = {
   logout: () => Promise<void>;
   forgotPassword: (email: string) => Promise<AuthResult<void>>;
   changePassword: (newPassword: string) => Promise<AuthResult<void>>;
-  continueAsGuest: () => void;
+  continueAsGuest: () => Promise<void>;
   skipWithAnonymousLogin: () => Promise<void>;
 };
 
@@ -227,20 +228,7 @@ function useSupabaseAuthState(): SupabaseAuthApi {
           switch (event) {
             case 'SIGNED_IN':
               if (session) {
-                dispatchSession({
-                  user: {
-                    id: session.user.id,
-                    email: session.user.email ?? '',
-                    name:
-                      (session.user.user_metadata?.full_name as string) ??
-                      session.user.email?.split('@')[0] ??
-                      '',
-                    avatarUrl: session.user.user_metadata?.avatar_url as string | undefined,
-                  },
-                  accessToken: session.access_token,
-                  refreshToken: session.refresh_token,
-                  expiresAt: session.expires_at ?? Math.floor(Date.now() / 1000) + 3600,
-                });
+                dispatchSession(mapSupabaseSession(session));
                 startRefreshInterval();
               }
               break;
@@ -248,20 +236,7 @@ function useSupabaseAuthState(): SupabaseAuthApi {
             case 'TOKEN_REFRESHED':
             case 'USER_UPDATED':
               if (session) {
-                dispatchSession({
-                  user: {
-                    id: session.user.id,
-                    email: session.user.email ?? '',
-                    name:
-                      (session.user.user_metadata?.full_name as string) ??
-                      session.user.email?.split('@')[0] ??
-                      '',
-                    avatarUrl: session.user.user_metadata?.avatar_url as string | undefined,
-                  },
-                  accessToken: session.access_token,
-                  refreshToken: session.refresh_token,
-                  expiresAt: session.expires_at ?? Math.floor(Date.now() / 1000) + 3600,
-                });
+                dispatchSession(mapSupabaseSession(session));
                 // startRefreshInterval burada çağrılmaz — SIGNED_IN'de bir kez başlatıldı
               }
               break;
@@ -377,23 +352,35 @@ function useSupabaseAuthState(): SupabaseAuthApi {
   }, []);
 
   const skipWithAnonymousLogin = useCallback(async (): Promise<void> => {
-    dispatch(setLoading(true));
-    const result = await signInAnonymously();
-    if (result.ok) {
+    try {
+      const session = await dispatch(establishAnonymousSession()).unwrap();
       mmkvStorage.setBoolean(STORAGE_KEYS.ONBOARDING_DONE, true);
-      dispatchSession(result.data);
       startRefreshInterval();
-    } else {
-      // Network yok veya anon disabled → local guest fallback
+      setErrorReportingUser({
+        id: session.user.id,
+        email: session.user.email,
+        username: session.user.name,
+      });
+    } catch {
       mmkvStorage.setBoolean(STORAGE_KEYS.ONBOARDING_DONE, true);
-      dispatch(setGuest());
+      setErrorReportingUser(null);
     }
-  }, [dispatch, dispatchSession, startRefreshInterval]);
+  }, [dispatch, startRefreshInterval]);
 
-  const continueAsGuest = useCallback(() => {
-    dispatch(setGuest());
-    setErrorReportingUser(null);
-  }, [dispatch]);
+  const continueAsGuest = useCallback(async (): Promise<void> => {
+    try {
+      const session = await dispatch(establishAnonymousSession()).unwrap();
+      startRefreshInterval();
+      setErrorReportingUser({
+        id: session.user.id,
+        email: session.user.email,
+        username: session.user.name,
+      });
+    } catch {
+      toast.error('Misafir girişi şu an yapılamadı. Bağlantınızı kontrol edin.');
+      setErrorReportingUser(null);
+    }
+  }, [dispatch, startRefreshInterval]);
 
   return {
     // State

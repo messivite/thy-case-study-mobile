@@ -14,7 +14,7 @@ import Animated, {
   withSequence,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { MotiView } from 'moti';
+import { MotiView } from '@/lib/motiView';
 import { Attachment } from '@/types/chat.types';
 import { Text } from '@/atoms/Text';
 import { useTheme } from '@/hooks/useTheme';

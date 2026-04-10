@@ -3,7 +3,7 @@ import { ScrollView, View, StyleSheet, Alert, Platform, Pressable } from 'react-
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { MotiView } from 'moti';
+import { MotiView } from '@/lib/motiView';
 import { Ionicons } from '@expo/vector-icons';
 import { toast } from 'sonner-native';
 import Constants from 'expo-constants';
@@ -46,8 +46,9 @@ export default function SettingsScreen() {
     ]);
   };
 
-  const displayName = isGuest ? t('settings.guest') : (user?.name ?? '');
-  const displayEmail = isGuest ? t('settings.loginToSync') : (user?.email ?? '');
+  const guestLike = isGuest || user?.isAnonymous === true;
+  const displayName = guestLike ? t('settings.guest') : (user?.name ?? '');
+  const displayEmail = guestLike ? t('settings.loginToSync') : (user?.email ?? '');
   const appVersion = Constants.expoConfig?.version ?? '1.0.0';
   const buildNumber =
     Platform.OS === 'ios'

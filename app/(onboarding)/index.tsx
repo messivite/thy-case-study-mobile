@@ -1,5 +1,21 @@
-import React, { useRef, useState, useCallback, useEffect, Suspense, lazy } from 'react';
-import { View, StyleSheet, FlatList, type ViewStyle } from 'react-native';
+import React, {
+  useRef,
+  useState,
+  useCallback,
+  useEffect,
+  useMemo,
+  memo,
+  Suspense,
+  lazy,
+} from 'react';
+import {
+  View,
+  StyleSheet,
+  FlatList,
+  InteractionManager,
+  type ListRenderItemInfo,
+  type ViewStyle,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import Animated, {
@@ -14,7 +30,11 @@ import Animated, {
 import { Button } from '@/atoms/Button';
 import { TextButton } from '@/atoms/TextButton';
 import { Logo } from '@/atoms/Logo';
-import { OnboardingSlide, ONBOARDING_SLIDES } from '@/organisms/OnboardingSlide';
+import {
+  OnboardingSlide,
+  ONBOARDING_SLIDES,
+  type SlideData,
+} from '@/organisms/OnboardingSlide';
 import { OnboardingProgress } from '@/molecules/OnboardingDot';
 import { devConfig } from '@/config/devConfig';
 import { mmkvStorage, STORAGE_KEYS } from '@/lib/mmkv';
@@ -23,13 +43,43 @@ import { spacing } from '@/constants/spacing';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
-import { scale, verticalScale } from '@/lib/responsive';
+import { scale, verticalScale, screen } from '@/lib/responsive';
 import { fontSize, fontFamily } from '@/constants/typography';
 
 /** V2 ayrı async chunk — kapalıyken Moti/Deck native bundle'a hiç girmez (SIGABRT riski). */
 const OnboardingDeckV2Lazy = lazy(() =>
   import('@/organisms/OnboardingDeckV2').then((m) => ({ default: m.OnboardingDeckV2 })),
 );
+
+const SKIP_HIT_SLOP = { top: 8, bottom: 8, left: 24, right: 24 } as const;
+
+const SLIDE_PAGE_WIDTH = screen.width;
+
+/**
+ * İlk mount’ta safe area + FlatList ölçümü bazen bir frame kaydırıyor; kısa fade ile maskelenir.
+ */
+function OnboardingMountFade({ children }: { children: React.ReactNode }) {
+  const opacity = useSharedValue(0);
+
+  useEffect(() => {
+    const task = InteractionManager.runAfterInteractions(() => {
+      requestAnimationFrame(() => {
+        opacity.value = withTiming(1, {
+          duration: 180,
+          easing: Easing.out(Easing.cubic),
+        });
+      });
+    });
+    return () => task.cancel();
+  }, [opacity]);
+
+  const fadeStyle = useAnimatedStyle(() => ({
+    flex: 1,
+    opacity: opacity.value,
+  }));
+
+  return <Animated.View style={fadeStyle}>{children}</Animated.View>;
+}
 
 // ---------------------------------------------------------------------------
 // Animated background circle
@@ -46,9 +96,9 @@ interface BgCircleProps {
   delay?: number;
 }
 
-const BgCircle: React.FC<BgCircleProps> = ({
+const BgCircle = memo<BgCircleProps>(function BgCircle({
   size, top, bottom, left, right, opacity, duration, delay = 0,
-}) => {
+}) {
   const pulse = useSharedValue(1);
 
   useEffect(() => {
@@ -83,7 +133,7 @@ const BgCircle: React.FC<BgCircleProps> = ({
       ]}
     />
   );
-};
+});
 
 // ---------------------------------------------------------------------------
 // Screen
@@ -97,6 +147,41 @@ export default function OnboardingScreen() {
   const listRef = useRef<FlatList>(null);
 
   const isLast = activeIndex === ONBOARDING_SLIDES.length - 1;
+
+  const safeAreaStyle = useMemo(
+    () => [styles.safe, { backgroundColor: colors.background }],
+    [colors.background],
+  );
+
+  const flatListStyle = useMemo(() => ({ flex: 1 }), []);
+
+  const nextButtonTitle = useMemo(
+    () => (isLast ? t('onboarding.getStarted') : t('common.next')),
+    [isLast, t],
+  );
+
+  const keyExtractor = useCallback((_: SlideData, i: number) => String(i), []);
+
+  const getItemLayout = useCallback(
+    (_data: ArrayLike<SlideData> | null | undefined, index: number) => ({
+      length: SLIDE_PAGE_WIDTH,
+      offset: SLIDE_PAGE_WIDTH * index,
+      index,
+    }),
+    [],
+  );
+
+  const renderSlide = useCallback(
+    ({ item, index }: ListRenderItemInfo<SlideData>) => (
+      <OnboardingSlide slide={item} index={index} isActive={index === activeIndex} />
+    ),
+    [activeIndex],
+  );
+
+  const v2Fallback = useMemo(
+    () => <SafeAreaView style={safeAreaStyle} />,
+    [safeAreaStyle],
+  );
 
   const handleComplete = useCallback(() => {
     mmkvStorage.setBoolean(STORAGE_KEYS.ONBOARDING_DONE, true);
@@ -127,19 +212,17 @@ export default function OnboardingScreen() {
 
   if (devConfig.onboardingV2Enabled) {
     return (
-      <Suspense
-        fallback={
-          <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]} />
-        }
-      >
-        <OnboardingDeckV2Lazy onComplete={handleComplete} onSkip={handleSkip} />
+      <Suspense fallback={v2Fallback}>
+        <OnboardingMountFade>
+          <OnboardingDeckV2Lazy onComplete={handleComplete} onSkip={handleSkip} />
+        </OnboardingMountFade>
       </Suspense>
     );
   }
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
-
+    <SafeAreaView style={safeAreaStyle}>
+      <OnboardingMountFade>
       {/* Animated background circles */}
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
         <BgCircle
@@ -169,15 +252,15 @@ export default function OnboardingScreen() {
       <FlatList
         ref={listRef}
         data={ONBOARDING_SLIDES}
-        keyExtractor={(_, i) => String(i)}
+        keyExtractor={keyExtractor}
+        getItemLayout={getItemLayout}
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
         scrollEnabled={false}
-        renderItem={({ item, index }) => (
-          <OnboardingSlide slide={item} index={index} isActive={index === activeIndex} />
-        )}
-        style={{ flex: 1 }}
+        renderItem={renderSlide}
+        style={flatListStyle}
+        removeClippedSubviews={false}
       />
 
       {/* Bottom */}
@@ -191,11 +274,7 @@ export default function OnboardingScreen() {
         </View>
 
         {/* Next / Get Started */}
-        <Button
-          title={isLast ? t('onboarding.getStarted') : t('common.next')}
-          onPress={handleNext}
-          fullWidth
-        />
+        <Button title={nextButtonTitle} onPress={handleNext} fullWidth />
 
         {/* Skip — Next'in altında, text olarak */}
         <TextButton
@@ -205,9 +284,10 @@ export default function OnboardingScreen() {
           hapticType="selection"
           style={styles.skipBtn}
           textStyle={styles.skipText}
-          hitSlop={{ top: 8, bottom: 8, left: 24, right: 24 }}
+          hitSlop={SKIP_HIT_SLOP}
         />
       </View>
+      </OnboardingMountFade>
     </SafeAreaView>
   );
 }

@@ -3,6 +3,8 @@ export type User = {
   email: string;
   name: string;
   avatarUrl?: string;
+  /** Supabase anonymous; JWT vardır, API çağrıları için */
+  isAnonymous?: boolean;
 };
 
 export type AuthStatus =

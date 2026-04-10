@@ -9,7 +9,7 @@
  * Animasyon: Tek seferlik mount fade-in, sallantı/spring yok.
  */
 
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -39,29 +39,25 @@ import { useI18n } from '@/hooks/useI18n';
 import { useValidatedForm } from '@/hooks/useValidatedForm';
 import { palette } from '@/constants/colors';
 import { spacing, radius } from '@/constants/spacing';
-import { fontFamily, fontSize } from '@/constants/typography';
+import {
+  WELCOME_GUEST_AUTH_FLOW,
+  WELCOME_GUEST_SIGNING_TOAST_ID,
+} from '@/constants/welcomeGuestAuthFlow';
+import {
+  WELCOME_HERO_RATIO,
+  WELCOME_INFO_SITE_URL,
+  WELCOME_LOGIN_BUTTON_DISABLED_OPACITY,
+  WELCOME_LOGIN_BUTTON_OPACITY_TRANSITION_MS,
+  WELCOME_MOUNT_FADE_DURATION_MS,
+  WELCOME_SKY_GRADIENT,
+  WELCOME_SKY_GRADIENT_LOCATIONS,
+} from '@/constants/welcomeScreen';
+import { fontFamily } from '@/constants/typography';
 import { scale } from '@/lib/responsive';
 import {
   welcomeLoginSchema,
   type WelcomeLoginFormValues,
 } from '@/schemas/authForms';
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-/** Daha alçak hero → form alanı yukarı, tek ekranda sabit layout */
-const HERO_RATIO = 0.30;
-
-/** Tam ekran dikey gökyüzü → açık ton (üst #B6D8E4, alt #F0F7F9) */
-const WELCOME_SKY_GRADIENT = ['#B6D8E4', '#C9E4ED', '#E0F0F5', '#F0F7F9'] as const;
-const WELCOME_SKY_LOCATIONS = [0, 0.32, 0.68, 1] as const;
-
-const INFO_SITE_URL = 'https://mustafaaksoy.dev/';
-
-// ---------------------------------------------------------------------------
-// Screen
-// ---------------------------------------------------------------------------
 
 export default function WelcomeScreen() {
   const insets = useSafeAreaInsets();
@@ -69,26 +65,11 @@ export default function WelcomeScreen() {
   const { t } = useI18n();
   const { status } = useAuth();
   const { login, loginWithGoogle, continueAsGuest } = useSupabaseAuth();
+  const [guestAuthPending, setGuestAuthPending] = useState(false);
+  const mountedRef = useRef(true);
 
   // Mount fade-in — tek seferlik, RN Animated (Reanimated bağımlılığı yok burada)
   const fadeAnim = useRef(new RNAnimated.Value(0)).current;
-
-  useEffect(() => {
-    RNAnimated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 320,
-      useNativeDriver: true,
-    }).start();
-  }, []);
-
-  // Authenticated guard
-  useEffect(() => {
-    if (status === 'authenticated' || status === 'guest') {
-      router.replace('/(tabs)');
-    }
-  }, [status]);
-
-  if (status === 'authenticated' || status === 'guest') return null;
 
   const loginSchema = useMemo(() => welcomeLoginSchema(t), [t]);
 
@@ -104,14 +85,53 @@ export default function WelcomeScreen() {
     [loginSchema, email, password],
   );
 
-  const loginBtnOpacity = useSharedValue(0.42);
+  const loginBtnOpacity = useSharedValue(WELCOME_LOGIN_BUTTON_DISABLED_OPACITY);
   useEffect(() => {
-    loginBtnOpacity.value = withTiming(canSubmit ? 1 : 0.42, { duration: 220 });
+    loginBtnOpacity.value = withTiming(
+      canSubmit ? 1 : WELCOME_LOGIN_BUTTON_DISABLED_OPACITY,
+      { duration: WELCOME_LOGIN_BUTTON_OPACITY_TRANSITION_MS },
+    );
   }, [canSubmit, loginBtnOpacity]);
 
   const loginBtnAnimatedStyle = useAnimatedStyle(() => ({
     opacity: loginBtnOpacity.value,
   }));
+
+  const guestDimOpacity = useSharedValue(1);
+  useEffect(() => {
+    guestDimOpacity.value = withTiming(
+      guestAuthPending ? WELCOME_GUEST_AUTH_FLOW.dimTargetOpacity : 1,
+      { duration: WELCOME_GUEST_AUTH_FLOW.dimDurationMs },
+    );
+  }, [guestAuthPending, guestDimOpacity]);
+
+  const guestDimAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: guestDimOpacity.value,
+  }));
+
+  useEffect(() => {
+    RNAnimated.timing(fadeAnim, {
+      toValue: 1,
+      duration: WELCOME_MOUNT_FADE_DURATION_MS,
+      useNativeDriver: true,
+    }).start();
+  }, []);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  // Authenticated guard
+  useEffect(() => {
+    if (status === 'authenticated' || status === 'guest') {
+      router.replace('/(tabs)');
+    }
+  }, [status]);
+
+  if (status === 'authenticated' || status === 'guest') return null;
 
   const onSubmit = async (data: WelcomeLoginFormValues) => {
     const result = await login(data.email, data.password);
@@ -126,16 +146,34 @@ export default function WelcomeScreen() {
     await loginWithGoogle();
   };
 
-  const handleGuest = () => {
-    continueAsGuest();
-    router.replace('/(tabs)');
+  const handleGuest = async () => {
+    if (guestAuthPending) return;
+    setGuestAuthPending(true);
+    toast.custom(
+      <View style={styles.guestSigningToast}>
+        <Text style={styles.guestSigningToastText}>{t('auth.loggingIn')}</Text>
+      </View>,
+      {
+        id: WELCOME_GUEST_SIGNING_TOAST_ID,
+        ...WELCOME_GUEST_AUTH_FLOW.signingToast,
+      },
+    );
+    try {
+      await continueAsGuest();
+      router.replace('/(tabs)');
+    } finally {
+      toast.dismiss(WELCOME_GUEST_SIGNING_TOAST_ID);
+      if (mountedRef.current) {
+        setGuestAuthPending(false);
+      }
+    }
   };
 
   const openInfoSite = () => {
     router.push({
       pathname: '/webview-modal',
       params: {
-        url: INFO_SITE_URL,
+        url: WELCOME_INFO_SITE_URL,
         title: t('auth.infoSiteWebTitle'),
       },
     });
@@ -146,7 +184,7 @@ export default function WelcomeScreen() {
       <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
       <LinearGradient
         colors={[...WELCOME_SKY_GRADIENT]}
-        locations={[...WELCOME_SKY_LOCATIONS]}
+        locations={[...WELCOME_SKY_GRADIENT_LOCATIONS]}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
         style={styles.gradientFill}
@@ -165,26 +203,32 @@ export default function WelcomeScreen() {
           keyboardVerticalOffset={0}
         >
           <View style={styles.pageGradient}>
-              <SurfaceIconPressable
-                shape="circle"
-                width={scale(44)}
-                height={scale(44)}
-                onPress={openInfoSite}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                accessibilityLabel={t('auth.infoSiteA11yLabel')}
+              <Animated.View
                 style={[
                   styles.infoSiteAnchor,
                   { top: 0, right: spacing[4] + insets.right },
+                  guestDimAnimatedStyle,
                 ]}
+                pointerEvents={guestAuthPending ? 'none' : 'auto'}
               >
-                <Ionicons
-                  name="information-circle-outline"
-                  size={scale(24)}
-                  color={palette.primary}
-                />
-              </SurfaceIconPressable>
+                <SurfaceIconPressable
+                  shape="circle"
+                  width={scale(44)}
+                  height={scale(44)}
+                  onPress={openInfoSite}
+                  disabled={guestAuthPending}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityLabel={t('auth.infoSiteA11yLabel')}
+                >
+                  <Ionicons
+                    name="information-circle-outline"
+                    size={scale(24)}
+                    color={palette.primary}
+                  />
+                </SurfaceIconPressable>
+              </Animated.View>
 
-              <View style={[styles.hero, { height: windowHeight * HERO_RATIO }]}>
+              <View style={[styles.hero, { height: windowHeight * WELCOME_HERO_RATIO }]}>
                 <View style={styles.heroLogoBox}>
                   <Logo width={scale(100)} />
                 </View>
@@ -201,6 +245,10 @@ export default function WelcomeScreen() {
               </View>
 
               {/* Klavye açılınca sıkışır; form alta yapışır, scroll yok */}
+              <Animated.View
+                style={guestDimAnimatedStyle}
+                pointerEvents={guestAuthPending ? 'none' : 'auto'}
+              >
               <View style={styles.flexSpacer} />
 
               <View style={styles.formSection}>
@@ -214,6 +262,7 @@ export default function WelcomeScreen() {
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoComplete="email"
+                editable={!guestAuthPending}
                 leftIcon={<Ionicons name="mail-outline" size={18} color={palette.gray400} />}
               />
 
@@ -223,6 +272,8 @@ export default function WelcomeScreen() {
                 <TouchableOpacity
                   onPress={() => {}}
                   hitSlop={{ top: 8, bottom: 8, left: 12, right: 4 }}
+                  disabled={guestAuthPending}
+                  accessibilityState={{ disabled: guestAuthPending }}
                 >
                   <Text style={styles.forgotText}>{t('auth.forgotPassword')}</Text>
                 </TouchableOpacity>
@@ -232,6 +283,7 @@ export default function WelcomeScreen() {
                 name="password"
                 placeholder={t('auth.passwordPlaceholder')}
                 secure
+                editable={!guestAuthPending}
               />
 
               {/* Login butonu — geçersiz formda disabled + düşük opacity (Reanimated) */}
@@ -240,8 +292,8 @@ export default function WelcomeScreen() {
                   style={styles.loginBtn}
                   onPress={handleSubmit(onSubmit)}
                   activeOpacity={0.85}
-                  disabled={!canSubmit || isSubmitting}
-                  accessibilityState={{ disabled: !canSubmit || isSubmitting }}
+                  disabled={!canSubmit || isSubmitting || guestAuthPending}
+                  accessibilityState={{ disabled: !canSubmit || isSubmitting || guestAuthPending }}
                 >
                   {isSubmitting ? (
                     <View style={styles.loginBtnRow}>
@@ -266,6 +318,8 @@ export default function WelcomeScreen() {
                 style={styles.googleBtn}
                 onPress={handleGoogle}
                 activeOpacity={0.85}
+                disabled={guestAuthPending}
+                accessibilityState={{ disabled: guestAuthPending }}
               >
                 <Ionicons name="logo-google" size={scale(18)} color="#4285F4" />
                 <Text style={styles.googleBtnText}>{t('auth.loginWithGoogle')}</Text>
@@ -273,18 +327,26 @@ export default function WelcomeScreen() {
               </View>
 
               <View style={styles.footer}>
-                <TouchableOpacity onPress={handleGuest} hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}>
+                <TouchableOpacity
+                  onPress={handleGuest}
+                  hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
+                  disabled={guestAuthPending}
+                  accessibilityState={{ disabled: guestAuthPending }}
+                >
                   <Text style={styles.footerLink}>{t('auth.continueAsGuest')}</Text>
                 </TouchableOpacity>
                 <View style={styles.footerDot} />
                 <TouchableOpacity
                   onPress={() => router.push('/(auth)/register')}
                   hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
+                  disabled={guestAuthPending}
+                  accessibilityState={{ disabled: guestAuthPending }}
                 >
                   <Text style={styles.footerLink}>{t('auth.register')}</Text>
                 </TouchableOpacity>
               </View>
               </View>
+              </Animated.View>
           </View>
         </KeyboardAvoidingView>
         </RNAnimated.View>
@@ -328,7 +390,7 @@ const styles = StyleSheet.create({
     zIndex: 2,
   },
 
-  // Hero (yükseklik: windowHeight * HERO_RATIO — useWindowDimensions)
+  // Hero (yükseklik: windowHeight * WELCOME_HERO_RATIO — useWindowDimensions)
   hero: {
     alignItems: 'center',
     justifyContent: 'flex-end',
@@ -493,5 +555,21 @@ const styles = StyleSheet.create({
     height: 3,
     borderRadius: 999,
     backgroundColor: palette.gray300,
+  },
+
+  guestSigningToast: {
+    backgroundColor: '#000000',
+    paddingVertical: scale(14),
+    paddingHorizontal: scale(22),
+    borderRadius: radius.lg,
+    alignSelf: 'center',
+    maxWidth: '92%',
+  },
+  guestSigningToastText: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: scale(15),
+    color: palette.white,
+    textAlign: 'center',
+    letterSpacing: 0.2,
   },
 });

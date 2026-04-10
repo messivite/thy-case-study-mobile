@@ -8,7 +8,7 @@ import Animated, {
   withDelay,
   Easing,
 } from 'react-native-reanimated';
-import { MotiView } from 'moti';
+import { MotiView } from '@/lib/motiView';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/atoms/Text';
 import { useTheme } from '@/hooks/useTheme';

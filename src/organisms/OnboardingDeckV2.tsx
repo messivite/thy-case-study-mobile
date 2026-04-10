@@ -8,7 +8,7 @@
  * - Button ile geçişte spring easing (daha canlı)
  */
 
-import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -320,8 +320,12 @@ const paginStyles = StyleSheet.create({
 
 const BackCircleButton = memo<{ onPress: () => void }>(({ onPress }) => {
   const haptics = useHaptics();
+  const handlePress = useCallback(() => {
+    haptics.light();
+    onPress();
+  }, [haptics, onPress]);
   return (
-    <TouchableOpacity onPress={() => { haptics.light(); onPress(); }} activeOpacity={0.85}>
+    <TouchableOpacity onPress={handlePress} activeOpacity={0.85}>
       <LinearGradient
         colors={[palette.primary, palette.primaryDark]}
         start={{ x: 0, y: 0 }}
@@ -376,12 +380,17 @@ const BottomSection = memo<{
   const isLast = activeIndex === TOTAL_SLIDES - 1;
   const isFirst = activeIndex === 0;
 
+  const primaryCtaTitle = useMemo(
+    () => (isLast ? t('onboarding.getStarted') : t('onboarding.nextDestination')),
+    [isLast, t],
+  );
+
   return (
     <View style={bottomStyles.container}>
       <View style={bottomStyles.buttonRow}>
         <BackButtonFade isFirst={isFirst} onBack={onBack} />
         <GradientButton
-          title={isLast ? t('onboarding.getStarted') : t('onboarding.nextDestination')}
+          title={primaryCtaTitle}
           onPress={onNext}
           colors={[palette.primary, palette.primaryDark]}
           showArrow
@@ -467,8 +476,8 @@ export const OnboardingDeckV2: React.FC<OnboardingDeckV2Props> = ({
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
       <LinearGradient
-        colors={[...palette.onboardingGradient]}
-        locations={[...palette.onboardingGradientLocations]}
+        colors={palette.onboardingGradient}
+        locations={palette.onboardingGradientLocations}
         style={mainStyles.gradient}
       />
 

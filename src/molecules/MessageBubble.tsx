@@ -6,7 +6,7 @@ import {
   Image,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
-import { MotiView } from 'moti';
+import { MotiView } from '@/lib/motiView';
 import { Ionicons } from '@expo/vector-icons';
 import { Message } from '@/types/chat.types';
 import { Text } from '@/atoms/Text';

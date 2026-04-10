@@ -6,7 +6,7 @@
  *   - OnboardingDot       → geriye dönük uyumluluk için tek bar (deprecated)
  */
 
-import React, { useEffect } from 'react';
+import React, { memo, useEffect } from 'react';
 import { View, StyleSheet } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -55,7 +55,12 @@ interface SegmentBarProps {
   trackColor?: string;
 }
 
-const SegmentBar: React.FC<SegmentBarProps> = ({ isActive, isPast, fillColor, trackColor }) => {
+const SegmentBar = memo<SegmentBarProps>(function SegmentBar({
+  isActive,
+  isPast,
+  fillColor,
+  trackColor,
+}) {
   const fillWidth = useSharedValue(isPast || isActive ? 1 : 0);
   const opacity = useSharedValue(isActive || isPast ? 1 : 0.3);
 
@@ -85,18 +90,18 @@ const SegmentBar: React.FC<SegmentBarProps> = ({ isActive, isPast, fillColor, tr
       <Animated.View style={[StyleSheet.absoluteFill, styles.fill, fillColor ? { backgroundColor: fillColor } : undefined, fillStyle]} />
     </Animated.View>
   );
-};
+});
 
 // ---------------------------------------------------------------------------
 // OnboardingProgress — tüm barlar (önerilen kullanım)
 // ---------------------------------------------------------------------------
 
-export const OnboardingProgress: React.FC<OnboardingProgressProps> = ({
+export const OnboardingProgress = memo<OnboardingProgressProps>(function OnboardingProgress({
   activeIndex,
   total,
   activeColor,
   inactiveColor,
-}) => {
+}) {
   return (
     <View style={styles.container}>
       {Array.from({ length: total }).map((_, i) => (
@@ -119,13 +124,16 @@ export const OnboardingProgress: React.FC<OnboardingProgressProps> = ({
       ))}
     </View>
   );
-};
+});
 
 // ---------------------------------------------------------------------------
 // OnboardingDot — geriye dönük uyumluluk
 // ---------------------------------------------------------------------------
 
-export const OnboardingDot: React.FC<OnboardingDotProps> = ({ index, activeIndex }) => {
+export const OnboardingDot = memo<OnboardingDotProps>(function OnboardingDot({
+  index,
+  activeIndex,
+}) {
   const isActive = index === activeIndex;
   const isPast = index < activeIndex;
 
@@ -151,7 +159,7 @@ export const OnboardingDot: React.FC<OnboardingDotProps> = ({ index, activeIndex
       ]}
     />
   );
-};
+});
 
 // ---------------------------------------------------------------------------
 // Styles

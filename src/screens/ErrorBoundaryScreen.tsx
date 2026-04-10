@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { MotiView } from 'moti';
+import { MotiView } from '@/lib/motiView';
 import { Logo } from '@/atoms/Logo';
 import { GradientButton } from '@/atoms/GradientButton';
 import { palette } from '@/constants/colors';

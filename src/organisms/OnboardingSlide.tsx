@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { memo, useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { MotiView } from 'moti';
+import { MotiView } from '@/lib/motiView';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/atoms/Text';
 import { useTheme } from '@/hooks/useTheme';
@@ -62,25 +62,40 @@ const ICON_SIZE = scale(68);
 // Component
 // ---------------------------------------------------------------------------
 
-export const OnboardingSlide: React.FC<OnboardingSlideProps> = ({ slide, isActive }) => {
+const ICON_SPRING_TRANSITION = { type: 'spring' as const, damping: 18 };
+const TEXT_ENTER_TRANSITION = { type: 'timing' as const, duration: 350, delay: 100 };
+
+export const OnboardingSlide = memo<OnboardingSlideProps>(function OnboardingSlide({
+  slide,
+  isActive,
+}) {
   const { colors } = useTheme();
   const { t } = useI18n();
+
+  const iconWrapStyle = useMemo(
+    () => [styles.iconWrap, { width: ICON_WRAP_SIZE, height: ICON_WRAP_SIZE }],
+    [],
+  );
+
+  const iconInnerStyle = useMemo(
+    () => [styles.iconInner, { backgroundColor: `${slide.color}14` }],
+    [slide.color],
+  );
+
+  const iconAnimate = useMemo(
+    () => ({ opacity: isActive ? 1 : 0.5, scale: isActive ? 1 : 0.9 }),
+    [isActive],
+  );
 
   return (
     <View style={styles.slide}>
       <MotiView
         from={{ opacity: 0, scale: 0.7 }}
-        animate={{ opacity: isActive ? 1 : 0.5, scale: isActive ? 1 : 0.9 }}
-        transition={{ type: 'spring', damping: 18 }}
-        style={[
-          styles.iconWrap,
-          {
-            width: ICON_WRAP_SIZE,
-            height: ICON_WRAP_SIZE,
-          },
-        ]}
+        animate={iconAnimate}
+        transition={ICON_SPRING_TRANSITION}
+        style={iconWrapStyle}
       >
-        <View style={[styles.iconInner, { backgroundColor: slide.color + '14' }]}>
+        <View style={iconInnerStyle}>
           <Ionicons name={slide.icon} size={ICON_SIZE} color={slide.color} />
         </View>
       </MotiView>
@@ -88,7 +103,7 @@ export const OnboardingSlide: React.FC<OnboardingSlideProps> = ({ slide, isActiv
       <MotiView
         from={{ opacity: 0, translateY: 16 }}
         animate={{ opacity: 1, translateY: 0 }}
-        transition={{ type: 'timing', duration: 350, delay: 100 }}
+        transition={TEXT_ENTER_TRANSITION}
         style={styles.textWrap}
       >
         <Text variant="h2" align="center" style={styles.title}>
@@ -100,7 +115,7 @@ export const OnboardingSlide: React.FC<OnboardingSlideProps> = ({ slide, isActiv
       </MotiView>
     </View>
   );
-};
+});
 
 // ---------------------------------------------------------------------------
 // Styles
