@@ -19,8 +19,7 @@ export const WELCOME_SKY_GRADIENT_LOCATIONS = [0, 0.32, 0.68, 1] as const;
 export const WELCOME_INFO_SITE_URL = 'https://mustafaaksoy.dev/';
 
 /** İlk mount fade-in (RN Animated) */
-export const WELCOME_MOUNT_FADE_DURATION_MS = 320;
+export const WELCOME_MOUNT_FADE_DURATION_MS = 120;
 
-/** Giriş butonu — form geçersizken düşük opacity (Reanimated) */
-export const WELCOME_LOGIN_BUTTON_DISABLED_OPACITY = 0.42;
-export const WELCOME_LOGIN_BUTTON_OPACITY_TRANSITION_MS = 220;
+/** Giriş butonu — form geçersizken düşük opacity (`WelcomeAuthForm` RN style) */
+export const WELCOME_LOGIN_BUTTON_DISABLED_OPACITY = 0.52;

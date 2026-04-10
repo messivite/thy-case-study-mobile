@@ -8,6 +8,7 @@ import authReducer from '@/store/slices/authSlice';
 import chatReducer from '@/store/slices/chatSlice';
 import settingsReducer from '@/store/slices/settingsSlice';
 import uiReducer from '@/store/slices/uiSlice';
+import profileReducer from '@/store/slices/profileSlice';
 import { queryClient } from '@/services/queryClient';
 
 /** Logout / oturum düşmesi: tüm slice'lar initialState'e döner + React Query önbelleği temizlenir */
@@ -18,6 +19,7 @@ const combinedReducer = combineReducers({
   chat: chatReducer,
   settings: settingsReducer,
   ui: uiReducer,
+  profile: profileReducer,
 });
 
 export type RootState = ReturnType<typeof combinedReducer>;
@@ -27,7 +29,9 @@ export function rootReducer(
   action: Parameters<typeof combinedReducer>[1],
 ): RootState {
   if (resetAfterLogout.match(action)) {
-    return combinedReducer(undefined, action);
+    const reset = combinedReducer(undefined, action);
+    // Welcome screen'in fade animasyonunu başlatması için status 'unauthenticated' olmalı
+    return { ...reset, auth: { ...reset.auth, status: 'unauthenticated' } };
   }
   return combinedReducer(state, action);
 }

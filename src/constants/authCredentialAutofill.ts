@@ -1,15 +1,59 @@
 import { Platform, type TextInputProps } from 'react-native';
 
 /**
- * iOS Keychain / Android Autofill "şifreyi kaydet" önerisini tetiklememek için alanları nötrler.
- * OS veya kullanıcı ayarları yine nadiren müdahale edebilir; tam garanti Apple tarafında yok.
+ * iOS Keychain "Şifreyi kaydet" / Şifreler çubuğu — tam kapatma garantisi yok.
+ * - email + secure alan + email klavyesi → sistem bunu login formu sayar.
+ * - Şifre alanında passwordRules boş string, güçlü şifre / bazı önerileri kısar (iOS 12+).
  */
-export const AUTH_NO_CREDENTIAL_SAVE_PROPS: Pick<
-  TextInputProps,
-  'autoComplete' | 'textContentType' | 'importantForAutofill'
-> =
+
+const iosBase: Pick<TextInputProps, 'autoCorrect' | 'spellCheck'> = {
+  autoCorrect: false,
+  spellCheck: false,
+};
+
+/** E-posta — iOS’ta mümkünse `keyboardType="default"` kullan (email-address + şifre = login eşlemesi). */
+export const AUTH_NO_CREDENTIAL_EMAIL_PROPS: TextInputProps =
   Platform.OS === 'ios'
-    ? { autoComplete: 'off', textContentType: 'none' }
+    ? {
+        ...iosBase,
+        autoComplete: 'off',
+        textContentType: 'none',
+      }
     : Platform.OS === 'android'
-      ? { autoComplete: 'off', importantForAutofill: 'no' }
-      : { autoComplete: 'off' };
+      ? {
+          ...iosBase,
+          autoComplete: 'off',
+          importantForAutofill: 'no',
+        }
+      : {
+          ...iosBase,
+          autoComplete: 'off',
+        };
+
+/** Şifre — secureTextEntry yine Keychain ipucu verir; mümkün olan ek nötrleştirme. */
+export const AUTH_NO_CREDENTIAL_PASSWORD_PROPS: TextInputProps =
+  Platform.OS === 'ios'
+    ? {
+        ...iosBase,
+        autoComplete: 'off',
+        textContentType: 'none',
+        passwordRules: '',
+      }
+    : Platform.OS === 'android'
+      ? {
+          ...iosBase,
+          autoComplete: 'off',
+          importantForAutofill: 'no',
+        }
+      : {
+          ...iosBase,
+          autoComplete: 'off',
+        };
+
+/** Tek prop objesi isteyen eski kullanım — her iki alanda da `none` (şifre için passwordRules yok). */
+export const AUTH_NO_CREDENTIAL_SAVE_PROPS: TextInputProps =
+  Platform.OS === 'ios'
+    ? { ...iosBase, autoComplete: 'off', textContentType: 'none' }
+    : Platform.OS === 'android'
+      ? { ...iosBase, autoComplete: 'off', importantForAutofill: 'no' }
+      : { ...iosBase, autoComplete: 'off' };

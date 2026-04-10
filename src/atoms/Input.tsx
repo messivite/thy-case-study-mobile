@@ -9,7 +9,7 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '@/hooks/useTheme';
+import { lightColors, type ThemeColors } from '@/constants/colors';
 import { radius, spacing } from '@/constants/spacing';
 import { fontFamily, fontSize } from '@/constants/typography';
 
@@ -18,6 +18,8 @@ type Props = TextInputProps & {
   rightIcon?: ReactNode;
   error?: string;
   secure?: boolean;
+  /** Renk tokenlari — verilmezse lightColors kullanilir (store subscription olmadan) */
+  themeColors?: ThemeColors;
 };
 
 export const Input: FC<Props> = ({
@@ -26,17 +28,19 @@ export const Input: FC<Props> = ({
   error,
   secure,
   style,
+  themeColors,
   onFocus: onFocusProp,
   onBlur: onBlurProp,
   ...props
 }) => {
-  const { colors } = useTheme();
-  const errorColor = colors.error;
+  const colors = themeColors ?? lightColors;
   const [focused, setFocused] = useState(false);
   const [secureVisible, setSecureVisible] = useState(false);
 
-  const borderColor = error
-    ? errorColor
+  const hasError = typeof error === 'string' && error.length > 0;
+
+  const borderColor = hasError
+    ? colors.error
     : focused
       ? colors.primary
       : colors.border;
@@ -91,9 +95,9 @@ export const Input: FC<Props> = ({
         )}
         {rightIcon && !secure && <View style={styles.iconRight}>{rightIcon}</View>}
       </View>
-      {error ? (
+      {hasError ? (
         <RNText
-          style={[styles.errorText, { color: errorColor, fontFamily: fontFamily.regular, fontSize: fontSize.xs }]}
+          style={[styles.errorText, { color: colors.error, fontFamily: fontFamily.regular, fontSize: fontSize.xs }]}
         >
           {error}
         </RNText>

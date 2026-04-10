@@ -1,16 +1,24 @@
 /**
- * Welcome login form — useForm burada; her tuşta sadece bu subtree render olur (tüm ekran değil).
+ * Welcome login — Zod + react-hook-form (useValidatedForm), FormField; misafir/giriş beklerken Reanimated dim.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, type Dispatch, type SetStateAction } from 'react';
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import {
+  View,
+  StyleSheet,
+  TouchableOpacity,
+  Platform,
+} from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { toast } from '@/lib/toast';
-import { FormField } from '@/molecules/FormField';
 import { Text } from '@/atoms/Text';
-import { useAuth } from '@/hooks/useAuth';
+import { FormField } from '@/molecules/FormField';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { useI18n } from '@/hooks/useI18n';
 import { useValidatedForm } from '@/hooks/useValidatedForm';
@@ -21,10 +29,10 @@ import {
   WELCOME_GUEST_SIGNING_TOAST_ID,
 } from '@/constants/welcomeGuestAuthFlow';
 import {
-  WELCOME_LOGIN_BUTTON_DISABLED_OPACITY,
-  WELCOME_LOGIN_BUTTON_OPACITY_TRANSITION_MS,
-} from '@/constants/welcomeScreen';
-import { AUTH_NO_CREDENTIAL_SAVE_PROPS } from '@/constants/authCredentialAutofill';
+  AUTH_NO_CREDENTIAL_EMAIL_PROPS,
+  AUTH_NO_CREDENTIAL_PASSWORD_PROPS,
+} from '@/constants/authCredentialAutofill';
+import { WELCOME_LOGIN_BUTTON_DISABLED_OPACITY } from '@/constants/welcomeScreen';
 import { fontFamily } from '@/constants/typography';
 import { scale } from '@/lib/responsive';
 import {
@@ -32,7 +40,6 @@ import {
   type WelcomeLoginFormValues,
 } from '@/forms/auth/welcome/schema';
 
-/** Welcome ekranı `webScaled` ile aynı şekil (hero alanları formda kullanılmıyor ama prop uyumu için) */
 type WebScaled = {
   heroTitle?: { fontSize: number; lineHeight: number };
   heroTitleAccent?: { fontSize: number; lineHeight: number };
@@ -53,7 +60,7 @@ type Props = {
   contentScale: (n: number) => number;
   webScaled: WebScaled | null;
   guestAuthPending: boolean;
-  setGuestAuthPending: Dispatch<SetStateAction<boolean>>;
+  setGuestAuthPending: React.Dispatch<React.SetStateAction<boolean>>;
 };
 
 export function WelcomeAuthForm({
@@ -63,9 +70,19 @@ export function WelcomeAuthForm({
   setGuestAuthPending,
 }: Props) {
   const { t, currentLanguage } = useI18n();
-  const { status } = useAuth();
   const { login, loginWithGoogle, continueAsGuest } = useSupabaseAuth();
   const mountedRef = useRef(true);
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- t referansı stabil değil; dil değişince yeterli
+  const schema = useMemo(() => welcomeLoginSchema(t), [currentLanguage]);
+
+  const {
+    control,
+    handleSubmit,
+    formState: { isValid, isSubmitting },
+  } = useValidatedForm<WelcomeLoginFormValues>(schema, {
+    defaultValues: { email: '', password: '' },
+  });
 
   useEffect(() => {
     mountedRef.current = true;
@@ -74,52 +91,28 @@ export function WelcomeAuthForm({
     };
   }, []);
 
-  // `t` her render’da yeni referans olabiliyor; [t] ile şema sürekli yenilenir → resolver/useForm kilitlenir.
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- şemayı sadece dil değişince yenile
-  const loginSchema = useMemo(() => welcomeLoginSchema(t), [currentLanguage]);
+  const anyPending = isSubmitting || guestAuthPending;
 
-  const { control, handleSubmit, reset, formState } = useValidatedForm<WelcomeLoginFormValues>(
-    loginSchema,
-    { defaultValues: { email: '', password: '' } },
-  );
-
-  const { isValid } = formState;
-
-  const isLoginPending = status === 'loading';
-  const anyPending = isLoginPending || guestAuthPending;
-
-  const loginBtnOpacity = useSharedValue(WELCOME_LOGIN_BUTTON_DISABLED_OPACITY);
-  const guestDimOpacity = useSharedValue(1);
-
-  const loginBtnAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: loginBtnOpacity.value,
-  }));
-  const guestDimAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: guestDimOpacity.value,
-  }));
-
+  const dim = useSharedValue(1);
   useEffect(() => {
-    loginBtnOpacity.value = withTiming(
-      isValid ? 1 : WELCOME_LOGIN_BUTTON_DISABLED_OPACITY,
-      { duration: WELCOME_LOGIN_BUTTON_OPACITY_TRANSITION_MS },
-    );
-  }, [isValid, loginBtnOpacity]);
+    dim.value = withTiming(anyPending ? WELCOME_GUEST_AUTH_FLOW.dimTargetOpacity : 1, {
+      duration: WELCOME_GUEST_AUTH_FLOW.dimDurationMs,
+    });
+  }, [anyPending, dim]);
 
-  useEffect(() => {
-    guestDimOpacity.value = withTiming(
-      anyPending ? WELCOME_GUEST_AUTH_FLOW.dimTargetOpacity : 1,
-      { duration: WELCOME_GUEST_AUTH_FLOW.dimDurationMs },
-    );
-  }, [anyPending, guestDimOpacity]);
+  const formRootAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: dim.value,
+  }));
 
   const onSubmit = useCallback(
     async (data: WelcomeLoginFormValues) => {
-      const result = await login(data.email, data.password);
+      const result = await login(data.email.trim(), data.password);
       if (result.ok) {
-        router.replace('/(tabs)');
-      } else {
-        reset({ email: data.email, password: '' });
-        const errorKey = (() => {
+        // Navigation'i (auth)/_layout guard'ina birak:
+        // dispatchSession -> status:'authenticated' -> Redirect href="/(tabs)"
+        return;
+      }
+      const errorKey = (() => {
           switch (result.errorCode) {
             case 'INVALID_CREDENTIALS':
               return 'toast.loginErrorInvalidCredentials';
@@ -130,23 +123,28 @@ export function WelcomeAuthForm({
             default:
               return 'toast.loginErrorUnknown';
           }
-        })();
-        toast.error(t(errorKey));
-      }
+      })();
+      toast.error(t(errorKey));
     },
-    [login, t, reset],
+    [login, t],
   );
 
   const handleGoogle = useCallback(async () => {
     await loginWithGoogle();
   }, [loginWithGoogle]);
 
+  const webScaledRef = useRef(webScaled);
+  useEffect(() => {
+    webScaledRef.current = webScaled;
+  }, [webScaled]);
+
   const handleGuest = useCallback(async () => {
     if (anyPending) return;
     setGuestAuthPending(true);
+    const ws = webScaledRef.current;
     toast.custom(
-      <View style={[styles.guestSigningToast, webScaled?.guestSigningToast]}>
-        <Text style={[styles.guestSigningToastText, webScaled?.guestSigningToastText]}>
+      <View style={[styles.guestSigningToast, ws?.guestSigningToast]}>
+        <Text style={[styles.guestSigningToastText, ws?.guestSigningToastText]}>
           {t('auth.loggingIn')}
         </Text>
       </View>,
@@ -154,20 +152,24 @@ export function WelcomeAuthForm({
     );
     try {
       await continueAsGuest();
-      router.replace('/(tabs)');
+      // Navigation'i guard'a birak
     } finally {
       toast.dismiss(WELCOME_GUEST_SIGNING_TOAST_ID);
       if (mountedRef.current) setGuestAuthPending(false);
     }
-  }, [anyPending, continueAsGuest, t, webScaled]);
+  }, [anyPending, continueAsGuest, t, setGuestAuthPending]);
 
   const handleRegister = useCallback(() => {
     router.push('/(auth)/register');
   }, []);
 
+  /** Üstteki Reanimated dim ayrı; buton sadece geçersizken soluk (pending’de zaten tüm form soluk). */
+  const loginBtnOpacity =
+    anyPending ? 1 : !isValid ? WELCOME_LOGIN_BUTTON_DISABLED_OPACITY : 1;
+
   return (
     <Animated.View
-      style={guestDimAnimatedStyle}
+      style={[styles.formRoot, formRootAnimatedStyle]}
       pointerEvents={anyPending ? 'none' : 'auto'}
     >
       <View style={styles.flexSpacer} />
@@ -178,11 +180,11 @@ export function WelcomeAuthForm({
             control={control}
             name="email"
             placeholder={t('auth.emailPlaceholder')}
-            keyboardType="email-address"
+            keyboardType={Platform.OS === 'ios' ? 'default' : 'email-address'}
             autoCapitalize="none"
             editable={!anyPending}
             leftIcon={<Ionicons name="mail-outline" size={18} color={palette.gray400} />}
-            {...AUTH_NO_CREDENTIAL_SAVE_PROPS}
+            {...AUTH_NO_CREDENTIAL_EMAIL_PROPS}
           />
 
           <View style={styles.passwordHeader}>
@@ -201,34 +203,32 @@ export function WelcomeAuthForm({
             name="password"
             placeholder={t('auth.passwordPlaceholder')}
             secure
+            autoCapitalize="none"
             editable={!anyPending}
-            {...AUTH_NO_CREDENTIAL_SAVE_PROPS}
+            {...AUTH_NO_CREDENTIAL_PASSWORD_PROPS}
           />
 
-          <Animated.View style={loginBtnAnimatedStyle}>
-            <TouchableOpacity
-              style={[styles.loginBtn, webScaled?.loginBtn]}
-              onPress={handleSubmit(onSubmit)}
-              activeOpacity={0.85}
-              disabled={!isValid || anyPending}
-              accessibilityState={{ disabled: !isValid || anyPending }}
-            >
-              {isLoginPending ? (
-                <View style={styles.loginBtnRow}>
-                  <Ionicons
-                    name="reload-outline"
-                    size={contentScale(16)}
-                    color={palette.white}
-                  />
-                  <Text style={[styles.loginBtnText, webScaled?.loginBtnText]}>
-                    {t('auth.loggingIn')}
-                  </Text>
-                </View>
-              ) : (
-                <Text style={[styles.loginBtnText, webScaled?.loginBtnText]}>{t('auth.login')}</Text>
-              )}
-            </TouchableOpacity>
-          </Animated.View>
+          <TouchableOpacity
+            style={[
+              styles.loginBtn,
+              webScaled?.loginBtn,
+              { opacity: loginBtnOpacity },
+              (!isValid || anyPending) && styles.loginBtnDisabled,
+            ]}
+            onPress={handleSubmit(onSubmit)}
+            activeOpacity={0.85}
+            disabled={!isValid || anyPending}
+            accessibilityState={{ disabled: !isValid || anyPending }}
+          >
+            {isSubmitting ? (
+              <View style={styles.loginBtnRow}>
+                <Ionicons name="reload-outline" size={contentScale(16)} color={palette.white} />
+                <Text style={[styles.loginBtnText, webScaled?.loginBtnText]}>{t('auth.loggingIn')}</Text>
+              </View>
+            ) : (
+              <Text style={[styles.loginBtnText, webScaled?.loginBtnText]}>{t('auth.login')}</Text>
+            )}
+          </TouchableOpacity>
 
           <View style={styles.divider}>
             <View style={styles.dividerLine} />
@@ -244,9 +244,7 @@ export function WelcomeAuthForm({
             accessibilityState={{ disabled: anyPending }}
           >
             <Ionicons name="logo-google" size={contentScale(18)} color="#4285F4" />
-            <Text style={[styles.googleBtnText, webScaled?.googleBtnText]}>
-              {t('auth.loginWithGoogle')}
-            </Text>
+            <Text style={[styles.googleBtnText, webScaled?.googleBtnText]}>{t('auth.loginWithGoogle')}</Text>
           </TouchableOpacity>
         </View>
 
@@ -275,6 +273,10 @@ export function WelcomeAuthForm({
 }
 
 const styles = StyleSheet.create({
+  formRoot: {
+    flex: 1,
+    minHeight: 0,
+  },
   flexSpacer: {
     flex: 1,
     minHeight: 0,
@@ -321,6 +323,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.28,
     shadowRadius: 10,
     elevation: 4,
+  },
+  loginBtnDisabled: {
+    shadowOpacity: 0,
+    elevation: 0,
   },
   loginBtnRow: {
     flexDirection: 'row',
