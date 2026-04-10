@@ -29,18 +29,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
-  withRepeat,
-  withSequence,
   withTiming,
-  cancelAnimation,
-  Easing,
   FadeIn,
-  FadeOut,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { Image } from 'react-native';
 import { AppHeader } from '@/organisms/AppHeader';
 import { Text } from '@/atoms/Text';
+import { ActivityThyLoading } from '@/atoms/ActivityThyLoading';
 import { palette } from '@/constants/colors';
 import { spacing, radius } from '@/constants/spacing';
 import { scale } from '@/lib/responsive';
@@ -56,76 +51,19 @@ type WebViewModalParams = {
 };
 
 // ---------------------------------------------------------------------------
-// THY Logo Pulse — yükleme sırasında gösterilir
+// THY loader — proje genelindeki ActivityThyLoading
 // ---------------------------------------------------------------------------
 
-const LogoLoader: React.FC<{ uiScale?: (n: number) => number }> = ({ uiScale }) => {
-  const outerScale = useSharedValue(1);
-  const innerScale = useSharedValue(1);
-  const opacity = useSharedValue(0.6);
-
-  useEffect(() => {
-    outerScale.value = withRepeat(
-      withSequence(
-        withTiming(1.22, { duration: 900, easing: Easing.inOut(Easing.ease) }),
-        withTiming(1.0, { duration: 900, easing: Easing.inOut(Easing.ease) }),
-      ),
-      -1,
-      false,
-    );
-    innerScale.value = withRepeat(
-      withSequence(
-        withTiming(1.1, { duration: 700, easing: Easing.inOut(Easing.ease) }),
-        withTiming(1.0, { duration: 700, easing: Easing.inOut(Easing.ease) }),
-      ),
-      -1,
-      false,
-    );
-    opacity.value = withRepeat(
-      withSequence(
-        withTiming(1, { duration: 700, easing: Easing.inOut(Easing.ease) }),
-        withTiming(0.5, { duration: 700, easing: Easing.inOut(Easing.ease) }),
-      ),
-      -1,
-      false,
-    );
-
-    return () => {
-      cancelAnimation(outerScale);
-      cancelAnimation(innerScale);
-      cancelAnimation(opacity);
-    };
-  }, []);
-
-  const outerStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: outerScale.value }],
-  }));
-  const innerStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: innerScale.value }],
-    opacity: opacity.value,
-  }));
-
-  return (
-    <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)} style={loaderStyles.container}>
-      {/* Dış halka */}
-      <Animated.View
-        style={[
-          loaderStyles.ring,
-          uiScale && { width: uiScale(100), height: uiScale(100) },
-          outerStyle,
-        ]}
-      />
-      {/* Logo */}
-      <Animated.View style={[loaderStyles.logoWrap, innerStyle]}>
-        <Image
-          source={require('../assets/svg/compact-logo.png')}
-          style={[loaderStyles.logo, uiScale && { width: uiScale(64), height: uiScale(64) }]}
-          resizeMode="contain"
-        />
-      </Animated.View>
-    </Animated.View>
-  );
-};
+const LogoLoader: React.FC<{ uiScale?: (n: number) => number }> = ({ uiScale }) => (
+  <Animated.View entering={FadeIn.duration(200)} style={loaderStyles.container}>
+    <ActivityThyLoading
+      mode="pulse"
+      size={uiScale ? uiScale(72) : scale(72)}
+      fill={palette.primary}
+      fillSecondary={palette.white}
+    />
+  </Animated.View>
+);
 
 const loaderStyles = StyleSheet.create({
   container: {
@@ -135,23 +73,6 @@ const loaderStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: palette.white,
-  },
-  ring: {
-    position: 'absolute',
-    width: scale(100),
-    height: scale(100),
-    borderRadius: 999,
-    borderWidth: 2.5,
-    borderColor: palette.primary,
-    opacity: 0.25,
-  },
-  logo: {
-    width: scale(64),
-    height: scale(64),
-  },
-  logoWrap: {
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 });
 

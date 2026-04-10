@@ -113,7 +113,7 @@ function AuthProvider() {
           name="webview-modal"
           options={{
             presentation: 'formSheet',
-            sheetAllowedDetents: [0.92],
+            sheetAllowedDetents: [1.0],
             sheetGrabberVisible: true,
             sheetCornerRadius: 20,
             gestureEnabled: true,
