@@ -112,12 +112,13 @@ export async function signInWithEmail(
 export async function signUpWithEmail(
   email: string,
   password: string,
-  fullName: string,
+  fullName?: string,
 ): Promise<AuthResult<AppSession | null>> {
+  const trimmed = fullName?.trim();
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { data: { full_name: fullName } },
+    ...(trimmed ? { options: { data: { full_name: trimmed } } } : {}),
   });
   if (error) {
     const mapped = mapAuthError(error);

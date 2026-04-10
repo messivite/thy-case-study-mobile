@@ -67,7 +67,7 @@ type SupabaseAuthApi = {
   register: (
     email: string,
     password: string,
-    fullName: string,
+    fullName?: string,
   ) => Promise<AuthResult<AppSession | null>>;
   loginWithGoogle: () => Promise<AuthResult<AppSession>>;
   logout: () => void;
@@ -336,7 +336,7 @@ function useSupabaseAuthState(): SupabaseAuthApi {
   );
 
   const register = useCallback(
-    async (email: string, password: string, fullName: string) => {
+    async (email: string, password: string, fullName?: string) => {
       dispatch(setLoading(true));
       const result = await signUpWithEmail(email, password, fullName);
       if (result.ok) {

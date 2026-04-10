@@ -66,9 +66,9 @@ import { AppHeader } from '@/organisms/AppHeader';
 import { useTheme } from '@/hooks/useTheme';
 import { useHaptics } from '@/hooks/useHaptics';
 import { useI18n } from '@/hooks/useI18n';
-import { useInfiniteChatsQuery, useSearchChatsQuery, CHAT_QUERY_KEYS } from '@/hooks/api/useChats';
+import { CHAT_QUERY_KEYS } from '@/hooks/api/useChats';
+import { useChatHistory } from '@/hooks/useChatHistory';
 import { ChatListItem, ChatSearchResultItem, PaginatedChatsResponse } from '@/types/chat.api.types';
-import { realmService } from '@/services/realm';
 import { palette } from '@/constants/colors';
 import { radius, shadow, spacing } from '@/constants/spacing';
 import { scale, verticalScale } from '@/lib/responsive';
@@ -513,46 +513,30 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
   const searchInputRef = useRef<SearchInputRef>(null);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Search API — 2+ karakter, debounce 400ms
-  const {
-    data: searchData,
-    isLoading: isSearching,
-    isFetchingNextPage: isSearchFetchingNext,
-    hasNextPage: searchHasNext,
-    fetchNextPage: searchFetchNext,
-  } = useSearchChatsQuery(debouncedQuery);
-
-  const searchResults = useMemo(
-    () => searchData?.pages.flatMap((p) => p.items) ?? [],
-    [searchData],
-  );
-
   // Toolbar animation — newChat slides out on focus
   const newChatOpacity = useSharedValue(1);
   const newChatMaxHeight = useSharedValue(48);
 
-  // React Query
+  // Data — useChatHistory tum Realm/API/sync logic'ini yonetir
   const {
-    data,
+    sessions,
     isLoading,
     isRefetching,
     isFetchingNextPage,
     hasNextPage,
     fetchNextPage,
     refetch,
-  } = useInfiniteChatsQuery();
+    searchResults,
+    isSearching,
+    isSearchFetchingNextPage: isSearchFetchingNext,
+    searchFetchNextPage: searchFetchNext,
+    searchHasNextPage: searchHasNext,
+  } = useChatHistory(debouncedQuery);
 
   const chats = useMemo(
-    () => (data?.pages.flatMap((p) => p.items ?? []) ?? []).filter((c) => c?.id && !deletedIds.has(c.id)),
-    [data, deletedIds],
+    () => sessions.filter((c) => c?.id && !deletedIds.has(c.id)),
+    [sessions, deletedIds],
   );
-
-  // Session listesi API'den gelince Realm'e kaydet
-  useEffect(() => {
-    if (!data) return;
-    const allItems = data.pages.flatMap((p) => p.items ?? []).filter((c) => c?.id);
-    if (allItems.length > 0) realmService.saveSessions(allItems);
-  }, [data]);
 
   const extraData = useMemo(() => ({ deletedIds, colors }), [deletedIds, colors]);
 

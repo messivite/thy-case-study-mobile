@@ -9,7 +9,7 @@ import {
 } from '@/hooks/api/useChats';
 import { useQueryClient } from '@tanstack/react-query';
 import { streamChat } from '@/api/chat.api';
-import { AIModelId, AI_MODELS } from '@/constants/models';
+import { AIModelId } from '@/constants/models';
 import { Attachment } from '@/types/chat.types';
 import { Message } from '@/types/chat.types';
 import { ChatMessage } from '@/types/chat.api.types';
@@ -94,14 +94,7 @@ export const useChatSession = () => {
     prevChatIdRef.current = chatId;
   }, [chatId]);
 
-  // Realm'e mesajları yaz — data gelince sync et
-  useEffect(() => {
-    if (!chatId || !messagesQuery.data) return;
-    const allMessages = messagesQuery.data.pages.flatMap((p) => p.messages);
-    if (allMessages.length > 0) {
-      realmService.saveMessages(chatId, allMessages);
-    }
-  }, [chatId, messagesQuery.data]);
+  // Not: Realm yazma useInfiniteMessagesQuery icindeki useEffect tarafindan yapiliyor.
 
   // Flatten paginated messages — oldest first for display
   const persistedMessages: Message[] = useMemo(() => {

@@ -25,10 +25,13 @@ import { SupabaseAuthProvider } from '@/hooks/useSupabaseAuth';
 import { AppErrorBoundary } from '@/components/AppErrorBoundary';
 import { initErrorReporting } from '@/services/errorReporting';
 import { ensureWebViewportRootStyle } from '@/lib/webViewport';
+import { realmService } from '@/services/realm';
 
 // Sentry native köprüsü her build'de bir kez init (DSN yok / dev'de enabled:false)
 initErrorReporting();
 ensureWebViewportRootStyle();
+// Realm'i splash sırasında arka planda aç — ilk getSessions() geldiğinde hazır olur
+realmService.prefetch();
 
 function RootLayout() {
   // Global font load: direct web route refresh (e.g. /auth/welcome) also gets Inter.

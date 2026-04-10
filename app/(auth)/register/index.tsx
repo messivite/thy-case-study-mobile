@@ -1,155 +1,328 @@
-import React, { useMemo } from 'react';
-import { View, StyleSheet } from 'react-native';
+/**
+ * Kayıt ekranı — Welcome ile aynı gökyüzü gradient + hero; form `RegisterAuthForm` içinde.
+ */
+
+import React, { useEffect, useMemo, useRef, type ComponentType } from 'react';
+import {
+  View,
+  StyleSheet,
+  TouchableOpacity,
+  Animated as RNAnimated,
+  useWindowDimensions,
+  StatusBar,
+  Platform,
+  type ViewStyle,
+} from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { LinearGradient } from 'expo-linear-gradient';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { MotiView } from '@/lib/motiView';
 import { Ionicons } from '@expo/vector-icons';
-import { AuthLayout } from '@/templates/AuthLayout';
-import { FormField } from '@/molecules/FormField';
-import { Button } from '@/atoms/Button';
-import { IconButton } from '@/atoms/IconButton';
-import { TextButton } from '@/atoms/TextButton';
+import { Logo } from '@/atoms/Logo';
+import { SurfaceIconPressable } from '@/atoms/SurfaceIconPressable';
 import { Text } from '@/atoms/Text';
-import { useTheme } from '@/hooks/useTheme';
+import { useAuth } from '@/hooks/useAuth';
 import { useI18n } from '@/hooks/useI18n';
-import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
-import { spacing } from '@/constants/spacing';
-import { AUTH_NO_CREDENTIAL_SAVE_PROPS } from '@/constants/authCredentialAutofill';
-import { toast } from '@/lib/toast';
-import { registerSchema, type RegisterFormValues } from '@/forms/auth/register/schema';
+import { palette } from '@/constants/colors';
+import { spacing, radius } from '@/constants/spacing';
+import {
+  WELCOME_HERO_RATIO,
+  WELCOME_MOUNT_FADE_DURATION_MS,
+  WELCOME_SKY_GRADIENT,
+  WELCOME_SKY_GRADIENT_LOCATIONS,
+} from '@/constants/welcomeScreen';
+import { fontFamily } from '@/constants/typography';
+import { scale, DESIGN_BASE_WIDTH } from '@/lib/responsive';
+import { RegisterAuthForm } from '@/organisms/RegisterAuthForm';
+
+const IS_WEB = Platform.OS === 'web';
+const KeyboardContainer: ComponentType<any> = IS_WEB ? View : KeyboardAvoidingView;
+const keyboardContainerProps = IS_WEB ? {} : { behavior: 'padding' as const, keyboardVerticalOffset: 0 };
+const safeAreaEdges = ['top', 'bottom'] as const;
+const gradientColors = [...WELCOME_SKY_GRADIENT] as [string, string, ...string[]];
+const gradientLocations = [...WELCOME_SKY_GRADIENT_LOCATIONS] as [number, number, ...number[]];
 
 export default function RegisterScreen() {
-  const { colors } = useTheme();
-  const { t, currentLanguage } = useI18n();
-  const { register } = useSupabaseAuth();
+  const insets = useSafeAreaInsets();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const viewportHeight = windowHeight > 0 ? windowHeight : 844;
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- t referansı stabil değil; dil değişince yeterli
-  const schema = useMemo(() => registerSchema(t), [currentLanguage]);
+  const contentScale = useMemo(() => {
+    if (!IS_WEB) return scale;
+    const w = windowWidth > 0 ? windowWidth : DESIGN_BASE_WIDTH;
+    const cw = Math.max(1, Math.min(w, DESIGN_BASE_WIDTH));
+    return (n: number) => Math.round((cw / DESIGN_BASE_WIDTH) * n);
+  }, [windowWidth]);
 
-  const { control, handleSubmit, formState: { isSubmitting } } = useForm<RegisterFormValues>({
-    resolver: zodResolver(schema),
-    defaultValues: { name: '', email: '', password: '', confirmPassword: '' },
-  });
+  const webScaled = useMemo(() => {
+    if (!IS_WEB) return null;
+    const cs = contentScale;
+    return {
+      heroTitle: { fontSize: cs(28), lineHeight: cs(34) },
+      heroTitleAccent: { fontSize: cs(28), lineHeight: cs(34) },
+      heroSub: { fontSize: cs(13), lineHeight: cs(20) },
+      fieldLabel: { fontSize: cs(12) },
+      submitBtn: { height: cs(52) },
+      submitBtnText: { fontSize: cs(16) },
+      footerLink: { fontSize: cs(12) },
+    };
+  }, [contentScale]);
 
-  const onSubmit = async (data: RegisterFormValues) => {
-    const result = await register(data.email, data.password, data.name);
-    if (result.ok) {
-      if (result.data) {
-        toast.success(t('toast.registerSuccess'));
-        router.push('/(tabs)');
-      } else {
-        // E-posta doğrulama gönderildi
-        toast.info('Lütfen e-posta kutunuzu kontrol edin ve hesabınızı doğrulayın.');
-        router.replace('/(auth)/login');
-      }
-    } else {
-      toast.error(result.error);
-    }
-  };
+  const { t } = useI18n();
+  const { status } = useAuth();
+  const fadeAnim = useRef(new RNAnimated.Value(0)).current;
+
+  useEffect(() => {
+    if (status !== 'unauthenticated') return;
+    RNAnimated.timing(fadeAnim, {
+      toValue: 1,
+      duration: WELCOME_MOUNT_FADE_DURATION_MS,
+      useNativeDriver: true,
+    }).start();
+  }, [status, fadeAnim]);
+
+  const screenWrapStyle = useMemo<(ViewStyle | false | undefined)[]>(() => {
+    const s: (ViewStyle | false | undefined)[] = [styles.screenWrap];
+    if (IS_WEB) s.push({ minHeight: viewportHeight, height: viewportHeight });
+    return s;
+  }, [viewportHeight]);
+
+  const heroStyle = useMemo(
+    () => [styles.hero, { height: viewportHeight * WELCOME_HERO_RATIO }],
+    [viewportHeight],
+  );
+
+  const backAnchorStyle = useMemo(
+    () => [
+      styles.backAnchor,
+      {
+        top: IS_WEB ? insets.top + spacing[3] : 0,
+        left: spacing[4] + insets.left,
+      },
+    ],
+    [insets.top, insets.left],
+  );
+
+  const pageGradientStyle = useMemo(
+    () => [styles.pageGradient, IS_WEB && styles.pageGradientWebRoot],
+    [],
+  );
+
+  const pageGradientInnerStyle = useMemo(
+    () => [styles.pageGradientInner, IS_WEB && styles.pageGradientInnerWeb],
+    [],
+  );
+
+  const safeOverlayStyle = useMemo(
+    () => [styles.safeOverlay, IS_WEB && styles.safeOverlayWeb],
+    [],
+  );
+
+  const fadeStyle = useMemo(() => [styles.fill, { opacity: fadeAnim }], [fadeAnim]);
+
+  if (status === 'authenticated' || status === 'guest') {
+    return null;
+  }
+
+  if (status === 'idle') {
+    return (
+      <View style={styles.screenWrap}>
+        <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
+        <LinearGradient
+          colors={gradientColors}
+          locations={gradientLocations}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={styles.gradientFill}
+          pointerEvents="none"
+        />
+      </View>
+    );
+  }
 
   return (
-    <AuthLayout>
-      <MotiView
-        from={{ opacity: 0, translateY: 20 }}
-        animate={{ opacity: 1, translateY: 0 }}
-        transition={{ type: 'timing', duration: 350 }}
-      >
-        <IconButton onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={22} color={colors.text} />
-        </IconButton>
+    <View style={screenWrapStyle}>
+      <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
+      <LinearGradient
+        colors={gradientColors}
+        locations={gradientLocations}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+        style={styles.gradientFill}
+        pointerEvents="none"
+      />
+      <SafeAreaView style={safeOverlayStyle} edges={safeAreaEdges}>
+        <RNAnimated.View style={fadeStyle}>
+          <KeyboardContainer style={styles.fill} {...keyboardContainerProps}>
+            <View style={pageGradientStyle}>
+              <View style={pageGradientInnerStyle}>
+                <View style={backAnchorStyle}>
+                  <SurfaceIconPressable
+                    shape="circle"
+                    width={contentScale(44)}
+                    height={contentScale(44)}
+                    onPress={() => router.back()}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    accessibilityLabel={t('common.back')}
+                  >
+                    <Ionicons
+                      name="arrow-back"
+                      size={contentScale(24)}
+                      color={palette.primary}
+                    />
+                  </SurfaceIconPressable>
+                </View>
 
-        <Text variant="h2" style={styles.title}>
-          {t('auth.createAccount')}
-        </Text>
-        <Text variant="body" color={colors.textSecondary} style={styles.subtitle}>
-          {t('auth.noAccount')}
-        </Text>
+                <View style={heroStyle}>
+                  <View style={styles.heroLogoBox}>
+                    <Logo width={contentScale(100)} />
+                  </View>
+                  <View style={styles.heroTitleWrap}>
+                    <Text style={[styles.heroTitle, webScaled?.heroTitle]}>
+                      {t('auth.registerHeroLine1')}
+                      {'\n'}
+                      <Text style={[styles.heroTitleAccent, webScaled?.heroTitleAccent]}>
+                        {t('auth.registerHeroLine2')}
+                      </Text>
+                    </Text>
+                  </View>
+                  <Text style={[styles.heroSub, webScaled?.heroSub]}>{t('auth.registerSubtitle')}</Text>
+                </View>
 
-        <View style={styles.form}>
-          <FormField
-            control={control}
-            name="name"
-            label={t('auth.name')}
-            placeholder={t('auth.namePlaceholder')}
-            autoCapitalize="words"
-            leftIcon={<Ionicons name="person-outline" size={18} color={colors.textSecondary} />}
-          />
-          <FormField
-            control={control}
-            name="email"
-            label={t('auth.email')}
-            placeholder={t('auth.emailPlaceholder')}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            leftIcon={<Ionicons name="mail-outline" size={18} color={colors.textSecondary} />}
-            {...AUTH_NO_CREDENTIAL_SAVE_PROPS}
-          />
-          <FormField
-            control={control}
-            name="password"
-            label={t('auth.password')}
-            placeholder={t('auth.passwordPlaceholder')}
-            secure
-            leftIcon={<Ionicons name="lock-closed-outline" size={18} color={colors.textSecondary} />}
-            {...AUTH_NO_CREDENTIAL_SAVE_PROPS}
-          />
-          <FormField
-            control={control}
-            name="confirmPassword"
-            label={t('auth.confirmPassword')}
-            placeholder={t('auth.confirmPasswordPlaceholder')}
-            secure
-            leftIcon={<Ionicons name="lock-closed-outline" size={18} color={colors.textSecondary} />}
-            {...AUTH_NO_CREDENTIAL_SAVE_PROPS}
-          />
-
-          <Button
-            title={t('auth.createAccount')}
-            onPress={handleSubmit(onSubmit)}
-            loading={isSubmitting}
-            style={styles.submitBtn}
-          />
-        </View>
-
-        <View style={styles.footer}>
-          <Text variant="body" color={colors.textSecondary}>
-            {t('auth.haveAccount')}{' '}
-          </Text>
-          <TextButton
-            title={t('auth.login')}
-            color={colors.primary}
-            onPress={() => router.back()}
-            hapticType="light"
-          />
-        </View>
-      </MotiView>
-    </AuthLayout>
+                <RegisterAuthForm
+                  contentScale={contentScale}
+                  webScaled={webScaled}
+                  footer={
+                    <View style={styles.footer}>
+                      <Text style={[styles.footerHint, webScaled?.footerLink]}>
+                        {t('auth.haveAccount')}{' '}
+                      </Text>
+                      <TouchableOpacity
+                        onPress={() => router.back()}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        accessibilityRole="button"
+                        accessibilityLabel={t('auth.login')}
+                      >
+                        <Text style={[styles.footerLink, webScaled?.footerLink]}>{t('auth.login')}</Text>
+                      </TouchableOpacity>
+                    </View>
+                  }
+                />
+              </View>
+            </View>
+          </KeyboardContainer>
+        </RNAnimated.View>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  backBtn: {
-    marginBottom: spacing[4],
-    alignSelf: 'flex-start',
-    padding: spacing[1],
+  screenWrap: {
+    flex: 1,
+    backgroundColor: '#F0F7F9',
   },
-  title: {
+  gradientFill: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  safeOverlay: {
+    flex: 1,
+    backgroundColor: 'transparent',
+  },
+  safeOverlayWeb: {
+    width: '100%',
+    minHeight: 0,
+    height: '100%',
+  },
+  fill: {
+    flex: 1,
+  },
+  pageGradient: {
+    flex: 1,
+    minHeight: 0,
+    backgroundColor: 'transparent',
+    flexDirection: 'column',
+  },
+  pageGradientWebRoot: {
+    width: '100%',
+    minHeight: 0,
+  },
+  pageGradientInner: {
+    flex: 1,
+    width: '100%',
+    minHeight: 0,
+    position: 'relative',
+    flexDirection: 'column',
+  },
+  pageGradientInnerWeb: {
+    maxWidth: DESIGN_BASE_WIDTH,
+    alignSelf: 'center',
+  },
+  backAnchor: {
+    position: 'absolute',
+    zIndex: 2,
+  },
+  hero: {
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    paddingHorizontal: spacing[8],
+    paddingBottom: spacing[2],
+    gap: spacing[2],
+  },
+  heroLogoBox: {
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[2],
     marginBottom: spacing[1],
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  subtitle: {
-    marginBottom: spacing[6],
+  heroTitleWrap: {
+    width: '100%',
+    alignItems: 'center',
   },
-  form: {
-    gap: spacing[1],
+  heroTitle: {
+    width: '100%',
+    fontFamily: fontFamily.bold,
+    fontSize: scale(28),
+    color: palette.navy,
+    textAlign: 'center',
+    lineHeight: scale(34),
   },
-  submitBtn: {
-    marginTop: spacing[3],
+  heroTitleAccent: {
+    fontFamily: fontFamily.bold,
+    fontSize: scale(28),
+    color: palette.primary,
+    lineHeight: scale(34),
+    textAlign: 'center',
+  },
+  heroSub: {
+    fontFamily: fontFamily.regular,
+    fontSize: scale(13),
+    color: palette.gray500,
+    textAlign: 'center',
+    lineHeight: scale(20),
   },
   footer: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
-    marginTop: spacing[6],
+    paddingTop: spacing[4],
+    paddingBottom: spacing[2],
     flexWrap: 'wrap',
+  },
+  footerHint: {
+    fontFamily: fontFamily.regular,
+    fontSize: scale(12),
+    color: palette.gray500,
+  },
+  footerLink: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: scale(12),
+    color: palette.primary,
   },
 });
