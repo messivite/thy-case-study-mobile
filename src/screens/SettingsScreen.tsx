@@ -347,13 +347,13 @@ export default function SettingsScreen() {
           style={styles.versionBadgeWrap}
         >
           <LinearGradient
-            colors={[palette.navy, palette.navyMid]}
+            colors={[palette.primary, palette.primaryDark]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={styles.versionBadge}
           >
-            <Ionicons name="airplane" size={14} color="rgba(255,255,255,0.7)" />
-            <Text variant="caption" color="rgba(255,255,255,0.85)" style={{ fontFamily: fontFamily.medium }}>
+            <Ionicons name="airplane" size={14} color={palette.white} />
+            <Text variant="caption" color={palette.white} style={{ fontFamily: fontFamily.medium }}>
               THY Asistan
             </Text>
             <View style={styles.versionPill}>

@@ -45,6 +45,7 @@ import {
   WELCOME_GUEST_AUTH_FLOW,
   WELCOME_GUEST_SIGNING_TOAST_ID,
 } from '@/constants/welcomeGuestAuthFlow';
+import { devConfig } from '@/config/devConfig';
 import {
   WELCOME_HERO_RATIO,
   WELCOME_INFO_SITE_URL,
@@ -162,14 +163,15 @@ export default function WelcomeScreen() {
     };
   }, []);
 
-  // Authenticated guard
+  // Authenticated guard — devConfig.welcomeInitial aktifse bypass et
   useEffect(() => {
+    if (devConfig.welcomeInitial) return;
     if (status === 'authenticated' || status === 'guest') {
       router.replace('/(tabs)');
     }
   }, [status]);
 
-  if (status === 'authenticated' || status === 'guest') return null;
+  if (!devConfig.welcomeInitial && (status === 'authenticated' || status === 'guest')) return null;
 
   const onSubmit = async (data: WelcomeLoginFormValues) => {
     const result = await login(data.email, data.password);

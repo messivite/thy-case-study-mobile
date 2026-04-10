@@ -27,6 +27,10 @@ export default function SplashPage() {
       schedulePostSplashNavigation(() => router.replace('/(onboarding)'));
       return;
     }
+    if (devConfig.welcomeInitial) {
+      schedulePostSplashNavigation(() => router.replace('/(auth)/welcome'));
+      return;
+    }
 
     const onboardingDone = mmkvStorage.getBoolean(STORAGE_KEYS.ONBOARDING_DONE);
     if (!onboardingDone) {
@@ -39,6 +43,7 @@ export default function SplashPage() {
     } else {
       schedulePostSplashNavigation(() => router.replace('/(auth)/welcome'));
     }
+
   };
 
   return (
