@@ -33,6 +33,9 @@ import { spacing } from '@/constants/spacing';
 import { scale } from '@/lib/responsive';
 import { fontFamily } from '@/constants/typography';
 
+/** Safe area altındaki bar — tüm ekranlarda aynı yükseklik (tab geçişinde zıplama olmasın). */
+const HEADER_ROW_HEIGHT = scale(48);
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -77,6 +80,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
     ? Math.min(windowWidth > 0 ? windowWidth : 390, 390) / 390
     : 1;
   const s = (n: number) => Math.round(n * webScale);
+  const rowHeight = Platform.OS === 'web' ? s(48) : HEADER_ROW_HEIGHT;
 
   const handleBack = () => {
     haptics.light();
@@ -87,37 +91,42 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
     }
   };
 
+  const sideLeftStyle = [styles.sideSlot, styles.sideSlotLeft, Platform.OS === 'web' && { width: s(72) }];
+  const sideRightStyle = [styles.sideSlot, styles.sideSlotRight, Platform.OS === 'web' && { width: s(72) }];
+
   const renderLeft = () => {
-    if (leftContent) return <View style={[styles.side, Platform.OS === 'web' && { width: s(72) }]}>{leftContent}</View>;
+    if (leftContent) return <View style={sideLeftStyle}>{leftContent}</View>;
     if (isBack) {
       return (
-        <TouchableOpacity
-          onPress={handleBack}
-          style={styles.backBtn}
-          activeOpacity={0.75}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          accessibilityLabel="Geri"
-          accessibilityRole="button"
-        >
-          <View style={[styles.backCircle, Platform.OS === 'web' && { width: s(34), height: s(34) }]}>
-            <Ionicons name="arrow-back" size={Platform.OS === 'web' ? s(18) : scale(18)} color={palette.white} />
-          </View>
-        </TouchableOpacity>
+        <View style={sideLeftStyle}>
+          <TouchableOpacity
+            onPress={handleBack}
+            style={styles.backBtn}
+            activeOpacity={0.75}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityLabel="Geri"
+            accessibilityRole="button"
+          >
+            <View style={[styles.backCircle, Platform.OS === 'web' && { width: s(34), height: s(34) }]}>
+              <Ionicons name="arrow-back" size={Platform.OS === 'web' ? s(18) : scale(18)} color={palette.white} />
+            </View>
+          </TouchableOpacity>
+        </View>
       );
     }
-    return <View style={[styles.side, Platform.OS === 'web' && { width: s(72) }]} />;
+    return <View style={sideLeftStyle} />;
   };
 
   const renderRight = () => {
     if (rightContent) {
-      return <View style={[styles.side, styles.rightRow, Platform.OS === 'web' && { width: s(72) }]}>{rightContent}</View>;
+      return <View style={[...sideRightStyle, styles.rightRow]}>{rightContent}</View>;
     }
     if (!rightIcons || rightIcons.length === 0) {
-      return <View style={[styles.side, Platform.OS === 'web' && { width: s(72) }]} />;
+      return <View style={sideRightStyle} />;
     }
 
     return (
-      <View style={[styles.side, styles.rightRow, Platform.OS === 'web' && { width: s(72) }]}>
+      <View style={[...sideRightStyle, styles.rightRow]}>
         {rightIcons.map((icon, i) => (
           <TouchableOpacity
             key={i}
@@ -153,28 +162,23 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
       style={[
-        styles.container,
-        Platform.OS === 'web' && { minHeight: s(50) },
+        styles.gradientOuter,
         {
           paddingTop: insets.top,
-          paddingBottom: 0,
         },
         style,
       ]}
     >
-      {/* Sol */}
-      {renderLeft()}
-
-      {/* Orta */}
-      <View style={styles.centerBlock}>
-        <Text style={[styles.title, Platform.OS === 'web' && { fontSize: s(16) }]} numberOfLines={1}>{title}</Text>
-        {subtitle ? (
-          <Text style={[styles.subtitle, Platform.OS === 'web' && { fontSize: s(11) }]} numberOfLines={1}>{subtitle}</Text>
-        ) : null}
+      <View style={[styles.row, { height: rowHeight }]}>
+        {renderLeft()}
+        <View style={styles.centerBlock}>
+          <Text style={[styles.title, Platform.OS === 'web' && { fontSize: s(16) }]} numberOfLines={1}>{title}</Text>
+          {subtitle ? (
+            <Text style={[styles.subtitle, Platform.OS === 'web' && { fontSize: s(11) }]} numberOfLines={1}>{subtitle}</Text>
+          ) : null}
+        </View>
+        {renderRight()}
       </View>
-
-      {/* Sağ */}
-      {renderRight()}
     </LinearGradient>
   );
 };
@@ -184,17 +188,25 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
 // ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  gradientOuter: {
     paddingHorizontal: spacing[4],
-    minHeight: scale(50),
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.12)',
   },
-  side: {
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  sideSlot: {
     width: scale(72),
+    height: '100%',
+    justifyContent: 'center',
+  },
+  sideSlotLeft: {
     alignItems: 'flex-start',
+  },
+  sideSlotRight: {
+    alignItems: 'flex-end',
   },
   rightRow: {
     flexDirection: 'row',
@@ -204,6 +216,7 @@ const styles = StyleSheet.create({
   },
   centerBlock: {
     flex: 1,
+    minWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
   },

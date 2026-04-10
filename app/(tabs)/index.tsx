@@ -47,6 +47,7 @@ export default function HomeScreen() {
       leftContent={
         <TouchableOpacity
           style={styles.menuBtn}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           onPress={() => {
             // Drawer/chat history akışı bir sonraki adımda bağlanacak.
           }}
@@ -115,9 +116,10 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  /** AppHeader satırı scale(48); layout şişmesin, dokunma hitSlop ile kalır. */
   menuBtn: {
-    width: 50,
-    height: 50,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },

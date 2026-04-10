@@ -9,6 +9,7 @@ import { toast } from 'sonner-native';
 import Constants from 'expo-constants';
 import { Avatar } from '@/atoms/Avatar';
 import { Text } from '@/atoms/Text';
+import { AppHeader } from '@/organisms/AppHeader';
 import { SettingsSection } from '@/organisms/SettingsSection';
 import { UsageStatsCard } from '@/molecules/UsageStatsCard';
 import { useTheme } from '@/hooks/useTheme';
@@ -72,23 +73,8 @@ export default function SettingsScreen() {
   } as const;
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]} edges={['top']}>
-      {/* Header */}
-      <LinearGradient
-        colors={[palette.navy, palette.navyMid, palette.primaryDark]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.header}
-      >
-        <View style={styles.headerContent}>
-          <View style={styles.headerIconWrap}>
-            <Ionicons name="settings" size={20} color="rgba(255,255,255,0.9)" />
-          </View>
-          <Text variant="h4" color={palette.white} style={{ fontFamily: fontFamily.semiBold }}>
-            {t('settings.title')}
-          </Text>
-        </View>
-      </LinearGradient>
+    <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]} edges={['left', 'right', 'bottom']}>
+      <AppHeader title={t('settings.title')} />
 
       <ScrollView
         style={{ flex: 1 }}
@@ -365,23 +351,6 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-  },
-  header: {
-    paddingHorizontal: spacing[4],
-    paddingVertical: spacing[4],
-  },
-  headerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[3],
-  },
-  headerIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.md,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   scroll: {
     padding: spacing[4],
