@@ -164,6 +164,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
       colors={[palette.primary, palette.primaryDark]}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
+      collapsable={false}
       style={[
         styles.gradientOuter,
         {
