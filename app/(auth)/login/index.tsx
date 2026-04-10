@@ -1,9 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import { MotiView } from '@/lib/motiView';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthLayout } from '@/templates/AuthLayout';
@@ -17,25 +16,22 @@ import { useI18n } from '@/hooks/useI18n';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { spacing } from '@/constants/spacing';
 import { toast } from '@/lib/toast';
-
-const loginSchema = z.object({
-  email: z.string().min(1, 'E-posta zorunludur').email('Geçerli bir e-posta girin'),
-  password: z.string().min(6, 'Şifre en az 6 karakter olmalıdır'),
-});
-
-type LoginForm = z.infer<typeof loginSchema>;
+import { loginSchema, type LoginFormValues } from '@/forms/auth/login/schema';
 
 export default function LoginScreen() {
   const { colors } = useTheme();
-  const { t } = useI18n();
+  const { t, currentLanguage } = useI18n();
   const { login } = useSupabaseAuth();
 
-  const { control, handleSubmit, formState: { isSubmitting } } = useForm<LoginForm>({
-    resolver: zodResolver(loginSchema),
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- t referansı stabil değil; dil değişince yeterli
+  const schema = useMemo(() => loginSchema(t), [currentLanguage]);
+
+  const { control, handleSubmit, formState: { isSubmitting } } = useForm<LoginFormValues>({
+    resolver: zodResolver(schema),
     defaultValues: { email: '', password: '' },
   });
 
-  const onSubmit = async (data: LoginForm) => {
+  const onSubmit = async (data: LoginFormValues) => {
     const result = await login(data.email, data.password);
     if (result.ok) {
       toast.success(t('toast.loginSuccess'));

@@ -1,37 +1,33 @@
-import React, { useEffect, useState } from 'react';
+import { useState, type FC, type ReactNode } from 'react';
 import {
   TextInput,
   View,
   StyleSheet,
+  Text as RNText,
   TextInputProps,
   TouchableOpacity,
   Platform,
 } from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-} from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
 import { radius, spacing } from '@/constants/spacing';
 import { fontFamily, fontSize } from '@/constants/typography';
 
-const DURATION = 200;
-
 type Props = TextInputProps & {
-  leftIcon?: React.ReactNode;
-  rightIcon?: React.ReactNode;
+  leftIcon?: ReactNode;
+  rightIcon?: ReactNode;
   error?: string;
   secure?: boolean;
 };
 
-export const Input: React.FC<Props> = ({
+export const Input: FC<Props> = ({
   leftIcon,
   rightIcon,
   error,
   secure,
   style,
+  onFocus: onFocusProp,
+  onBlur: onBlurProp,
   ...props
 }) => {
   const { colors } = useTheme();
@@ -39,48 +35,28 @@ export const Input: React.FC<Props> = ({
   const [focused, setFocused] = useState(false);
   const [secureVisible, setSecureVisible] = useState(false);
 
-  // 3 durumu tek shared value ile yönet:
-  // 0 = idle, 1 = focused, 2 = error
-  const borderProgress = useSharedValue(0);
+  const borderColor = error
+    ? errorColor
+    : focused
+      ? colors.primary
+      : colors.border;
 
-  useEffect(() => {
-    if (error) {
-      borderProgress.value = withTiming(2, { duration: DURATION });
-    } else if (focused) {
-      borderProgress.value = withTiming(1, { duration: DURATION });
-    } else {
-      borderProgress.value = withTiming(0, { duration: DURATION });
-    }
-  }, [error, focused, borderProgress]);
-
-  const handleFocus = () => {
+  const handleFocus = (e: Parameters<NonNullable<Props['onFocus']>>[0]) => {
     setFocused(true);
-    props.onFocus?.(null as any);
+    onFocusProp?.(e);
   };
 
-  const handleBlur = () => {
+  const handleBlur = (e: Parameters<NonNullable<Props['onBlur']>>[0]) => {
     setFocused(false);
-    props.onBlur?.(null as any);
+    onBlurProp?.(e);
   };
-
-  const animatedBorder = useAnimatedStyle(() => {
-    'worklet';
-    if (borderProgress.value >= 1.5) {
-      return { borderColor: errorColor };
-    }
-    if (borderProgress.value >= 0.5) {
-      return { borderColor: colors.primary };
-    }
-    return { borderColor: colors.border };
-  });
 
   return (
     <View>
-      <Animated.View
+      <View
         style={[
           styles.container,
-          { backgroundColor: colors.inputBg },
-          animatedBorder,
+          { backgroundColor: colors.inputBg, borderColor },
         ]}
       >
         {leftIcon && <View style={styles.iconLeft}>{leftIcon}</View>}
@@ -96,10 +72,10 @@ export const Input: React.FC<Props> = ({
             style,
           ]}
           placeholderTextColor={colors.textSecondary}
-          onFocus={handleFocus}
-          onBlur={handleBlur}
           secureTextEntry={secure && !secureVisible}
           {...props}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
         />
         {secure && (
           <TouchableOpacity
@@ -114,13 +90,13 @@ export const Input: React.FC<Props> = ({
           </TouchableOpacity>
         )}
         {rightIcon && !secure && <View style={styles.iconRight}>{rightIcon}</View>}
-      </Animated.View>
+      </View>
       {error ? (
-        <Animated.Text
+        <RNText
           style={[styles.errorText, { color: errorColor, fontFamily: fontFamily.regular, fontSize: fontSize.xs }]}
         >
           {error}
-        </Animated.Text>
+        </RNText>
       ) : null}
     </View>
   );

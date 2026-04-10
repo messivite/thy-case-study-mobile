@@ -1,16 +1,13 @@
 import type { TFunction } from 'i18next';
 import { z } from 'zod';
-import { emailZod, passwordZod } from '@/lib/form/zodHelpers';
+import { emailZod, PASSWORD_MIN_LENGTH, passwordZod } from '@/lib/form/zodHelpers';
 
-/**
- * Welcome / e-posta girişi — mesajlar i18n `auth.validation.*`
- * Başka ekranlarda aynı alanları paylaşmak için buradan import et.
- */
+/** Welcome ekranı — i18n `auth.validation.*` */
 export function welcomeLoginSchema(t: TFunction) {
   return z.object({
     email: emailZod(t('auth.validation.emailRequired'), t('auth.validation.emailInvalid')),
     password: passwordZod(
-      6,
+      PASSWORD_MIN_LENGTH,
       t('auth.validation.passwordRequired'),
       t('auth.validation.passwordMin'),
     ),

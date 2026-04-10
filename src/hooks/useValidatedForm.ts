@@ -7,7 +7,8 @@ import {
 import { zodResolver } from '@hookform/resolvers/zod';
 
 /**
- * Zod + RHF varsayılanları: blur’da doğrula, hata varken yazarken yenile.
+ * Zod + RHF: onChange — değer değişince resolver; fieldState.error güncellenir,
+ * FormField doğrudan error?.message ile border + metni bağlar (focus/dirty şartı yok).
  * Zod 4 + zodResolver generic uyumu için resolver’da Resolver<T> cast kullanılır.
  */
 export function useValidatedForm<T extends FieldValues>(
@@ -16,7 +17,7 @@ export function useValidatedForm<T extends FieldValues>(
 ) {
   return useForm<T>({
     resolver: zodResolver(schema) as Resolver<T>,
-    mode: 'onBlur',
+    mode: 'onChange',
     reValidateMode: 'onChange',
     ...options,
   });

@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
-import { Controller, Control, FieldValues, Path, useFormState } from 'react-hook-form';
+import { Controller, Control, FieldValues, Path } from 'react-hook-form';
 import { Input } from '@/atoms/Input';
 import { Text } from '@/atoms/Text';
 import { spacing } from '@/constants/spacing';
@@ -24,33 +24,29 @@ export function FormField<T extends FieldValues>({
   ...inputProps
 }: Props<T>) {
   const { colors } = useTheme();
-  const { isSubmitted } = useFormState({ control });
 
   return (
     <Controller
       control={control}
       name={name}
-      render={({ field: { onChange, onBlur, value }, fieldState: { error, isTouched } }) => {
-        const showError = Boolean(error?.message && (isTouched || isSubmitted));
-        return (
-          <View style={styles.wrapper}>
-            {label ? (
-              <Text variant="label" color={colors.textSecondary} style={styles.label}>
-                {label}
-              </Text>
-            ) : null}
-            <Input
-              value={value}
-              onChangeText={onChange}
-              onBlur={onBlur}
-              error={showError ? error?.message : undefined}
-              secure={secure}
-              leftIcon={leftIcon}
-              {...inputProps}
-            />
-          </View>
-        );
-      }}
+      render={({ field: { onChange, onBlur, value }, fieldState: { error } }) => (
+        <View style={styles.wrapper}>
+          {label ? (
+            <Text variant="label" color={colors.textSecondary} style={styles.label}>
+              {label}
+            </Text>
+          ) : null}
+          <Input
+            {...inputProps}
+            value={value}
+            onChangeText={onChange}
+            onBlur={onBlur}
+            error={error?.message}
+            secure={secure}
+            leftIcon={leftIcon}
+          />
+        </View>
+      )}
     />
   );
 }

@@ -1,9 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import { MotiView } from '@/lib/motiView';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthLayout } from '@/templates/AuthLayout';
@@ -17,32 +16,22 @@ import { useI18n } from '@/hooks/useI18n';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { spacing } from '@/constants/spacing';
 import { toast } from '@/lib/toast';
-
-const registerSchema = z
-  .object({
-    name: z.string().min(2, 'Ad soyad zorunludur'),
-    email: z.string().min(1, 'E-posta zorunludur').email('Geçerli bir e-posta girin'),
-    password: z.string().min(6, 'Şifre en az 6 karakter olmalıdır'),
-    confirmPassword: z.string(),
-  })
-  .refine((d) => d.password === d.confirmPassword, {
-    message: 'Şifreler eşleşmiyor',
-    path: ['confirmPassword'],
-  });
-
-type RegisterForm = z.infer<typeof registerSchema>;
+import { registerSchema, type RegisterFormValues } from '@/forms/auth/register/schema';
 
 export default function RegisterScreen() {
   const { colors } = useTheme();
-  const { t } = useI18n();
+  const { t, currentLanguage } = useI18n();
   const { register } = useSupabaseAuth();
 
-  const { control, handleSubmit, formState: { isSubmitting } } = useForm<RegisterForm>({
-    resolver: zodResolver(registerSchema),
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- t referansı stabil değil; dil değişince yeterli
+  const schema = useMemo(() => registerSchema(t), [currentLanguage]);
+
+  const { control, handleSubmit, formState: { isSubmitting } } = useForm<RegisterFormValues>({
+    resolver: zodResolver(schema),
     defaultValues: { name: '', email: '', password: '', confirmPassword: '' },
   });
 
-  const onSubmit = async (data: RegisterForm) => {
+  const onSubmit = async (data: RegisterFormValues) => {
     const result = await register(data.email, data.password, data.name);
     if (result.ok) {
       if (result.data) {
