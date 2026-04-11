@@ -205,6 +205,14 @@ export const searchChats = async (params: ChatSearchParams): Promise<ChatSearchR
 };
 
 /**
+ * DELETE /api/chats/:chatId
+ * Sohbeti kalıcı olarak siler.
+ */
+export const deleteChat = async (chatId: string): Promise<void> => {
+  await privateApi.delete(`/api/chats/${chatId}`);
+};
+
+/**
  * GET /api/chats/:chatId/messages?limit=20&direction=older&cursor=xxx
  * Chat mesajlarını paginated olarak döner. direction: 'older' | 'newer'
  * İlk yükleme: direction=older (son mesajlara doğru)

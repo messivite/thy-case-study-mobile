@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
+import { Skeleton } from 'moti/skeleton';
 import { Text } from '@/atoms/Text';
 import { spacing } from '@/constants/spacing';
 import { PromptChipButton } from '@/molecules/PromptChipButton';
@@ -14,6 +15,7 @@ export type WelcomeQuickAction = {
 
 type Props = {
   greeting: string;
+  greetingReady: boolean;
   question: string;
   quickActions: WelcomeQuickAction[];
   onQuickActionPress: (action: WelcomeQuickAction) => void;
@@ -21,11 +23,12 @@ type Props = {
 
 export const HomeWelcomePanel: React.FC<Props> = ({
   greeting,
+  greetingReady,
   question,
   quickActions,
   onQuickActionPress,
 }) => {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
 
   const handleQuickActionPress = useCallback(
     (action: WelcomeQuickAction) => () => onQuickActionPress(action),
@@ -46,9 +49,19 @@ export const HomeWelcomePanel: React.FC<Props> = ({
 
   return (
     <View style={styles.root}>
-      <Text variant="h3" color={colors.text} style={styles.greeting}>
-        {greeting}
-      </Text>
+      <Skeleton
+        show={!greetingReady}
+        colorMode={isDark ? 'dark' : 'light'}
+        width={180}
+        height={20}
+        radius={6}
+      >
+        {greetingReady ? (
+          <Text variant="h3" color={colors.text} style={styles.greeting}>
+            {greeting}
+          </Text>
+        ) : null}
+      </Skeleton>
       <Text variant="h1" color={colors.text} style={styles.question}>
         {question}
       </Text>

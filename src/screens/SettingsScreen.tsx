@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { MotiView } from '@/lib/motiView';
+import { Skeleton } from 'moti/skeleton';
 import { Ionicons } from '@expo/vector-icons';
 import { toast } from '@/lib/toast';
 import Constants from 'expo-constants';
@@ -32,7 +33,7 @@ export default function SettingsScreen() {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const { isGuest, logout } = useAuth();
-  const { displayName: profileDisplayName, email: profileEmail, avatarUrl, isAnonymous } = useWhoIAm();
+  const { displayName: profileDisplayName, email: profileEmail, avatarUrl, isAnonymous, profileReady } = useWhoIAm();
   const { t, changeLanguage, currentLanguage } = useI18n();
   const dispatch = useAppDispatch();
   const { theme, streamingEnabled } = useAppSelector((s) => s.settings);
@@ -233,12 +234,32 @@ export default function SettingsScreen() {
               )}
             </View>
             <View style={styles.profileInfo}>
-              <Text variant="h4" style={{ fontFamily: fontFamily.semiBold }}>
-                {displayName}
-              </Text>
-              <Text variant="caption" color={colors.textSecondary} style={styles.emailText}>
-                {displayEmail}
-              </Text>
+              <Skeleton
+                show={!guestLike && !profileReady}
+                colorMode={isDark ? 'dark' : 'light'}
+                width={120}
+                height={18}
+                radius={5}
+              >
+                {guestLike || profileReady ? (
+                  <Text variant="h4" style={{ fontFamily: fontFamily.semiBold }}>
+                    {displayName}
+                  </Text>
+                ) : null}
+              </Skeleton>
+              <Skeleton
+                show={!guestLike && !profileReady}
+                colorMode={isDark ? 'dark' : 'light'}
+                width={180}
+                height={14}
+                radius={4}
+              >
+                {guestLike || profileReady ? (
+                  <Text variant="caption" color={colors.textSecondary} style={styles.emailText}>
+                    {displayEmail}
+                  </Text>
+                ) : null}
+              </Skeleton>
             </View>
             <View style={[styles.profileBadge, { backgroundColor: isGuest ? colors.border : palette.primary + '18' }]}>
               <Ionicons

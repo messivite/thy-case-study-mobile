@@ -15,7 +15,6 @@ import {
   TouchableOpacity,
   View,
   StyleSheet,
-  Platform,
   ViewStyle,
 } from 'react-native';
 import Animated, {
@@ -26,7 +25,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/atoms/Text';
-import { useTheme } from '@/hooks/useTheme';
+import { lightColors, ThemeColors } from '@/constants/colors';
 import { radius, spacing } from '@/constants/spacing';
 import { fontFamily } from '@/constants/typography';
 import { scale } from '@/lib/responsive';
@@ -44,6 +43,7 @@ type Props = TextInputProps & {
   onClear?: () => void;
   showCancelOnFocus?: boolean;
   cancelLabel?: string;
+  themeColors?: ThemeColors;
 };
 
 export const SearchInput = forwardRef<SearchInputRef, Props>(({
@@ -56,9 +56,10 @@ export const SearchInput = forwardRef<SearchInputRef, Props>(({
   style,
   value,
   onChangeText,
+  themeColors,
   ...props
 }, ref) => {
-  const { colors } = useTheme();
+  const colors = themeColors ?? lightColors;
   const inputRef = useRef<TextInput>(null);
   const [isFocused, setIsFocused] = useState(false);
   const progress = useSharedValue(0);
@@ -76,15 +77,13 @@ export const SearchInput = forwardRef<SearchInputRef, Props>(({
     setIsFocused(true);
     progress.value = withTiming(1, { duration: 180 });
     onFocusChange?.(true);
-    props.onFocus?.(null as any);
-  }, [onFocusChange, progress, props]);
+  }, [onFocusChange, progress]);
 
   const handleBlur = useCallback(() => {
     setIsFocused(false);
     progress.value = withTiming(0, { duration: 180 });
     onFocusChange?.(false);
-    props.onBlur?.(null as any);
-  }, [onFocusChange, progress, props]);
+  }, [onFocusChange, progress]);
 
   const handleCancel = useCallback(() => {
     onChangeText?.('');

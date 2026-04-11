@@ -57,6 +57,7 @@
     "forgotPasswordHeroLine2": "THY Study Case",
     "forgotPasswordSubtitle": "Enter your account email address.",
     "forgotPasswordSubmit": "Send reset link",
+    "sending": "Sending...",
     "rememberPassword": "Remember your password?",
     "loginWithGoogle": "Sign in with Google",
     "loginWithEmail": "Sign in with Email",
@@ -185,7 +186,13 @@
     "noResultsFor": "No match for \"{{query}}\"",
     "noRecentSearches": "No search history",
     "recentSection": "Recent",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "deleteAlertTitle": "Delete Chat",
+    "deleteAlertMessage": "\"{{title}}\" will be permanently deleted. This action cannot be undone.",
+    "deleteAlertConfirm": "Delete",
+    "deleteAlertCancel": "Cancel",
+    "deleteSuccess": "Your chat has been successfully deleted",
+    "deleteError": "Could not delete chat, please try again"
   },
   "toast": {
     "loginSuccess": "Signed in successfully",
@@ -196,6 +203,10 @@
     "logoutSuccess": "You have successfully signed out.",
     "registerSuccess": "Account created",
     "registerVerifyEmail": "Please check your inbox and verify your email to finish signing up.",
+    "registerErrorAlreadyRegistered": "An account with this email already exists",
+    "registerErrorPasswordTooShort": "Password must be at least 6 characters",
+    "forgotPasswordSuccess": "Reset link sent to your email address",
+    "forgotPasswordError": "Failed to send, please try again",
     "messageSent": "Message sent",
     "offlineQueued": "Offline – message queued",
     "copied": "Copied",

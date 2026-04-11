@@ -49,6 +49,8 @@ import { authEventEmitter, AUTH_EVENTS } from '@/services/api';
 import { authMutex } from '@/lib/authMutex';
 import { setErrorReportingUser } from '@/services/errorReporting';
 import { toast } from '@/lib/toast';
+import { getMe } from '@/api/user.api';
+import { setProfile, setProfileError } from '@/store/slices/profileSlice';
 import type { AuthStatus } from '@/types/auth.types';
 import type { AuthResult } from '@/services/authService';
 
@@ -138,6 +140,13 @@ function useSupabaseAuthState(): SupabaseAuthApi {
     },
     [dispatch],
   );
+
+  // /api/me → profileSlice — session kurulduktan hemen sonra arka planda çağrılır
+  const fetchAndSetProfile = useCallback(() => {
+    getMe()
+      .then((data) => dispatch(setProfile(data)))
+      .catch(() => dispatch(setProfileError()));
+  }, [dispatch]);
 
   const dispatchRefreshedTokens = useCallback(
     (session: AppSession) => {
@@ -253,6 +262,7 @@ function useSupabaseAuthState(): SupabaseAuthApi {
                 dispatchSession(appSession);
                 void persistSession(appSession);
                 startRefreshInterval();
+                fetchAndSetProfile();
               }
               break;
 
@@ -262,6 +272,7 @@ function useSupabaseAuthState(): SupabaseAuthApi {
                 const appSession = mapSupabaseSession(session);
                 dispatchSession(appSession);
                 void persistSession(appSession);
+                fetchAndSetProfile();
               }
               break;
 
@@ -292,7 +303,7 @@ function useSupabaseAuthState(): SupabaseAuthApi {
     );
 
     return () => subscription.unsubscribe();
-  }, [dispatch, dispatchSession, startRefreshInterval, doLogout]);
+  }, [dispatch, dispatchSession, startRefreshInterval, doLogout, fetchAndSetProfile]);
 
   // -------------------------------------------------------------------------
   // App init — mevcut session'ı restore et
@@ -308,6 +319,7 @@ function useSupabaseAuthState(): SupabaseAuthApi {
         if (result.ok && result.data) {
           dispatchSession(result.data);
           startRefreshInterval();
+          fetchAndSetProfile();
         } else {
           dispatch(setUnauthenticated());
         }

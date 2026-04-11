@@ -31,6 +31,7 @@ import React, {
   useState,
 } from 'react';
 import {
+  Alert,
   LayoutChangeEvent,
   Modal,
   Platform,
@@ -45,6 +46,7 @@ import { BlurView } from 'expo-blur';
 import Animated, {
   FadeIn,
   FadeOut,
+  interpolate,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
@@ -66,10 +68,11 @@ import { AppHeader } from '@/organisms/AppHeader';
 import { useTheme } from '@/hooks/useTheme';
 import { useHaptics } from '@/hooks/useHaptics';
 import { useI18n } from '@/hooks/useI18n';
-import { CHAT_QUERY_KEYS } from '@/hooks/api/useChats';
+import { CHAT_QUERY_KEYS, useDeleteChatMutation } from '@/hooks/api/useChats';
 import { useChatHistory } from '@/hooks/useChatHistory';
 import { realmService } from '@/services/realm';
 import { ChatListItem, ChatSearchResultItem, PaginatedChatsResponse } from '@/types/chat.api.types';
+import { toast } from '@/lib/toast';
 import { palette } from '@/constants/colors';
 import { radius, shadow, spacing } from '@/constants/spacing';
 import { scale, verticalScale } from '@/lib/responsive';
@@ -91,6 +94,8 @@ type ContextMenuState = {
   chat: ChatListItem;
   pageY: number;
   pageH: number;
+  pageX: number;
+  pageW: number;
 } | null;
 
 // ---------------------------------------------------------------------------
@@ -102,6 +107,8 @@ const CLOSE_THRESHOLD = 80;
 const SWIPE_VELOCITY_THRESHOLD = 600;
 const CONTEXT_MENU_WIDTH = 200;
 const CONTEXT_MENU_HEIGHT = 108;
+const SWIPE_ACTION_WIDTH = 130; // Sil + Arşivle butonları toplam genişlik
+const SWIPE_OPEN_THRESHOLD = 60; // Bu kadar sürüklendikten sonra snap-open
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -165,7 +172,11 @@ const ModelChip = React.memo(({ model, color, isDark }: { model: string; color: 
 interface ChatHistoryItemProps {
   item: ChatListItem;
   onPress: () => void;
-  onLongPress: (pageY: number, pageH: number) => void;
+  onLongPress: (pageY: number, pageH: number, pageX: number, pageW: number) => void;
+  onDelete: () => void;
+  onArchive: () => void;
+  isHighlighted: boolean;
+  isDeleting: boolean;
   textColor: string;
   textSecondary: string;
   borderColor: string;
@@ -173,48 +184,137 @@ interface ChatHistoryItemProps {
 }
 
 const ChatHistoryItem = React.memo<ChatHistoryItemProps>(
-  ({ item, onPress, onLongPress, textColor, textSecondary, borderColor, isDark }) => {
+  ({ item, onPress, onLongPress, onDelete, onArchive, isHighlighted, isDeleting, textColor, textSecondary, borderColor, isDark }) => {
     const itemRef = useRef<View>(null);
+    const swipeX = useSharedValue(0);
+    const isSwipeOpen = useSharedValue(false);
+    const deleteProgress = useSharedValue(1); // 1=görünür, 0=silinmiş
+
+    // Silme animasyonu — opacity + height collapse
+    useEffect(() => {
+      if (isDeleting) {
+        deleteProgress.value = withTiming(0, { duration: 220 });
+      }
+    }, [isDeleting, deleteProgress]);
+
+    const deleteAnimStyle = useAnimatedStyle(() => ({
+      opacity: deleteProgress.value,
+      maxHeight: interpolate(deleteProgress.value, [0, 1], [0, 200]),
+      overflow: 'hidden',
+    }));
 
     const handleLongPress = useCallback(() => {
-      itemRef.current?.measureInWindow((_x, y, _w, h) => {
-        onLongPress(y, h);
+      itemRef.current?.measureInWindow((x, y, w, h) => {
+        onLongPress(y, h, x, w);
       });
     }, [onLongPress]);
+
+    const closeSwipe = useCallback(() => {
+      swipeX.value = withSpring(0, { damping: 20, stiffness: 200 });
+      isSwipeOpen.value = false;
+    }, [swipeX, isSwipeOpen]);
+
+    const handleDelete = useCallback(() => {
+      closeSwipe();
+      onDelete();
+    }, [closeSwipe, onDelete]);
+
+    const handleArchive = useCallback(() => {
+      closeSwipe();
+      onArchive();
+    }, [closeSwipe, onArchive]);
+
+    const swipeGesture = useMemo(() =>
+      Gesture.Pan()
+        .activeOffsetX([-8, 8])
+        .failOffsetY([-10, 10])
+        .onUpdate((e) => {
+          'worklet';
+          const base = isSwipeOpen.value ? -SWIPE_ACTION_WIDTH : 0;
+          const next = Math.min(0, Math.max(-SWIPE_ACTION_WIDTH, base + e.translationX));
+          swipeX.value = next;
+        })
+        .onEnd((e) => {
+          'worklet';
+          const isOpenEnough = swipeX.value < -SWIPE_OPEN_THRESHOLD;
+          const isFastSwipe = e.velocityX < -400;
+          if (isOpenEnough || isFastSwipe) {
+            swipeX.value = withSpring(-SWIPE_ACTION_WIDTH, { damping: 20, stiffness: 200 });
+            isSwipeOpen.value = true;
+          } else {
+            swipeX.value = withSpring(0, { damping: 20, stiffness: 200 });
+            isSwipeOpen.value = false;
+          }
+        }),
+    [swipeX, isSwipeOpen]);
+
+    const rowAnimatedStyle = useAnimatedStyle(() => ({
+      transform: [{ translateX: swipeX.value }],
+    }));
+
+    const actionsOpacity = useAnimatedStyle(() => ({
+      opacity: interpolate(swipeX.value, [-SWIPE_ACTION_WIDTH, 0], [1, 0]),
+    }));
 
     const providerColor = getProviderColor(item.provider);
     const providerIcon = getProviderIcon(item.provider);
 
     return (
-      <View ref={itemRef}>
-        <TouchableOpacity
-          style={[styles.item, { borderBottomColor: borderColor + 'AA' }]}
-          onPress={onPress}
-          onLongPress={handleLongPress}
-          delayLongPress={350}
-          activeOpacity={0.7}
-        >
-          <View style={[styles.providerAvatar, { backgroundColor: providerColor + '1A' }]}>
-            <Ionicons name={providerIcon} size={scale(16)} color={providerColor} />
-          </View>
-          <View style={styles.itemContent}>
-            <View style={styles.itemTitleRow}>
-              <Text style={[styles.itemTitle, { color: textColor }]} numberOfLines={1}>
-                {item.title}
-              </Text>
-              <Text style={[styles.itemTime, { color: textSecondary }]}>
-                {getRelativeTime(item.updatedAt)}
-              </Text>
-            </View>
-            <Text style={[styles.itemPreview, { color: textSecondary }]} numberOfLines={2}>
-              {item.lastMessagePreview}
-            </Text>
-            <View style={styles.chipRow}>
-              <ModelChip model={item.model} color={providerColor} isDark={isDark} />
-            </View>
-          </View>
-        </TouchableOpacity>
+      <Animated.View style={deleteAnimStyle}>
+      <View ref={itemRef} style={styles.swipeContainer}>
+        {/* Arka plan: Arşivle + Sil butonları */}
+        <Animated.View style={[styles.swipeActions, actionsOpacity]}>
+          <TouchableOpacity style={styles.swipeArchive} onPress={handleArchive} activeOpacity={0.8}>
+            <Ionicons name="archive-outline" size={scale(18)} color="#fff" />
+            <Text style={styles.swipeActionLabel}>Arşivle</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.swipeDelete} onPress={handleDelete} activeOpacity={0.8}>
+            <Ionicons name="trash-outline" size={scale(18)} color="#fff" />
+            <Text style={styles.swipeActionLabel}>Sil</Text>
+          </TouchableOpacity>
+        </Animated.View>
+
+        {/* Row içeriği */}
+        <GestureDetector gesture={swipeGesture}>
+          <Animated.View style={rowAnimatedStyle}>
+            <TouchableOpacity
+              style={[
+                styles.item,
+                { borderBottomColor: borderColor + 'AA' },
+                isHighlighted && styles.itemHighlighted,
+              ]}
+              onPress={() => {
+                if (isSwipeOpen.value) { closeSwipe(); return; }
+                onPress();
+              }}
+              onLongPress={handleLongPress}
+              delayLongPress={350}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.providerAvatar, { backgroundColor: providerColor + '1A' }]}>
+                <Ionicons name={providerIcon} size={scale(16)} color={providerColor} />
+              </View>
+              <View style={styles.itemContent}>
+                <View style={styles.itemTitleRow}>
+                  <Text style={[styles.itemTitle, { color: textColor }]} numberOfLines={1}>
+                    {item.title}
+                  </Text>
+                  <Text style={[styles.itemTime, { color: textSecondary }]}>
+                    {getRelativeTime(item.updatedAt)}
+                  </Text>
+                </View>
+                <Text style={[styles.itemPreview, { color: textSecondary }]} numberOfLines={2}>
+                  {item.lastMessagePreview}
+                </Text>
+                <View style={styles.chipRow}>
+                  <ModelChip model={item.model} color={providerColor} isDark={isDark} />
+                </View>
+              </View>
+            </TouchableOpacity>
+          </Animated.View>
+        </GestureDetector>
       </View>
+      </Animated.View>
     );
   },
 );
@@ -261,32 +361,54 @@ const ContextMenuOverlay = React.memo(({
   t: (k: string) => string;
 }) => {
   const { height: screenHeight } = useWindowDimensions();
-  const menuTop = contextMenu.pageY + contextMenu.pageH + 6;
-  const clampedTop = menuTop + CONTEXT_MENU_HEIGHT > screenHeight
-    ? contextMenu.pageY - CONTEXT_MENU_HEIGHT - 6
-    : menuTop;
-  const menuLeft = (panelWidth - CONTEXT_MENU_WIDTH) / 2;
+
+  // Menüyü row'un hemen üstüne koy; sığmazsa altına al
+  // Row ortasına hizala, biraz yukarı çek — responsive (pageH bazlı)
+  const menuAbove = contextMenu.pageY + contextMenu.pageH / 2 - CONTEXT_MENU_HEIGHT / 2 - contextMenu.pageH * -0.2;
+  const menuBelow = contextMenu.pageY + contextMenu.pageH + 4;
+  const clampedTop = menuAbove >= 0 ? menuAbove : menuBelow;
+
+  // Menüyü row'un ortasına hizala, panel sınırına taşmasın
+  const menuLeft = Math.min(
+    Math.max(8, contextMenu.pageX + (contextMenu.pageW - CONTEXT_MENU_WIDTH) / 2),
+    panelWidth - CONTEXT_MENU_WIDTH - 8,
+  );
 
   return (
     <Animated.View
-      style={StyleSheet.absoluteFill}
-      entering={FadeIn.duration(160)}
-      exiting={FadeOut.duration(140)}
+      style={[styles.contextOverlayWrapper, { width: panelWidth }]}
+      entering={FadeIn.duration(140)}
+      exiting={FadeOut.duration(120)}
     >
-      <Pressable style={StyleSheet.absoluteFill} onPress={onDismiss}>
+      {/* Dismiss alanı — transparan, blur yok */}
+      <Pressable style={StyleSheet.absoluteFill} onPress={onDismiss} />
+
+      {/* Sadece row blur — pageY/pageH koordinatlarına göre konumlu */}
+      <View
+        pointerEvents="none"
+        style={{
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          top: contextMenu.pageY,
+          height: contextMenu.pageH,
+          overflow: 'hidden',
+        }}
+      >
         {Platform.OS === 'ios' ? (
           <BlurView
-            intensity={isDark ? 40 : 30}
+            intensity={isDark ? 10 : 6}
             tint={isDark ? 'dark' : 'light'}
             style={StyleSheet.absoluteFill}
           />
         ) : (
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.45)' }]} />
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(128,128,128,0.10)' }]} />
         )}
-      </Pressable>
+      </View>
 
+      {/* Floating menü */}
       <Animated.View
-        entering={FadeIn.springify().damping(22).stiffness(280)}
+        entering={FadeIn.springify().damping(20).stiffness(300)}
         style={[styles.contextMenu, { top: clampedTop, left: menuLeft, backgroundColor: surfaceColor, borderColor }]}
       >
         <TouchableOpacity style={styles.contextItem} onPress={onArchive} activeOpacity={0.75}>
@@ -307,8 +429,11 @@ const ContextMenuOverlay = React.memo(({
 // SearchOverlay — focus olunca tüm listeyi kaplar
 // ---------------------------------------------------------------------------
 
+type QueryState = 'empty' | 'typing' | 'ready';
+
 interface SearchOverlayProps {
-  query: string;
+  queryState: QueryState;
+  queryText: string; // sadece empty state gösterimi için
   isSearching: boolean;
   isFetchingNext: boolean;
   hasNext: boolean;
@@ -326,7 +451,8 @@ interface SearchOverlayProps {
 }
 
 const SearchOverlay = React.memo(({
-  query,
+  queryState,
+  queryText,
   isSearching,
   isFetchingNext,
   hasNext,
@@ -342,9 +468,6 @@ const SearchOverlay = React.memo(({
   backgroundColor,
   t,
 }: SearchOverlayProps) => {
-  const trimmedQuery = query.trim();
-  const isApiQuery = trimmedQuery.length >= 2;
-  const isTyping = trimmedQuery.length === 1;
 
   const renderSearchResult = useCallback(({ item }: { item: ChatSearchResultItem }) => (
     <TouchableOpacity
@@ -423,7 +546,7 @@ const SearchOverlay = React.memo(({
       entering={FadeIn.duration(180)}
       exiting={FadeOut.duration(140)}
     >
-      {isApiQuery ? (
+      {queryState === 'ready' ? (
         // --- API arama sonuçları (>= 2 karakter) ---
         isSearching ? (
           <View style={styles.searchLoading}>
@@ -436,7 +559,7 @@ const SearchOverlay = React.memo(({
               Sonuç bulunamadı
             </Text>
             <Text style={[styles.searchHint, { color: textSecondary }]}>
-              "{trimmedQuery}" için eşleşme yok
+              "{queryText}" için eşleşme yok
             </Text>
           </View>
         ) : (
@@ -453,7 +576,7 @@ const SearchOverlay = React.memo(({
             />
           </View>
         )
-      ) : isTyping ? (
+      ) : queryState === 'typing' ? (
         // --- 1 karakter: bekle ---
         <View style={styles.searchLoading}>
           <Text style={[styles.searchHint, { color: textSecondary }]}>
@@ -521,6 +644,9 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
   const [modalVisible, setModalVisible] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
   const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const { mutate: deleteChatMutate } = useDeleteChatMutation();
 
   // Fixed area height (header + toolbar) — SearchOverlay top offset
   const [fixedAreaHeight, setFixedAreaHeight] = useState(0);
@@ -561,12 +687,26 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
     }
   }, [searchFocused]);
 
+  // QueryState: debouncedQuery'e göre hesapla — kullanıcı yazarken overlay re-render olmaz,
+  // sadece debounce bitince (400ms) 'ready' geçişi olur ve API sorgusu tetiklenir.
+  // searchQuery.length > 0 iken 'typing' göster ki kullanıcı feedback alsın.
+  const queryState = useMemo((): QueryState => {
+    const rawLen = searchQuery.trim().length;
+    const debouncedLen = debouncedQuery.trim().length;
+    if (rawLen === 0) return 'empty';
+    if (debouncedLen < 2) return 'typing';
+    return 'ready';
+  }, [searchQuery, debouncedQuery]);
+
   const chats = useMemo(
     () => sessions.filter((c) => c?.id && !deletedIds.has(c.id)),
     [sessions, deletedIds],
   );
 
-  const extraData = useMemo(() => ({ deletedIds, colors }), [deletedIds, colors]);
+  const extraData = useMemo(
+    () => ({ deletedIds, colors, highlightedId: contextMenu?.chat.id, deletingId }),
+    [deletedIds, colors, contextMenu, deletingId],
+  );
 
   // ---------------------------------------------------------------------------
   // Open / Close animations
@@ -602,7 +742,7 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
   const panGesture = useMemo(
     () =>
       Gesture.Pan()
-        .activeOffsetX([-8, 8])
+        .activeOffsetX([-12, 999])
         .failOffsetY([-15, 15])
         .onUpdate((e) => {
           'worklet';
@@ -700,79 +840,100 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
   );
 
   const handleLongPress = useCallback(
-    (chat: ChatListItem, pageY: number, pageH: number) => {
+    (chat: ChatListItem, pageY: number, pageH: number, pageX: number, pageW: number) => {
       haptics.medium();
-      setContextMenu({ chat, pageY, pageH });
+      setContextMenu({ chat, pageY, pageH, pageX, pageW });
     },
     [haptics],
   );
 
-  const optimisticRemove = useCallback(
-    (chatId: string) => {
-      type IC = InfiniteData<PaginatedChatsResponse>;
-      const previous = queryClient.getQueryData<IC>(CHAT_QUERY_KEYS.chatsList);
-
-      setDeletedIds((prev) => new Set([...prev, chatId]));
-
-      queryClient.setQueryData<IC>(CHAT_QUERY_KEYS.chatsList, (old) => {
-        if (!old) return old;
-        return {
-          ...old,
-          pages: old.pages.map((page) => ({
-            ...page,
-            items: (page.items ?? []).filter((c) => c.id !== chatId),
-          })),
-        };
-      });
-
-      return () => {
-        if (previous) queryClient.setQueryData(CHAT_QUERY_KEYS.chatsList, previous);
-        setDeletedIds((prev) => {
-          const next = new Set(prev);
-          next.delete(chatId);
-          return next;
-        });
-      };
+  // Silme onayı + animasyon + mutation — hem context menu hem swipe için ortak
+  const confirmDelete = useCallback(
+    (item: ChatListItem) => {
+      Alert.alert(
+        t('chatHistory.deleteAlertTitle'),
+        t('chatHistory.deleteAlertMessage', { title: item.title }),
+        [
+          { text: t('chatHistory.deleteAlertCancel'), style: 'cancel' },
+          {
+            text: t('chatHistory.deleteAlertConfirm'),
+            style: 'destructive',
+            onPress: () => {
+              // 1. Animate out başlat
+              setDeletingId(item.id);
+              // 2. Animasyon bitmeden mutation başlat (220ms sonra cache'den kaldır)
+              setTimeout(() => {
+                setDeletedIds((prev) => new Set([...prev, item.id]));
+                setDeletingId(null);
+              }, 220);
+              // 3. Remote sil
+              deleteChatMutate(item.id, {
+                onSuccess: () => {
+                  toast.success(t('chatHistory.deleteSuccess'));
+                },
+                onError: () => {
+                  // Rollback: cache useDeleteChatMutation onError'da zaten restore ediyor
+                  setDeletedIds((prev) => {
+                    const next = new Set(prev);
+                    next.delete(item.id);
+                    return next;
+                  });
+                  toast.error(t('chatHistory.deleteError'));
+                },
+              });
+            },
+          },
+        ],
+      );
     },
-    [queryClient],
+    [t, deleteChatMutate],
   );
 
   const handleDelete = useCallback(() => {
     if (!contextMenu) return;
-    const { id } = contextMenu.chat;
+    const item = contextMenu.chat;
     setContextMenu(null);
-    const rollback = optimisticRemove(id);
-    realmService.clearSessionMessages(id);
-    // TODO: deleteChat(id).catch(() => rollback());
-    void rollback;
-  }, [contextMenu, optimisticRemove]);
+    confirmDelete(item);
+  }, [contextMenu, confirmDelete]);
 
   const handleArchive = useCallback(() => {
     if (!contextMenu) return;
     const { id } = contextMenu.chat;
     setContextMenu(null);
-    const rollback = optimisticRemove(id);
-    // TODO: archiveChat(id).catch(() => rollback());
-    void rollback;
-  }, [contextMenu, optimisticRemove]);
+    // TODO: archiveChat mutation eklenince buraya gelecek
+    setDeletedIds((prev) => new Set([...prev, id]));
+  }, [contextMenu]);
 
   // ---------------------------------------------------------------------------
   // Render item
   // ---------------------------------------------------------------------------
+
+  const handleSwipeDelete = useCallback((item: ChatListItem) => {
+    confirmDelete(item);
+  }, [confirmDelete]);
+
+  const handleSwipeArchive = useCallback((item: ChatListItem) => {
+    // TODO: archiveChat mutation eklenince
+    setDeletedIds((prev) => new Set([...prev, item.id]));
+  }, []);
 
   const renderItem = useCallback(
     ({ item }: { item: ChatListItem }) => (
       <ChatHistoryItem
         item={item}
         onPress={() => handleSelectChat(item)}
-        onLongPress={(pageY, pageH) => handleLongPress(item, pageY, pageH)}
+        onLongPress={(pageY, pageH, pageX, pageW) => handleLongPress(item, pageY, pageH, pageX, pageW)}
+        onDelete={() => handleSwipeDelete(item)}
+        onArchive={() => handleSwipeArchive(item)}
+        isHighlighted={contextMenu?.chat.id === item.id}
+        isDeleting={deletingId === item.id}
         textColor={colors.text}
         textSecondary={colors.textSecondary}
         borderColor={colors.border}
         isDark={isDark}
       />
     ),
-    [handleSelectChat, handleLongPress, colors, isDark],
+    [handleSelectChat, handleLongPress, handleSwipeDelete, handleSwipeArchive, contextMenu, deletingId, colors, isDark],
   );
 
   // ---------------------------------------------------------------------------
@@ -826,6 +987,7 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
                 showCancelOnFocus
                 cancelLabel={t('chatHistory.cancel')}
                 containerStyle={styles.searchInputContainer}
+                themeColors={colors}
               />
               <Animated.View style={[styles.newChatWrap, newChatAnimatedStyle]}>
                 <Button
@@ -883,7 +1045,8 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
           {/* Search overlay — focus olunca liste üstünü kaplar, fixed area altından başlar */}
           {searchFocused && (
             <SearchOverlay
-              query={searchQuery}
+              queryState={queryState}
+              queryText={debouncedQuery}
               isSearching={isSearching}
               isFetchingNext={isSearchFetchingNext}
               hasNext={searchHasNext ?? false}
@@ -900,24 +1063,24 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
               t={t}
             />
           )}
-
-          {/* Context menu overlay */}
-          {contextMenu && (
-            <ContextMenuOverlay
-              contextMenu={contextMenu}
-              onDelete={handleDelete}
-              onArchive={handleArchive}
-              onDismiss={() => setContextMenu(null)}
-              isDark={isDark}
-              surfaceColor={colors.surface}
-              borderColor={colors.border}
-              textColor={colors.text}
-              panelWidth={DRAWER_WIDTH}
-              t={t}
-            />
-          )}
         </Animated.View>
       </GestureDetector>
+
+      {/* Context menu — panel dışında render: overflow:hidden'dan etkilenmiyor, BlurView çalışır */}
+      {contextMenu && (
+        <ContextMenuOverlay
+          contextMenu={contextMenu}
+          onDelete={handleDelete}
+          onArchive={handleArchive}
+          onDismiss={() => setContextMenu(null)}
+          isDark={isDark}
+          surfaceColor={colors.surface}
+          borderColor={colors.border}
+          textColor={colors.text}
+          panelWidth={DRAWER_WIDTH}
+          t={t}
+        />
+      )}
     </Modal>
   );
 };
@@ -1062,6 +1225,49 @@ const styles = StyleSheet.create({
     fontSize: scale(14),
     textAlign: 'center',
     lineHeight: scale(20),
+  },
+  // Context overlay — sadece drawer alanı, sağa taşmaz
+  contextOverlayWrapper: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    bottom: 0,
+    // width prop'tan gelir
+  },
+  // Swipe actions
+  swipeContainer: {
+    overflow: 'hidden',
+  },
+  swipeActions: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: SWIPE_ACTION_WIDTH,
+    flexDirection: 'row',
+  },
+  swipeArchive: {
+    flex: 1,
+    backgroundColor: palette.geminiBlue,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  swipeDelete: {
+    flex: 1,
+    backgroundColor: palette.error,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  swipeActionLabel: {
+    color: '#fff',
+    fontSize: scale(10),
+    fontFamily: fontFamily.medium,
+  },
+  // Item highlight — long press yapılan row
+  itemHighlighted: {
+    backgroundColor: 'rgba(128,128,128,0.12)',
   },
   // Context menu
   contextMenu: {

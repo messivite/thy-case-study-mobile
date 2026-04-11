@@ -22,6 +22,7 @@ type Props = {
   hasMore?: boolean;
   isLoadingMore?: boolean;
   welcomeGreeting?: string;
+  welcomeGreetingReady?: boolean;
   welcomeQuestion?: string;
   quickActions?: WelcomeQuickAction[];
   onQuickActionPress?: (action: WelcomeQuickAction) => void;
@@ -36,6 +37,7 @@ export const MessageList: React.FC<Props> = ({
   hasMore = false,
   isLoadingMore = false,
   welcomeGreeting,
+  welcomeGreetingReady = false,
   welcomeQuestion,
   quickActions = [],
   onQuickActionPress,
@@ -125,6 +127,7 @@ export const MessageList: React.FC<Props> = ({
       return (
         <HomeWelcomePanel
           greeting={welcomeGreeting}
+          greetingReady={welcomeGreetingReady}
           question={welcomeQuestion}
           quickActions={quickActions}
           onQuickActionPress={onQuickActionPress}

@@ -165,6 +165,7 @@ export default function HomeScreen() {
           hasMore={hasNextPage}
           isLoadingMore={isFetchingNextPage}
           welcomeGreeting={t('assistant.welcomeGreeting', { name: displayName })}
+          welcomeGreetingReady={!isGuest && profileReady}
           welcomeQuestion={t('assistant.welcomeQuestion')}
           quickActions={quickActions}
           onQuickActionPress={handleQuickActionPress}

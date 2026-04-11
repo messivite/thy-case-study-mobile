@@ -57,6 +57,7 @@
     "forgotPasswordHeroLine2": "THY Study Case",
     "forgotPasswordSubtitle": "Hesabınıza kayıtlı e-posta adresini girin.",
     "forgotPasswordSubmit": "Sıfırlama bağlantısı gönder",
+    "sending": "Gönderiliyor...",
     "rememberPassword": "Şifrenizi mi hatırladınız?",
     "loginWithGoogle": "Google ile Giriş Yap",
     "loginWithEmail": "E-posta ile Giriş Yap",
@@ -185,7 +186,13 @@
     "noResultsFor": "\"{{query}}\" için eşleşme yok",
     "noRecentSearches": "Arama geçmişi yok",
     "recentSection": "En yeni",
-    "cancel": "İptal"
+    "cancel": "İptal",
+    "deleteAlertTitle": "Sohbeti Sil",
+    "deleteAlertMessage": "\"{{title}}\" sohbeti kalıcı olarak silinecek. Bu işlem geri alınamaz.",
+    "deleteAlertConfirm": "Sil",
+    "deleteAlertCancel": "Vazgeç",
+    "deleteSuccess": "Sohbetiniz başarıyla silindi",
+    "deleteError": "Sohbet silinemedi, tekrar deneyin"
   },
   "toast": {
     "loginSuccess": "Giriş başarılı",
@@ -196,6 +203,10 @@
     "logoutSuccess": "Çıkış işleminiz başarıyla tamamlandı.",
     "registerSuccess": "Hesap oluşturuldu",
     "registerVerifyEmail": "Kaydı tamamlamak için e-postanızı kontrol edin ve hesabınızı doğrulayın.",
+    "registerErrorAlreadyRegistered": "Bu e-posta adresiyle zaten bir hesap var",
+    "registerErrorPasswordTooShort": "Şifre en az 6 karakter olmalıdır",
+    "forgotPasswordSuccess": "Sıfırlama bağlantısı e-posta adresinize gönderildi",
+    "forgotPasswordError": "Gönderim başarısız, lütfen tekrar deneyin",
     "messageSent": "Mesaj gönderildi",
     "offlineQueued": "Çevrimdışı – mesaj kuyruğa alındı",
     "copied": "Kopyalandı",

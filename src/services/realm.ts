@@ -150,7 +150,7 @@ export const realmService = {
         model: s.model,
         createdAt: s.lastMessageAt,
         updatedAt: s.lastMessageAt,
-        lastMessagePreview: '',
+        lastMessagePreview: s.lastMessagePreview ?? '',
       }));
 
       const syncedAt = Math.max(...arr.map((s) => s.syncedAt));
@@ -179,6 +179,7 @@ export const realmService = {
               provider: item.provider,
               model: item.model,
               lastMessageAt: item.updatedAt,
+              lastMessagePreview: item.lastMessagePreview ?? '',
               syncedAt: now,
             },
             Realm.UpdateMode.Modified,
@@ -262,6 +263,25 @@ export const realmService = {
           const toDelete = Array.from(all).slice(MAX_MESSAGES_PER_SESSION);
           for (const m of toDelete) realm.delete(m);
         }
+      });
+    } catch {
+      // sessizce gec
+    }
+  },
+
+  /**
+   * Session'i ve tum mesajlarini Realm'den siler. Async.
+   */
+  async deleteSession(sessionId: string): Promise<void> {
+    try {
+      const realm = await openRealm();
+      realm.write(() => {
+        const session = realm.objectForPrimaryKey<RealmSession>('RealmSession', sessionId);
+        if (session) realm.delete(session);
+        const msgs = realm
+          .objects<RealmMessage>('RealmMessage')
+          .filtered('sessionId == $0', sessionId);
+        realm.delete(msgs);
       });
     } catch {
       // sessizce gec

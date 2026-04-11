@@ -10,6 +10,7 @@
     "ios:xcode": "open ./ios/THYAsistan.xcworkspace",
     "log:ios": "xcrun simctl spawn booted log stream --level debug --style compact --predicate 'process == \"THYAsistan\" OR eventMessage CONTAINS[c] \"RCTFatal\" OR eventMessage CONTAINS[c] \"SIGABRT\" OR eventMessage CONTAINS[c] \"uncaught\" OR eventMessage CONTAINS[c] \"NativeModule\" OR eventMessage CONTAINS[c] \"terminating app\"'",
     "web": "expo start --web",
+    "postinstall": "patch-package",
     "test": "jest",
     "test:ci": "jest --ci --coverage --maxWorkers=2",
     "typecheck": "tsc --noEmit",

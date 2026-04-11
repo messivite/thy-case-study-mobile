@@ -17,7 +17,7 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
       filePath: path.resolve(__dirname, 'node_modules/tslib/tslib.es6.mjs'),
     };
   }
-  if (originalResolveRequest) {
+if (originalResolveRequest) {
     return originalResolveRequest(context, moduleName, platform);
   }
   return context.resolveRequest(context, moduleName, platform);

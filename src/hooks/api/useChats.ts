@@ -6,11 +6,12 @@ import {
   InfiniteData,
   UseQueryOptions,
 } from '@tanstack/react-query';
-import { useMemo, useEffect } from 'react';
+import { useMemo, useEffect, useRef } from 'react';
 import {
   getChats,
   getChat,
   createChat,
+  deleteChat,
   sendMessage,
   streamChat,
   syncChat,
@@ -45,15 +46,39 @@ export const CHAT_QUERY_KEYS = {
 };
 
 /**
- * GET /api/chats — non-paginated
+ * GET /api/chats — tüm chatleri döner (non-paginated)
  */
-export const useGetChatsQuery = (
-  options?: Partial<UseQueryOptions<GetChatsResponse, Error>>,
-) =>
+export const useGetChatsQuery = (options?: Partial<UseQueryOptions<GetChatsResponse, Error>>) =>
   useQuery<GetChatsResponse, Error>({
     queryKey: CHAT_QUERY_KEYS.chats,
     queryFn: () => getChats(),
     ...options,
+  });
+
+/**
+ * GET /api/chats/:chatId
+ */
+export const useGetChatQuery = (chatId: string) =>
+  useQuery<GetChatResponse, Error>({
+    queryKey: CHAT_QUERY_KEYS.chat(chatId),
+    queryFn: () => getChat(chatId),
+    enabled: !!chatId,
+  });
+
+/**
+ * POST /api/chats/:chatId/stream — streaming chat
+ */
+export const useStreamChatMutation = (chatId: string) =>
+  useMutation<void, Error, { payload: StreamChatRequest; callbacks: StreamChatCallbacks }>({
+    mutationFn: ({ payload, callbacks }) => streamChat(chatId, payload, callbacks),
+  });
+
+/**
+ * POST /api/chats/:chatId/sync
+ */
+export const useSyncChatMutation = (chatId: string) =>
+  useMutation<SyncChatResponse, Error, SyncChatRequest>({
+    mutationFn: (payload) => syncChat(chatId, payload),
   });
 
 /**
@@ -95,16 +120,62 @@ export const useInfiniteChatsQuery = (isAnonymous = false) => {
     enabled: !isAnonymous,
   });
 
-  // API'den gelen tum sessionlari Realm'e yaz (drawer'dan bagimsiz)
+  // API'den gelen sessionlari Realm'e yaz — sadece yeni fetch oldugunda (dataUpdatedAt degisince)
+  const lastSyncedAt = useRef(0);
   useEffect(() => {
-    if (!query.data) return;
+    if (!query.data || !query.dataUpdatedAt) return;
+    if (query.dataUpdatedAt <= lastSyncedAt.current) return; // ayni veri, yazma
+    lastSyncedAt.current = query.dataUpdatedAt;
     const allItems = query.data.pages.flatMap((p) => p.items);
     if (allItems.length > 0) {
       realmService.saveSessions(allItems);
     }
-  }, [query.data]);
+  }, [query.dataUpdatedAt]); // query.data degil, timestamp'e bagla
 
   return query;
+};
+
+/**
+ * DELETE /api/chats/:chatId — optimistic remove + rollback
+ *
+ * onMutate  : chatsList cache'inden optimistik olarak çıkar
+ * onError   : rollback
+ * onSuccess : Realm'den de sil
+ */
+export const useDeleteChatMutation = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<void, Error, string, { previous: InfiniteData<PaginatedChatsResponse> | undefined }>({
+    mutationFn: (chatId) => deleteChat(chatId),
+    onMutate: async (chatId) => {
+      await queryClient.cancelQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
+      const previous = queryClient.getQueryData<InfiniteData<PaginatedChatsResponse>>(
+        CHAT_QUERY_KEYS.chatsList,
+      );
+      queryClient.setQueryData<InfiniteData<PaginatedChatsResponse>>(
+        CHAT_QUERY_KEYS.chatsList,
+        (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            pages: old.pages.map((page) => ({
+              ...page,
+              items: page.items.filter((c) => c.id !== chatId),
+            })),
+          };
+        },
+      );
+      return { previous };
+    },
+    onError: (_err, _chatId, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(CHAT_QUERY_KEYS.chatsList, context.previous);
+      }
+    },
+    onSuccess: (_data, chatId) => {
+      void realmService.deleteSession(chatId);
+    },
+  });
 };
 
 /**
@@ -113,24 +184,6 @@ export const useInfiniteChatsQuery = (isAnonymous = false) => {
 export const useCreateChatMutation = () =>
   useMutation<CreateChatResponse, Error, CreateChatRequest>({
     mutationFn: (payload) => createChat(payload),
-  });
-
-/**
- * GET /api/chats/:chatId
- */
-export const useGetChatQuery = (chatId: string) =>
-  useQuery<GetChatResponse, Error>({
-    queryKey: CHAT_QUERY_KEYS.chat(chatId),
-    queryFn: () => getChat(chatId),
-    enabled: !!chatId,
-  });
-
-/**
- * POST /api/chats/:chatId/stream
- */
-export const useStreamChatMutation = (chatId: string) =>
-  useMutation<void, Error, { payload: StreamChatRequest; callbacks: StreamChatCallbacks }>({
-    mutationFn: ({ payload, callbacks }) => streamChat(chatId, payload, callbacks),
   });
 
 /**
@@ -210,14 +263,6 @@ export const useSendMessageMutation = (chatId: string) => {
 };
 
 /**
- * POST /api/chats/:chatId/sync
- */
-export const useSyncChatMutation = (chatId: string) =>
-  useMutation<SyncChatResponse, Error, SyncChatRequest>({
-    mutationFn: (payload) => syncChat(chatId, payload),
-  });
-
-/**
  * GET /api/chats/:chatId/messages?direction=older&cursor=X — Infinite scroll
  *
  * initialData : Realm cache — mount'ta aninda render
@@ -252,14 +297,17 @@ export const useInfiniteMessagesQuery = (sessionId: string, isAnonymous = false)
     enabled: !!sessionId && !isAnonymous,
   });
 
-  // API'den gelen mesajlari Realm'e yaz
+  // API'den gelen mesajlari Realm'e yaz — sadece yeni fetch oldugunda
+  const lastMsgSyncedAt = useRef(0);
   useEffect(() => {
-    if (!sessionId || !query.data) return;
+    if (!sessionId || !query.data || !query.dataUpdatedAt) return;
+    if (query.dataUpdatedAt <= lastMsgSyncedAt.current) return;
+    lastMsgSyncedAt.current = query.dataUpdatedAt;
     const allMessages = query.data.pages.flatMap((p) => p.messages);
     if (allMessages.length > 0) {
       realmService.saveMessages(sessionId, allMessages);
     }
-  }, [sessionId, query.data]);
+  }, [sessionId, query.dataUpdatedAt]);
 
   return query;
 };

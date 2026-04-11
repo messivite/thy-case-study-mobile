@@ -168,7 +168,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
       style={[
         styles.gradientOuter,
         {
-          paddingTop: safeAreaTop ? insets.top + spacing[1] : 0,
+          paddingTop: safeAreaTop ? insets.top : 0,
         },
         style,
       ]}

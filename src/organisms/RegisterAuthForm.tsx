@@ -72,15 +72,28 @@ export function RegisterAuthForm({ contentScale, webScaled, footer }: Props) {
       const result = await signUp(data.email.trim(), data.password);
       if (result.ok) {
         if (result.data) {
+          // Session geldi → dispatchSession zaten çağrıldı → (auth)/_layout guard → /(tabs)
           toast.success(t('toast.registerSuccess'));
-          router.push('/(tabs)');
         } else {
+          // E-posta doğrulama aktif → doğrulama maili gönderildi
           toast.info(t('toast.registerVerifyEmail'));
-          router.replace('/(auth)/login');
+          router.replace('/(auth)/welcome');
         }
-      } else {
-        toast.error(result.error);
+        return;
       }
+      const errorKey = (() => {
+        switch (result.errorCode) {
+          case 'USER_ALREADY_REGISTERED':
+            return 'toast.registerErrorAlreadyRegistered';
+          case 'PASSWORD_TOO_SHORT':
+            return 'toast.registerErrorPasswordTooShort';
+          case 'RATE_LIMITED':
+            return 'toast.loginErrorRateLimited';
+          default:
+            return 'toast.loginErrorUnknown';
+        }
+      })();
+      toast.error(t(errorKey));
     },
     [signUp, t],
   );
