@@ -338,10 +338,6 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     marginTop: spacing[1],
   },
-  footerHidden: {
-    opacity: 0,
-    pointerEvents: 'none',
-  },
   actions: {
     flexDirection: 'row',
     gap: spacing[2],

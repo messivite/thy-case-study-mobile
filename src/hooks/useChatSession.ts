@@ -14,6 +14,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { streamChat, sendMessage as sendMessageApi } from '@/api/chat.api';
 import { Attachment, Message } from '@/types/chat.types';
 import { ChatMessage } from '@/types/chat.api.types';
+import { realmService } from '@/services/realm';
 import { toast } from '@/lib/toast';
 
 // ---------------------------------------------------------------------------
@@ -181,32 +182,73 @@ export const useChatSession = () => {
     lastStreamTextRef.current = finalText;
 
     const cid = activeChatIdRef.current ?? null;
+    const msgId = streamingMsgIdRef.current;
+    const meta = streamMetaRef.current;
+    const userMsg = optimisticUserMsgRef.current;
+    const now = new Date().toISOString();
 
-    // isStreamingActive'i kapat — optimisticUserMsg'yi burada temizleme.
-    // messages içinde gerçek user mesajı gelene kadar optimistic görünmeye devam etmeli,
-    // aksi hâlde user mesajı bir frame kaybolur ve liste kayar (flash).
-    // Temizleme useChatSession'daki useEffect ile yapılır.
-    setIsStreamingActive(false);
+    if (cid && msgId && msgId !== 'streaming') {
+      const userChatMsg: ChatMessage | null = userMsg && meta.userMessageId ? {
+        id: meta.userMessageId,
+        role: 'user',
+        content: userMsg.content,
+        createdAt: now,
+        provider: meta.provider ?? '',
+        model: meta.model ?? '',
+      } : null;
+      const assistantChatMsg: ChatMessage = {
+        id: msgId,
+        role: 'assistant',
+        content: finalText,
+        createdAt: now,
+        provider: meta.provider ?? '',
+        model: meta.model ?? '',
+      };
+
+      // React Query cache'ine yaz — sıra: eski→yeni (Realm/API ile aynı)
+      queryClient.setQueryData<import('@tanstack/react-query').InfiniteData<import('@/types/chat.api.types').PaginatedMessagesResponse>>(
+        CHAT_QUERY_KEYS.messages(cid),
+        (old) => {
+          if (!old) return old;
+          const lastPageIdx = old.pages.length - 1;
+          const lastPage = old.pages[lastPageIdx];
+          const existing = lastPage?.messages ?? [];
+          // optimistic ID'leri filtrele, gerçek mesajları sona ekle
+          const filtered = existing.filter(
+            (m) => m.id !== userMsg?.id && m.id !== meta.userMessageId && m.id !== msgId,
+          );
+          const newMessages = [
+            ...filtered,
+            ...(userChatMsg ? [userChatMsg] : []),
+            assistantChatMsg,
+          ];
+          const newPages = old.pages.map((p, i) =>
+            i === lastPageIdx ? { ...p, messages: newMessages } : p,
+          );
+          return { ...old, pages: newPages };
+        },
+      );
+
+      // Realm'e yaz
+      const msgsToSave: ChatMessage[] = [
+        ...(userChatMsg ? [userChatMsg] : []),
+        assistantChatMsg,
+      ];
+      realmService.saveMessages(cid, msgsToSave);
+    }
+
+    unstable_batchedUpdates(() => {
+      setIsStreamingActive(false);
+      setOptimisticUserMsg(null);
+    });
 
     if (cid) {
-      // refetchQueries: cache'e dokunmaz, arka planda fetch eder, gelince üstüne yazar.
-      queryClient.refetchQueries({ queryKey: CHAT_QUERY_KEYS.messages(cid) });
-      queryClient.refetchQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
+      // Sadece chatlist — mesajlar setQueryData ile güncellendi, API fetch'e gerek yok
+      queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queryClient]);
 
-  // optimisticUserMsg'yi messages içinde gerçek user mesajı görününce temizle.
-  // Streaming bitti ama API henüz gelmedi → optimistic hâlâ gösterilmeli (user mesajı kaybolmasın).
-  // streamMetaRef.userMessageId gerçek ID'yi tutar; messages içinde görününce temizle.
-  useEffect(() => {
-    if (!optimisticUserMsg) return;
-    if (isStreamingActive) return;
-    const realUserMsgId = streamMetaRef.current.userMessageId;
-    if (!realUserMsgId) return;
-    const found = messages.some((m) => m.id === realUserMsgId);
-    if (found) setOptimisticUserMsg(null);
-  }, [messages, optimisticUserMsg, isStreamingActive]);
 
   // ---------------------------------------------------------------------------
   // sendMessage

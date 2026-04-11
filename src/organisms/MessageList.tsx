@@ -15,6 +15,7 @@ import { toast } from '@/lib/toast';
 import { ActivityThyLoading } from '@/atoms/ActivityThyLoading';
 
 const AT_TOP_THRESHOLD = 80;
+const STREAMING_KEY = '__streaming__';
 
 
 type Props = {
@@ -219,6 +220,15 @@ export const MessageList: React.FC<Props> = ({
     }
   }, [streamingMessageId]);
 
+  // Streaming bitince en üste scroll et — yeni mesaj her zaman görünür
+  const prevIsStreamingRef = useRef(isStreamingActive);
+  useEffect(() => {
+    if (prevIsStreamingRef.current && !isStreamingActive) {
+      listRef.current?.scrollToOffset({ offset: 0, animated: false });
+    }
+    prevIsStreamingRef.current = isStreamingActive;
+  }, [isStreamingActive]);
+
   // speakingMessageId'yi ref'te tut — renderItem dep array'inden çıkar
   const speakingMessageIdRef = useRef(speakingMessageId);
   useEffect(() => { speakingMessageIdRef.current = speakingMessageId; }, [speakingMessageId]);
@@ -226,7 +236,7 @@ export const MessageList: React.FC<Props> = ({
   useEffect(() => { handleSpeakToggleRef.current = handleSpeakToggle; }, [handleSpeakToggle]);
 
   const renderItem = useCallback(({ item, index }: { item: Message; index: number }) => {
-    const isStreamingItem = !!streamingMessageId && item.id === streamingMessageId;
+    const isStreamingItem = item.id === STREAMING_KEY;
     const isOptimisticUserItem = !!optimisticUserMsgId && item.id === optimisticUserMsgId;
     // wasStreamingItem: gerçek ID eşleşmesi VEYA streaming sonrası gelen yeni mesaj
     const wasStreamingItem = item.id === lastStreamingMsgIdRef.current ||
@@ -254,7 +264,7 @@ export const MessageList: React.FC<Props> = ({
         onRegenerate={onRegenerate}
         isSpeaking={speakingMessageIdRef.current === item.id}
         skipEntryAnimation={isStreamingItem || isOptimisticUserItem || wasStreamingItem}
-        hideFooter={isStreamingItem}
+        hideFooter={isStreamingItem || wasStreamingItem}
         hideModelLabel={isLastMessage || wasStreamingItem}
         onSpeakToggle={
           item.role === 'assistant' && item.content.trim().length > 0
@@ -264,7 +274,6 @@ export const MessageList: React.FC<Props> = ({
       />
     );
   }, [
-    streamingMessageId,
     isStreamingActive,
     optimisticUserMsgId,
     pendingStreamSV,
@@ -274,14 +283,6 @@ export const MessageList: React.FC<Props> = ({
     onLike,
     onRegenerate,
   ]);
-
-  if (isSessionLoading) {
-    return (
-      <View style={styles.center}>
-        <ActivityThyLoading mode="float" size={48} />
-      </View>
-    );
-  }
 
   // Streaming bittikten sonra gerçek mesaj cache'e girene kadar placeholder'ı göstermeye devam et.
   // Kullanılan ID: aktif streamingMessageId VEYA son streaming'in ID'si (lastStreamingMsgIdRef).
@@ -308,12 +309,13 @@ export const MessageList: React.FC<Props> = ({
     ? messages.some((m) => m.id === activeOrLastId)
     : messagesLengthAtStreamEndRef.current !== null && messages.length > messagesLengthAtStreamEndRef.current;
 
-  // Placeholder göster:
-  // - streaming aktifse VE mesaj henüz cache'de yoksa (setQueryData erken yazınca çift önle)
-  // - streaming bitti + gerçek ID var + mesaj henüz cache'de yok
-  const shouldShowPlaceholder =
-    (isStreamingActive && !!activeOrLastId && !streamingAlreadyInMessages) ||
-    (hasRealId && !streamingAlreadyInMessages && !!lastStreamingMsgIdRef.current);
+  // Placeholder sadece streaming BİTTİKTEN SONRA göster — API gelene kadar boşluğu doldur.
+  // Streaming aktifken StreamingBubble zaten displayMessages'a renderItem üzerinden giriyor,
+  // ayrıca placeholder eklersek çift kart olur.
+  const shouldShowPlaceholder = !isStreamingActive &&
+    hasRealId &&
+    !streamingAlreadyInMessages &&
+    !!lastStreamingMsgIdRef.current;
 
   // Streaming aktifken content boş (StreamingBubble kendi yönetiyor),
   // bittikten sonra lastStreamTextRef'ten son metni al — API gelene kadar flash olmaz.
@@ -321,6 +323,15 @@ export const MessageList: React.FC<Props> = ({
 
 
 
+  // Streaming aktifken StreamingBubble için displayMessages'a dummy item ekle.
+  // İçerik boş — renderItem içinde StreamingBubble döndürür, içeriği SV'den okur.
+  // Streaming item ID'si sabit sentinel — onMeta gelince streamingMessageId değişse de
+  // FlatList key değişmez, StreamingBubble unmount/remount olmaz → flash yok.
+  const streamingItem: Message | null = isStreamingActive
+    ? { id: STREAMING_KEY, role: 'assistant', content: '', timestamp: 0 }
+    : null;
+
+  // Streaming bittikten sonra API gelene kadar son metni gösteren placeholder.
   const streamingPlaceholder: Message | null = shouldShowPlaceholder
     ? { id: activeOrLastId!, role: 'assistant', content: placeholderContent, timestamp: Date.now() }
     : null;
@@ -332,19 +343,23 @@ export const MessageList: React.FC<Props> = ({
       lastStreamingMsgIdRef.current = null;
       preStreamMsgIdsRef.current = new Set();
     }
-  // shouldShowPlaceholder primitive değil, effect dep olarak güvenli
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shouldShowPlaceholder, isStreamingActive]);
 
-  // optimisticUserMsg: messages içinde gerçek ID'siyle zaten varsa ekleme — çift önle
-  const optimisticAlreadyInMessages = !!optimisticUserMsg &&
-    messages.some((m) => m.id === optimisticUserMsg.id);
+  // Placeholder aktifken activeOrLastId'yi messages'dan çıkar — çift kart önle.
+  const cachedMessages = streamingPlaceholder
+    ? messages.filter((m) => m.id !== activeOrLastId)
+    : messages;
 
   const displayMessages: Message[] = [
+    ...(streamingItem ? [streamingItem] : []),
     ...(streamingPlaceholder ? [streamingPlaceholder] : []),
-    ...(!optimisticAlreadyInMessages && optimisticUserMsg ? [optimisticUserMsg] : []),
-    ...messages.slice().reverse(),
+    ...(optimisticUserMsg ? [optimisticUserMsg] : []),
+    ...cachedMessages.slice().reverse(),
   ];
+
+
+
 
 
   // WelcomePanel overlay için greeting'i parçala
@@ -356,6 +371,14 @@ export const MessageList: React.FC<Props> = ({
         return { greetingPrefix, greetingName };
       })()
     : null;
+
+  if (isSessionLoading) {
+    return (
+      <View style={styles.center}>
+        <ActivityThyLoading mode="float" size={48} />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.fill}>
