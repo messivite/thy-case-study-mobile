@@ -388,9 +388,16 @@ const GrowingTextInput = React.forwardRef<GrowingTextInputHandle, GrowingTextInp
       getText: () => value,
       clear: () => {
         setValue('');
+        // Parent'taki hasText'i sıfırla — stale closure'dan kurtarmak için hemen çağır
+        if (prevHasText.current) {
+          prevHasText.current = false;
+          onHasTextChange(false);
+        }
+        onCharCountChange(0);
       },
       focus: () => inputRef.current?.focus(),
-    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }), [value, onHasTextChange, onCharCountChange]);
 
     const [atMax, setAtMax] = useState(false);
 
@@ -615,10 +622,9 @@ const ChatInputInner: React.FC<Props> = ({
     if (attachments.some((a) => a.status === 'uploading')) return;
     haptics.medium();
     onSend(trimmed, attachments);
+    // clear() içinde onHasTextChange(false) ve onCharCountChange(0) çağrılır
     growingInputRef.current?.clear();
-    setHasText(false);
     setExpandVisible(false);
-    setCharCount(0);
     setAttachments([]);
   }, [attachments, disabled, onSend, haptics]);
 

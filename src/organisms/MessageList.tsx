@@ -82,6 +82,8 @@ export const MessageList: React.FC<Props> = ({
   // geçişinde MotiView entry animation'ı skip etmek için
   const lastStreamingMsgIdRef = useRef<string | null>(null);
   const prevChatIdRef = useRef<string | null | undefined>(undefined);
+  // Kullanıcı scroll etmeden (mount anında) onEndReached tetiklenmesin
+  const userHasScrolledRef = useRef(false);
 
   const hasContent = messages.length > 0 || !!optimisticUserMsg || !!streamingMessageId || isTyping;
   const welcomeReady = quickActions.length > 0 && !!welcomeGreeting && !!welcomeQuestion && !!onQuickActionPress;
@@ -98,13 +100,14 @@ export const MessageList: React.FC<Props> = ({
   // showWelcome: panel gösterilmişse ve exit tamamlanmadıysa mount'ta tut
   const showWelcome = canShowWelcome || isWelcomeExitingRef.current;
 
-  // canShowWelcome false olur olmaz — aynı render'da isWelcomeExiting'i başlat
-  // useEffect gecikmesi yok: render sırasında ref + sonraki render'a state set
-  if (!canShowWelcome && welcomeShownRef.current && !isWelcomeExitingRef.current) {
-    isWelcomeExitingRef.current = true;
-    // Sonraki mikro-görevde state'i de güncelle (render-in-render yasak)
-    Promise.resolve().then(() => setIsWelcomeExiting(true));
-  }
+  // canShowWelcome false olunca exit animasyonunu başlat
+  // (render fonksiyonu içinde setState yasak — useEffect zorunlu)
+  useEffect(() => {
+    if (!canShowWelcome && welcomeShownRef.current && !isWelcomeExitingRef.current) {
+      isWelcomeExitingRef.current = true;
+      setIsWelcomeExiting(true);
+    }
+  }, [canShowWelcome]);
 
   const handleWelcomeExitComplete = useCallback(() => {
     welcomeShownRef.current = false;
@@ -129,6 +132,7 @@ export const MessageList: React.FC<Props> = ({
     prevCountRef.current = 0;
     unreadCountRef.current = 0;
     isAtLatestRef.current = true;
+    userHasScrolledRef.current = false;
     lastStreamingMsgIdRef.current = null;
     welcomeShownRef.current = false;
     isWelcomeExitingRef.current = false;
@@ -151,6 +155,7 @@ export const MessageList: React.FC<Props> = ({
   }, [messages.length, optimisticUserMsg, streamingMessageId]);
 
   const handleScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    userHasScrolledRef.current = true;
     const offsetY = e.nativeEvent.contentOffset.y;
     const atLatest = offsetY < AT_TOP_THRESHOLD;
     isAtLatestRef.current = atLatest;
@@ -159,6 +164,11 @@ export const MessageList: React.FC<Props> = ({
       onScrollStateChange?.(false, 0);
     }
   }, [onScrollStateChange]);
+
+  const handleEndReached = useCallback(() => {
+    if (!userHasScrolledRef.current) return;
+    if (hasMore && !isLoadingMore && onLoadMore) onLoadMore();
+  }, [hasMore, isLoadingMore, onLoadMore]);
 
   const handleScrollToLatest = useCallback(() => {
     listRef.current?.scrollToOffset({ offset: 0, animated: true });
@@ -259,8 +269,12 @@ export const MessageList: React.FC<Props> = ({
     );
   }
 
-  // Streaming item: gerçek mesaj cache'e girince gösterme (aynı ID zaten messages'ta)
-  const streamingAlreadyInMessages = !!streamingMessageId && messages.some((m) => m.id === streamingMessageId);
+  // Streaming item: gerçek mesaj cache'e girince gösterme.
+  // streamingMessageId artık gerçek assistant ID'si olabilir (ya da henüz meta gelmemişse 'streaming').
+  // Her iki durumda da ID eşleşince placeholder'ı gizle.
+  const streamingAlreadyInMessages = !!streamingMessageId &&
+    streamingMessageId !== 'streaming' &&
+    messages.some((m) => m.id === streamingMessageId);
 
   // Streaming item için placeholder — StreamingBubble kendi içeriğini yönetiyor
   const streamingPlaceholder: Message | null = (!streamingAlreadyInMessages && streamingMessageId && isStreamingActive)
@@ -301,12 +315,10 @@ export const MessageList: React.FC<Props> = ({
             </View>
           ) : null
         }
-        onEndReached={() => {
-          if (hasMore && !isLoadingMore && onLoadMore) onLoadMore();
-        }}
+        onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
         onScroll={handleScroll}
-        scrollEventThrottle={100}
+        scrollEventThrottle={32}
         showsVerticalScrollIndicator={false}
         keyboardDismissMode="interactive"
         keyboardShouldPersistTaps="handled"

@@ -9,7 +9,7 @@
  *   │  [search input]             │  ← DrawerToolbar (fix)
  *   │  [+ Yeni Sohbet]            │
  *   ├─────────────────────────────┤
- *   │  FlashList (scroll)         │
+ *   │  FlatList (scroll)         │
  *   └─────────────────────────────┘
  *
  * Focus olunca SearchOverlay tam panel'i kaplar:
@@ -32,8 +32,8 @@ import React, {
 } from 'react';
 import {
   Alert,
-  InteractionManager,
   LayoutChangeEvent,
+  FlatList,
   Modal,
   Platform,
   Pressable,
@@ -43,7 +43,6 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
-import { BlurView } from 'expo-blur';
 import Animated, {
   FadeIn,
   FadeOut,
@@ -55,7 +54,6 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { FlashList } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -66,7 +64,6 @@ import { ActivityThyLoading } from '@/atoms/ActivityThyLoading';
 import { SearchInput, SearchInputRef } from '@/atoms/SearchInput';
 import { AppHeader } from '@/organisms/AppHeader';
 import { useTheme } from '@/hooks/useTheme';
-import { useHaptics } from '@/hooks/useHaptics';
 import { useI18n } from '@/hooks/useI18n';
 import { useAppDispatch } from '@/store/hooks';
 import { setSessionId } from '@/store/slices/chatSlice';
@@ -87,6 +84,7 @@ import { fontFamily } from '@/constants/typography';
 export interface ChatHistoryDrawerProps {
   visible: boolean;
   onClose: () => void;
+  onHidden?: () => void;
   onSelectChat?: (chat: ChatListItem) => void;
   onNewChat?: () => void;
 }
@@ -151,16 +149,7 @@ function getProviderIcon(p: string): React.ComponentProps<typeof Ionicons>['name
 // ---------------------------------------------------------------------------
 
 const ModelChip = React.memo(({ model, color, isDark }: { model: string; color: string; isDark: boolean }) => (
-  <View style={[styles.chip, { borderColor: color + '40' }]}>
-    {Platform.OS === 'ios' ? (
-      <BlurView
-        intensity={isDark ? 28 : 18}
-        tint={isDark ? 'dark' : 'light'}
-        style={StyleSheet.absoluteFill}
-      />
-    ) : (
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? color + '18' : color + '12' }]} />
-    )}
+  <View style={[styles.chip, { borderColor: color + '40', backgroundColor: isDark ? color + '18' : color + '12' }]}>
     <Ionicons name="hardware-chip-outline" size={scale(11)} color={color} style={styles.chipIcon} />
     <Text style={[styles.chipText, { color }]} numberOfLines={1}>{model}</Text>
   </View>
@@ -172,11 +161,9 @@ const ModelChip = React.memo(({ model, color, isDark }: { model: string; color: 
 
 interface ChatHistoryItemProps {
   item: ChatListItem;
-  onPress: () => void;
-  onLongPress: (pageY: number, pageH: number, pageX: number, pageW: number) => void;
-  onDelete: () => void;
-  onArchive: () => void;
-  isHighlighted: boolean;
+  onPress: (id: string) => void;
+  onDelete: (id: string) => void;
+  onArchive: (id: string) => void;
   isDeleting: boolean;
   textColor: string;
   textSecondary: string;
@@ -185,8 +172,7 @@ interface ChatHistoryItemProps {
 }
 
 const ChatHistoryItem = React.memo<ChatHistoryItemProps>(
-  ({ item, onPress, onLongPress, onDelete, onArchive, isHighlighted, isDeleting, textColor, textSecondary, borderColor, isDark }) => {
-    const itemRef = useRef<View>(null);
+  ({ item, onPress, onDelete, onArchive, isDeleting, textColor, textSecondary, borderColor, isDark }) => {
     const swipeX = useSharedValue(0);
     const isSwipeOpen = useSharedValue(false);
     const deleteProgress = useSharedValue(1); // 1=görünür, 0=silinmiş
@@ -204,12 +190,6 @@ const ChatHistoryItem = React.memo<ChatHistoryItemProps>(
       overflow: 'hidden',
     }));
 
-    const handleLongPress = useCallback(() => {
-      itemRef.current?.measureInWindow((x, y, w, h) => {
-        onLongPress(y, h, x, w);
-      });
-    }, [onLongPress]);
-
     const closeSwipe = useCallback(() => {
       swipeX.value = withSpring(0, { damping: 20, stiffness: 200 });
       isSwipeOpen.value = false;
@@ -217,13 +197,13 @@ const ChatHistoryItem = React.memo<ChatHistoryItemProps>(
 
     const handleDelete = useCallback(() => {
       closeSwipe();
-      onDelete();
-    }, [closeSwipe, onDelete]);
+      onDelete(item.id);
+    }, [closeSwipe, onDelete, item.id]);
 
     const handleArchive = useCallback(() => {
       closeSwipe();
-      onArchive();
-    }, [closeSwipe, onArchive]);
+      onArchive(item.id);
+    }, [closeSwipe, onArchive, item.id]);
 
     const swipeGesture = useMemo(() =>
       Gesture.Pan()
@@ -262,7 +242,7 @@ const ChatHistoryItem = React.memo<ChatHistoryItemProps>(
 
     return (
       <Animated.View style={deleteAnimStyle}>
-      <View ref={itemRef} style={styles.swipeContainer}>
+      <View style={styles.swipeContainer}>
         {/* Arka plan: Arşivle + Sil butonları */}
         <Animated.View style={[styles.swipeActions, actionsOpacity]}>
           <TouchableOpacity style={styles.swipeArchive} onPress={handleArchive} activeOpacity={0.8}>
@@ -282,14 +262,11 @@ const ChatHistoryItem = React.memo<ChatHistoryItemProps>(
               style={[
                 styles.item,
                 { borderBottomColor: borderColor + 'AA' },
-                isHighlighted && styles.itemHighlighted,
               ]}
               onPress={() => {
                 if (isSwipeOpen.value) { closeSwipe(); return; }
-                onPress();
+                onPress(item.id);
               }}
-              onLongPress={handleLongPress}
-              delayLongPress={350}
               activeOpacity={0.7}
             >
               <View style={[styles.providerAvatar, { backgroundColor: providerColor + '1A' }]}>
@@ -396,15 +373,7 @@ const ContextMenuOverlay = React.memo(({
           overflow: 'hidden',
         }}
       >
-        {Platform.OS === 'ios' ? (
-          <BlurView
-            intensity={isDark ? 10 : 6}
-            tint={isDark ? 'dark' : 'light'}
-            style={StyleSheet.absoluteFill}
-          />
-        ) : (
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(128,128,128,0.10)' }]} />
-        )}
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(128,128,128,0.10)' }]} />
       </View>
 
       {/* Floating menü */}
@@ -565,7 +534,7 @@ const SearchOverlay = React.memo(({
           </View>
         ) : (
           <View style={styles.overlayList}>
-            <FlashList
+            <FlatList
               data={searchResults}
               keyExtractor={(item) => item.sessionId}
               renderItem={renderSearchResult}
@@ -595,7 +564,7 @@ const SearchOverlay = React.memo(({
       ) : (
         // --- Boş query: Realm'den son 20 session ---
         <View style={styles.overlayList}>
-          <FlashList
+          <FlatList
             data={focusInitialSessions}
             keyExtractor={(item) => item.id}
             renderItem={renderRecentSession}
@@ -616,12 +585,12 @@ const SearchOverlay = React.memo(({
 export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
   visible,
   onClose,
+  onHidden,
   onSelectChat,
   onNewChat,
 }) => {
   const { colors, isDark } = useTheme();
   const { t } = useI18n();
-  const haptics = useHaptics();
   const dispatch = useAppDispatch();
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
@@ -637,13 +606,15 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
 
   const onCloseRef = useRef(onClose);
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+  const onHiddenRef = useRef(onHidden);
+  useEffect(() => { onHiddenRef.current = onHidden; }, [onHidden]);
+  const callOnHidden = useCallback(() => { onHiddenRef.current?.(); }, []);
   const closeDrawerFromGesture = useCallback(() => {
     onCloseRef.current?.();
   }, []);
 
   // UI state
   const [modalVisible, setModalVisible] = useState(false);
-  const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
   const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -705,8 +676,8 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
   );
 
   const extraData = useMemo(
-    () => ({ deletedIds, highlightedId: contextMenu?.chat.id, deletingId }),
-    [deletedIds, contextMenu, deletingId],
+    () => ({ deletedIds, deletingId }),
+    [deletedIds, deletingId],
   );
 
   // ---------------------------------------------------------------------------
@@ -717,20 +688,17 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
     if (visible) {
       translateX.value = -DRAWER_WIDTH;
       overlayOpacity.value = 0;
-      const task = InteractionManager.runAfterInteractions(() => {
-        setModalVisible(true);
-        requestAnimationFrame(() => {
-          translateX.value = withSpring(0, SPRING_CONFIG);
-          overlayOpacity.value = withTiming(0.55, { duration: 260 });
-        });
+      setModalVisible(true);
+      requestAnimationFrame(() => {
+        translateX.value = withSpring(0, SPRING_CONFIG);
+        overlayOpacity.value = withTiming(0.55, { duration: 260 });
       });
-      return () => task.cancel();
+      return;
     } else {
       overlayOpacity.value = withTiming(0, { duration: 200 });
       translateX.value = withTiming(-DRAWER_WIDTH, { duration: 220 }, (done) => {
-        if (done) runOnJS(setModalVisible)(false);
+        if (done) { runOnJS(setModalVisible)(false); runOnJS(callOnHidden)(); }
       });
-      setContextMenu(null);
       // Arama state'ini temizle
       setSearchFocused(false);
       setSearchQuery('');
@@ -831,26 +799,22 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
   // Chat handlers
   // ---------------------------------------------------------------------------
 
-  const handleSelectChat = useCallback(
-    (chat: ChatListItem) => {
+  const chatsRef = useRef(chats);
+  useEffect(() => { chatsRef.current = chats; }, [chats]);
+
+  const handleSelectChatById = useCallback(
+    (id: string) => {
       if (onSelectChat) {
-        // Caller (index.tsx) loadSession ile yönetiyor — kendi dispatch'imizi çağırma
-        onSelectChat(chat);
+        const chat = chatsRef.current.find((c) => c.id === id);
+        if (chat) onSelectChat(chat);
       } else {
-        dispatch(setSessionId(chat.id));
+        dispatch(setSessionId(id));
         onClose();
       }
     },
     [dispatch, onSelectChat, onClose],
   );
 
-  const handleLongPress = useCallback(
-    (chat: ChatListItem, pageY: number, pageH: number, pageX: number, pageW: number) => {
-      haptics.medium();
-      setContextMenu({ chat, pageY, pageH, pageX, pageW });
-    },
-    [haptics],
-  );
 
   // Silme onayı + animasyon + mutation — hem context menu hem swipe için ortak
   const confirmDelete = useCallback(
@@ -894,43 +858,32 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
     [t, deleteChatMutate],
   );
 
-  const handleDelete = useCallback(() => {
-    if (!contextMenu) return;
-    const item = contextMenu.chat;
-    setContextMenu(null);
-    confirmDelete(item);
-  }, [contextMenu, confirmDelete]);
-
-  const handleArchive = useCallback(() => {
-    if (!contextMenu) return;
-    const { id } = contextMenu.chat;
-    setContextMenu(null);
-    // TODO: archiveChat mutation eklenince buraya gelecek
-    setDeletedIds((prev) => new Set([...prev, id]));
-  }, [contextMenu]);
 
   // ---------------------------------------------------------------------------
   // Render item
   // ---------------------------------------------------------------------------
 
-  const handleSwipeDelete = useCallback((item: ChatListItem) => {
-    confirmDelete(item);
+  const handleSwipeDeleteById = useCallback((id: string) => {
+    const item = chatsRef.current.find((c) => c.id === id);
+    if (item) confirmDelete(item);
   }, [confirmDelete]);
 
-  const handleSwipeArchive = useCallback((item: ChatListItem) => {
+  const handleSwipeArchiveById = useCallback((id: string) => {
     // TODO: archiveChat mutation eklenince
-    setDeletedIds((prev) => new Set([...prev, item.id]));
+    setDeletedIds((prev) => new Set([...prev, id]));
   }, []);
+
+  const handleEndReached = useCallback(() => {
+    if (hasNextPage && !isFetchingNextPage) fetchNextPage();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   const renderItem = useCallback(
     ({ item }: { item: ChatListItem }) => (
       <ChatHistoryItem
         item={item}
-        onPress={() => handleSelectChat(item)}
-        onLongPress={(pageY, pageH, pageX, pageW) => handleLongPress(item, pageY, pageH, pageX, pageW)}
-        onDelete={() => handleSwipeDelete(item)}
-        onArchive={() => handleSwipeArchive(item)}
-        isHighlighted={contextMenu?.chat.id === item.id}
+        onPress={handleSelectChatById}
+        onDelete={handleSwipeDeleteById}
+        onArchive={handleSwipeArchiveById}
         isDeleting={deletingId === item.id}
         textColor={colors.text}
         textSecondary={colors.textSecondary}
@@ -938,7 +891,7 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
         isDark={isDark}
       />
     ),
-    [handleSelectChat, handleLongPress, handleSwipeDelete, handleSwipeArchive, contextMenu, deletingId, colors, isDark],
+    [handleSelectChatById, handleSwipeDeleteById, handleSwipeArchiveById, deletingId, colors, isDark],
   );
 
   // ---------------------------------------------------------------------------
@@ -1017,16 +970,14 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
             ) : chats.length === 0 ? (
               <EmptyState textColor={colors.text} textSecondary={colors.textSecondary} t={t} />
             ) : (
-              <FlashList
+              <FlatList
                 data={chats}
                 keyExtractor={(item) => item.id}
                 renderItem={renderItem}
                 extraData={extraData}
                 showsVerticalScrollIndicator={false}
                 onEndReachedThreshold={0.2}
-                onEndReached={() => {
-                  if (hasNextPage && !isFetchingNextPage) fetchNextPage();
-                }}
+                onEndReached={handleEndReached}
                 ListFooterComponent={
                   isFetchingNextPage ? (
                     <View style={styles.footerLoader}>
@@ -1060,7 +1011,7 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
               topOffset={fixedAreaHeight}
               onLoadMore={searchFetchNext}
               onSelectResult={handleSelectSearchResult}
-              onSelectSession={handleSelectChat}
+              onSelectSession={(item) => handleSelectChatById(item.id)}
               textColor={colors.text}
               textSecondary={colors.textSecondary}
               borderColor={colors.border}
@@ -1071,21 +1022,6 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
         </Animated.View>
       </GestureDetector>
 
-      {/* Context menu — panel dışında render: overflow:hidden'dan etkilenmiyor, BlurView çalışır */}
-      {contextMenu && (
-        <ContextMenuOverlay
-          contextMenu={contextMenu}
-          onDelete={handleDelete}
-          onArchive={handleArchive}
-          onDismiss={() => setContextMenu(null)}
-          isDark={isDark}
-          surfaceColor={colors.surface}
-          borderColor={colors.border}
-          textColor={colors.text}
-          panelWidth={DRAWER_WIDTH}
-          t={t}
-        />
-      )}
     </Modal>
   );
 };

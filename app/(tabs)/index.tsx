@@ -66,6 +66,7 @@ export default function HomeScreen() {
 
   const [modelPickerVisible, setModelPickerVisible] = useState(false);
   const [drawerVisible, setDrawerVisible] = useState(false);
+  const [drawerEverOpened, setDrawerEverOpened] = useState(false);
   const closeModelPicker = useCallback(() => setModelPickerVisible(false), []);
   const openModelPicker = useCallback(() => setModelPickerVisible(true), []);
 
@@ -73,9 +74,9 @@ export default function HomeScreen() {
   const chatPlaceholder = useMemo(() => t('assistant.placeholder'), [t]);
   const aiModelName = useMemo(() => selectedAIModel?.displayName, [selectedAIModel?.displayName]);
 
-  // Sol kenardan sağa swipe → drawer aç
-  const openDrawer = useCallback(() => setDrawerVisible(true), []);
+  const openDrawer = useCallback(() => { setDrawerEverOpened(true); setDrawerVisible(true); }, []);
   const closeDrawer = useCallback(() => setDrawerVisible(false), []);
+  const handleDrawerHidden = useCallback(() => {}, []);
   const handleSelectChat = useCallback((chat: import('@/types/chat.api.types').ChatListItem) => {
     loadSession(chat.id);
     setDrawerVisible(false);
@@ -225,12 +226,15 @@ export default function HomeScreen() {
         variant="liquidGlass"
       />
 
-      <ChatHistoryDrawer
-        visible={drawerVisible}
-        onClose={closeDrawer}
-        onNewChat={startNewChat}
-        onSelectChat={handleSelectChat}
-      />
+      {drawerEverOpened && (
+        <ChatHistoryDrawer
+          visible={drawerVisible}
+          onClose={closeDrawer}
+          onHidden={handleDrawerHidden}
+          onNewChat={startNewChat}
+          onSelectChat={handleSelectChat}
+        />
+      )}
     </View>
   );
 }

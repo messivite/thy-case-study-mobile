@@ -246,11 +246,16 @@ export const useInfiniteMessagesQuery = (sessionId: string, isAnonymous = false)
     if (query.dataUpdatedAt <= lastMsgSyncedAt.current) return;
     lastMsgSyncedAt.current = query.dataUpdatedAt;
 
-    // pages[0] = en yeni mesajlar (ilk fetch, direction=older, cursor=undefined)
-    // fetchNextPage ile gelen eski sayfaları Realm'e yazmıyoruz — sadece son 40 cache'lenir
-    const latestPage = query.data.pages[0]?.messages ?? [];
-    if (latestPage.length > 0) {
-      realmService.saveMessages(sessionId, latestPage);
+    // Tüm yüklü sayfaları düzleştir, en yeni 40'ı Realm'e yaz.
+    // pages[0] varsayımı kırılabilir (fetchNextPage sonrası sıra değişebilir),
+    // flatten ile her zaman doğru 40 mesaj cache'lenir.
+    const allMsgs = query.data.pages.flatMap((p) => p.messages ?? []);
+    // createdAt'e göre azalan sıra → en yeni 40
+    const newest40 = [...allMsgs]
+      .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''))
+      .slice(0, 40);
+    if (newest40.length > 0) {
+      realmService.saveMessages(sessionId, newest40);
     }
   }, [sessionId, query.dataUpdatedAt]);
 

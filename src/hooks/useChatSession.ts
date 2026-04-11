@@ -11,7 +11,6 @@ import {
 } from '@/hooks/api/useChats';
 import { useQueryClient } from '@tanstack/react-query';
 import { streamChat, sendMessage as sendMessageApi } from '@/api/chat.api';
-import { realmService } from '@/services/realm';
 import { Attachment, Message } from '@/types/chat.types';
 import { ChatMessage } from '@/types/chat.api.types';
 import { toast } from '@/lib/toast';
@@ -157,44 +156,65 @@ export const useChatSession = () => {
   const handleStreamingComplete = useCallback((finalText: string) => {
     if (streamCancelledRef.current) return;
 
-    const cid = activeChatIdRef.current ?? chatId ?? null;
+    const cid = activeChatIdRef.current ?? null;
     const userMsg = optimisticUserMsgRef.current;
     const { provider, model, userMessageId } = streamMetaRef.current;
     const assistantMsgId = streamingMsgIdRef.current;
     const now = Date.now();
 
     if (cid) {
-      const msgsToSave = [
-        {
-          id: userMessageId ?? userMsg?.id ?? `user_${now}`,
-          role: 'user' as const,
-          content: userMsg?.content ?? '',
-          createdAt: new Date(userMsg?.timestamp ?? now).toISOString(),
-          provider: provider ?? '',
-          model: model ?? '',
+      // Realm'e yazmıyoruz — useInfiniteMessagesQuery'nin useEffect'i invalidate
+      // sonrası gelen fresh API verisini Realm'e yazacak. Double-write yok.
+      // Cache'e optimistic olarak iki mesajı ekle — API'den gelen veriyle merge edilecek.
+      const userMsgId = userMessageId ?? userMsg?.id ?? `user_${now}`;
+      const asstMsgId = assistantMsgId !== 'streaming' ? assistantMsgId : `asst_${now}`;
+      queryClient.setQueryData(
+        CHAT_QUERY_KEYS.messages(cid),
+        (old: import('@tanstack/react-query').InfiniteData<import('@/types/chat.api.types').PaginatedMessagesResponse> | undefined) => {
+          if (!old) return old;
+          const newMsgs: import('@/types/chat.api.types').ChatMessage[] = [
+            {
+              id: userMsgId,
+              role: 'user',
+              content: userMsg?.content ?? '',
+              createdAt: new Date(userMsg?.timestamp ?? now).toISOString(),
+              provider: provider ?? '',
+              model: model ?? '',
+            },
+            {
+              id: asstMsgId,
+              role: 'assistant',
+              content: finalText,
+              createdAt: new Date(now).toISOString(),
+              provider: provider ?? '',
+              model: model ?? '',
+            },
+          ];
+          // pages[0] = en yeni sayfa; başına ekle (duplicate guard: aynı id varsa skip)
+          const existingIds = new Set(old.pages[0]?.messages.map((m) => m.id) ?? []);
+          const toAdd = newMsgs.filter((m) => !existingIds.has(m.id));
+          if (toAdd.length === 0) return old;
+          return {
+            ...old,
+            pages: [
+              { ...old.pages[0], messages: [...(old.pages[0]?.messages ?? []), ...toAdd] },
+              ...old.pages.slice(1),
+            ],
+          };
         },
-        {
-          id: assistantMsgId !== 'streaming' ? assistantMsgId : `asst_${now}`,
-          role: 'assistant' as const,
-          content: finalText,
-          createdAt: new Date(now).toISOString(),
-          provider: provider ?? '',
-          model: model ?? '',
-        },
-      ];
+      );
 
-      // Realm'e yaz — React Query initialData Realm'den geliyor, invalidate sonrası güncel gelir
-      realmService.saveMessages(cid, msgsToSave).then(() => {
-        queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.messages(cid) });
-        queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
-      });
+      // invalidate → API refetch → useEffect Realm'e yazar
+      queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.messages(cid) });
+      queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
     }
 
     unstable_batchedUpdates(() => {
       setIsStreamingActive(false);
       setOptimisticUserMsg(null);
     });
-  }, [queryClient, chatId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queryClient]);
 
   // ---------------------------------------------------------------------------
   // sendMessage
@@ -452,9 +472,11 @@ export const useChatSession = () => {
     return null;
   }, [chatId, chatsData]);
 
-  // streamingMessageId: isStreamingActive olduğu sürece sabit '__streaming__' sentinel.
-  // StreamingBubble hemen mount edilir; WaitingBubble kendi içinde loading gösterir.
-  const streamingMessageId = isStreamingActive ? '__streaming__' : null;
+  // streamingMessageId: isStreamingActive olduğu sürece gerçek assistant mesaj ID'sini
+  // (ya da henüz meta gelmemişse sabit sentinel) döndür.
+  // Bu sayede streaming bitip mesaj cache'e girdiğinde FlatList aynı key'i reuse eder
+  // → StreamingBubble→MessageBubble geçişi anlık değil, key korunuyor.
+  const streamingMessageId = isStreamingActive ? streamingMsgIdRef.current : null;
 
   return {
     messages,
