@@ -3,7 +3,6 @@ import { View, StyleSheet, ActivityIndicator, FlatList, NativeSyntheticEvent, Na
 import * as Speech from 'expo-speech';
 import { Message } from '@/types/chat.types';
 import { MessageBubble } from '@/molecules/MessageBubble';
-import { ScrollToBottomButton } from '@/molecules/ScrollToBottomButton';
 import { ActivityThyLoading } from '@/atoms/ActivityThyLoading';
 import { radius } from '@/constants/spacing';
 import { Text } from '@/atoms/Text';
@@ -62,6 +61,8 @@ type Props = {
   welcomeQuestion?: string;
   quickActions?: WelcomeQuickAction[];
   onQuickActionPress?: (action: WelcomeQuickAction) => void;
+  onScrollStateChange?: (scrolledUp: boolean, unreadCount: number) => void;
+  onScrollToLatestRef?: React.MutableRefObject<(() => void) | null>;
 };
 
 export const MessageList: React.FC<Props> = ({
@@ -81,6 +82,8 @@ export const MessageList: React.FC<Props> = ({
   welcomeQuestion,
   quickActions = [],
   onQuickActionPress,
+  onScrollStateChange,
+  onScrollToLatestRef,
 }) => {
   const { colors } = useTheme();
   const { t, currentLanguage } = useI18n();
@@ -88,19 +91,18 @@ export const MessageList: React.FC<Props> = ({
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
   // inverted modda offset=0 = en yeni mesaj (görsel olarak en altta)
   // Kullanıcı eski mesajlara kaydırınca offset artar
-  const [showScrollBtn, setShowScrollBtn] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
   const isAtLatestRef = useRef(true); // offset=0 → en yeni mesajda mı?
   const prevCountRef = useRef(0);
+  const unreadCountRef = useRef(0);
 
   useEffect(() => () => { void Speech.stop(); }, []);
 
   // Session değişince sıfırla
   useEffect(() => {
     prevCountRef.current = 0;
+    unreadCountRef.current = 0;
     isAtLatestRef.current = true;
-    setShowScrollBtn(false);
-    setUnreadCount(0);
+    onScrollStateChange?.(false, 0);
   }, [chatId]);
 
   // Yeni mesaj gelince: en yenideyse badge yok (zaten görüyor), değilse badge göster
@@ -112,8 +114,8 @@ export const MessageList: React.FC<Props> = ({
     prevCountRef.current = total;
 
     if (!isAtLatestRef.current && added > 0) {
-      setUnreadCount((c) => c + added);
-      setShowScrollBtn(true);
+      unreadCountRef.current += added;
+      onScrollStateChange?.(true, unreadCountRef.current);
     }
   }, [messages.length, optimisticUserMsg, streamingMessage]);
 
@@ -123,16 +125,23 @@ export const MessageList: React.FC<Props> = ({
     const atLatest = offsetY < AT_TOP_THRESHOLD;
     isAtLatestRef.current = atLatest;
     if (atLatest) {
-      setShowScrollBtn(false);
-      setUnreadCount(0);
+      unreadCountRef.current = 0;
+      onScrollStateChange?.(false, 0);
     }
-  }, []);
+  }, [onScrollStateChange]);
 
   const handleScrollToLatest = useCallback(() => {
     listRef.current?.scrollToOffset({ offset: 0, animated: true });
-    setShowScrollBtn(false);
-    setUnreadCount(0);
-  }, []);
+    unreadCountRef.current = 0;
+    onScrollStateChange?.(false, 0);
+  }, [onScrollStateChange]);
+
+  // Dışarıdan scroll-to-latest tetiklenebilsin
+  useEffect(() => {
+    if (onScrollToLatestRef) {
+      onScrollToLatestRef.current = handleScrollToLatest;
+    }
+  }, [onScrollToLatestRef, handleScrollToLatest]);
 
   const handleSpeakToggle = useCallback((messageId: string, text: string) => {
     if (speakingMessageId === messageId) {
@@ -227,7 +236,7 @@ export const MessageList: React.FC<Props> = ({
         keyExtractor={(item) => item.id}
         inverted
         contentContainerStyle={styles.listContent}
-        // inverted'da header aşağıda (en eski mesajların üstünde = görsel olarak üst)
+        // inverted'da footer görsel olarak en üstte (en eski mesajların üstünde)
         ListFooterComponent={
           isLoadingMore ? (
             <View style={styles.loadingMore}>
@@ -243,18 +252,12 @@ export const MessageList: React.FC<Props> = ({
         onEndReached={() => {
           if (hasMore && !isLoadingMore && onLoadMore) onLoadMore();
         }}
-        onEndReachedThreshold={0.3}
+        onEndReachedThreshold={0.5}
         onScroll={handleScroll}
         scrollEventThrottle={100}
         showsVerticalScrollIndicator={false}
         keyboardDismissMode="interactive"
         keyboardShouldPersistTaps="handled"
-      />
-
-      <ScrollToBottomButton
-        visible={showScrollBtn}
-        unreadCount={unreadCount}
-        onPress={handleScrollToLatest}
       />
     </View>
   );

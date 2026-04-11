@@ -227,13 +227,14 @@ const styles = StyleSheet.create({
   bubbleRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    maxWidth: '85%',
   },
   bubbleRowUser: {
     flexDirection: 'row',
+    maxWidth: '75%',
   },
   bubbleRowAi: {
     flexDirection: 'row',
+    maxWidth: '85%',
   },
   bubble: {
     padding: spacing[3],

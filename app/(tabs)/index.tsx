@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { TouchableOpacity, StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,6 +15,7 @@ import { palette } from '@/constants/colors';
 import { ChatHistoryDrawer } from '@/organisms/ChatHistoryDrawer';
 import { ModelPickerSheet } from '@/organisms/ModelPickerSheet';
 import { WelcomeQuickAction } from '@/organisms/HomeWelcomePanel';
+import { ScrollToBottomButton } from '@/molecules/ScrollToBottomButton';
 
 export default function HomeScreen() {
   const { user, isGuest } = useAuth();
@@ -43,6 +44,18 @@ export default function HomeScreen() {
   // Session seçilmiş ama mesajlar henüz yüklenmemiş → spinner göster
   const isSessionLoading = !!chatId && (isLoading || (isFetching && messages.length === 0));
 
+  const [scrolledUp, setScrolledUp] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const scrollToLatestRef = useRef<(() => void) | null>(null);
+
+  const handleScrollStateChange = useCallback((isScrolledUp: boolean, count: number) => {
+    setScrolledUp(isScrolledUp);
+    setUnreadCount(count);
+  }, []);
+
+  const handleScrollToLatest = useCallback(() => {
+    scrollToLatestRef.current?.();
+  }, []);
 
   const [modelPickerVisible, setModelPickerVisible] = useState(false);
   const [drawerVisible, setDrawerVisible] = useState(false);
@@ -169,9 +182,17 @@ input={
           welcomeQuestion={t('assistant.welcomeQuestion')}
           quickActions={chatId ? [] : quickActions}
           onQuickActionPress={handleQuickActionPress}
+          onScrollStateChange={handleScrollStateChange}
+          onScrollToLatestRef={scrollToLatestRef}
         />
 
       </ChatLayout>
+
+      <ScrollToBottomButton
+        visible={scrolledUp}
+        unreadCount={unreadCount}
+        onPress={handleScrollToLatest}
+      />
 
       <ModelPickerSheet
         visible={modelPickerVisible}

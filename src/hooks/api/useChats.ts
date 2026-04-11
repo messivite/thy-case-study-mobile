@@ -233,15 +233,24 @@ export const useInfiniteMessagesQuery = (sessionId: string, isAnonymous = false)
   });
 
   // API fetch tamamlanınca Realm'e yaz
+  // lastMsgSyncedAt sessionId'ye bağlı — session değişince sıfırla
   const lastMsgSyncedAt = useRef(0);
+  const lastSyncedSessionId = useRef('');
   useEffect(() => {
     if (!sessionId || !query.data || !query.dataUpdatedAt) return;
+    // Session değişince ref'i sıfırla — yeni session'da ilk fetch her zaman yazılsın
+    if (lastSyncedSessionId.current !== sessionId) {
+      lastSyncedSessionId.current = sessionId;
+      lastMsgSyncedAt.current = 0;
+    }
     if (query.dataUpdatedAt <= lastMsgSyncedAt.current) return;
     lastMsgSyncedAt.current = query.dataUpdatedAt;
 
-    const firstPage = query.data.pages[0]?.messages ?? [];
-    if (firstPage.length > 0) {
-      realmService.saveMessages(sessionId, firstPage);
+    // pages[0] = en yeni mesajlar (ilk fetch, direction=older, cursor=undefined)
+    // fetchNextPage ile gelen eski sayfaları Realm'e yazmıyoruz — sadece son 40 cache'lenir
+    const latestPage = query.data.pages[0]?.messages ?? [];
+    if (latestPage.length > 0) {
+      realmService.saveMessages(sessionId, latestPage);
     }
   }, [sessionId, query.dataUpdatedAt]);
 
