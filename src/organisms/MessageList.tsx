@@ -210,6 +210,7 @@ export const MessageList: React.FC<Props> = ({
   }, [speakingMessageId]);
 
   // Streaming biterken gerçek ID'yi state'e kaydet — placeholder için kullanılır
+  // streamingMessageId 'streaming' sentinel ise ID bilinmiyor (stop/cancel) — kaydetme
   useEffect(() => {
     if (streamingMessageId && streamingMessageId !== 'streaming') {
       setLastStreamingMsgId(streamingMessageId);
@@ -217,13 +218,20 @@ export const MessageList: React.FC<Props> = ({
   }, [streamingMessageId]);
 
   // Streaming bitince en üste scroll et — yeni mesaj her zaman görünür
+  // Stop/cancel durumunda streamingMessageId 'streaming' sentinel'e döner —
+  // lastStreamingMsgId'yi temizle ki boş placeholder kalmasın
   const prevIsStreamingRef = useRef(isStreamingActive);
   useEffect(() => {
     if (prevIsStreamingRef.current && !isStreamingActive) {
       listRef.current?.scrollToOffset({ offset: 0, animated: false });
+      // Stop ile iptal edildiyse (ID hiç set edilmedi veya sentinel'e döndü)
+      if (!streamingMessageId || streamingMessageId === 'streaming') {
+        setLastStreamingMsgId(null);
+        preStreamMsgIdsRef.current = new Set();
+      }
     }
     prevIsStreamingRef.current = isStreamingActive;
-  }, [isStreamingActive]);
+  }, [isStreamingActive, streamingMessageId]);
 
   // speakingMessageId'yi ref'te tut — renderItem dep array'inden çıkar
   const speakingMessageIdRef = useRef(speakingMessageId);
@@ -294,10 +302,12 @@ export const MessageList: React.FC<Props> = ({
   // Placeholder sadece streaming BİTTİKTEN SONRA göster — API gelene kadar boşluğu doldur.
   // Streaming aktifken StreamingBubble zaten displayMessages'a renderItem üzerinden giriyor,
   // ayrıca placeholder eklersek çift kart olur.
+  // lastStreamTextRef boşsa stop/cancel edildi — placeholder gösterme.
   const shouldShowPlaceholder = !isStreamingActive &&
     hasRealId &&
     !streamingAlreadyInMessages &&
-    !!lastStreamingMsgId;
+    !!lastStreamingMsgId &&
+    !!lastStreamTextRef?.current;
 
   // Streaming aktifken content boş (StreamingBubble kendi yönetiyor),
   // bittikten sonra lastStreamTextRef'ten son metni al — API gelene kadar flash olmaz.

@@ -447,7 +447,38 @@ export const useChatSession = () => {
   // ---------------------------------------------------------------------------
 
   const onStop = useCallback(() => {
-    abortCtrlRef.current?.abort();
+    if (!abortCtrlRef.current) return;
+
+    // 1. HTTP isteğini iptal et
+    abortCtrlRef.current.abort();
+    abortCtrlRef.current = null;
+
+    // 2. Typewriter interval'i durdur — buffer'daki yarım içerik SV'ye yazılmasın
+    if (typewriterIntervalRef.current) {
+      clearInterval(typewriterIntervalRef.current);
+      typewriterIntervalRef.current = null;
+    }
+
+    // 3. Stream state'lerini sıfırla
+    streamCancelledRef.current = true;
+    streamDoneRef.current = false;
+    pendingBufferRef.current = '';
+    writtenLenRef.current = 0;
+    lastStreamTextRef.current = '';
+    // SV sıfırlamadan önce reset counter'ı artır — StreamingBubble frame callback'i
+    // completedSV'yi false'a çeker, onComplete'in sızmasını engeller
+    streamResetCountSV.value = streamResetCountSV.value + 1;
+    pendingStreamSV.value = '';
+    isStreamingDoneSV.value = false;
+
+    // 4. UI'ı temizle
+    streamingMsgIdRef.current = 'streaming';
+    unstable_batchedUpdates(() => {
+      setStreamingMsgIdState('streaming');
+      setIsStreamingActive(false);
+      setOptimisticUserMsg(null);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const startNewChat = useCallback(() => {
