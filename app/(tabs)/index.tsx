@@ -1,8 +1,6 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import { TouchableOpacity, StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { runOnJS } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { ChatLayout } from '@/templates/ChatLayout';
 import { MessageList } from '@/organisms/MessageList';
@@ -49,20 +47,6 @@ export default function HomeScreen() {
 
   // Sol kenardan sağa swipe → drawer aç
   const openDrawer = useCallback(() => setDrawerVisible(true), []);
-  const openDrawerGesture = useMemo(
-    () =>
-      Gesture.Pan()
-        .activeOffsetX([20, 999])
-        .failOffsetY([-8, 8])
-        .simultaneousWithExternalGesture()
-        .onEnd((e) => {
-          'worklet';
-          if (e.translationX > 50 && e.velocityX > 100) {
-            runOnJS(openDrawer)();
-          }
-        }),
-    [openDrawer],
-  );
 
   const handleSend = useCallback(
     (text: string, attachments: import('@/types/chat.types').Attachment[]) => {
@@ -152,8 +136,7 @@ export default function HomeScreen() {
   );
 
   return (
-    <GestureDetector gesture={openDrawerGesture}>
-      <View style={styles.root}>
+    <View style={styles.root}>
       <ChatLayout
         header={header}
         input={
@@ -195,8 +178,7 @@ export default function HomeScreen() {
         onClose={() => setDrawerVisible(false)}
         onNewChat={startNewChat}
       />
-      </View>
-    </GestureDetector>
+    </View>
   );
 }
 

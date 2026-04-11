@@ -1,6 +1,7 @@
-import React, { useRef, useCallback, useState, useEffect } from 'react';
-import { View, StyleSheet, ActivityIndicator, FlatList } from 'react-native';
+import React, { useRef, useCallback, useState, useEffect, useMemo } from 'react';
+import { View, StyleSheet, ActivityIndicator } from 'react-native';
 import * as Speech from 'expo-speech';
+import { FlashList } from '@shopify/flash-list';
 import { Message } from '@/types/chat.types';
 import { MessageBubble } from '@/molecules/MessageBubble';
 import { TypingIndicator } from '@/molecules/TypingIndicator';
@@ -45,12 +46,24 @@ export const MessageList: React.FC<Props> = ({
 }) => {
   const { colors } = useTheme();
   const { t, currentLanguage } = useI18n();
-  const listRef = useRef<FlatList<Message>>(null);
+  const listRef = useRef<FlashList<Message>>(null);
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
+  const prevMessageCountRef = useRef(0);
 
   useEffect(() => {
     return () => { void Speech.stop(); };
   }, []);
+
+  // Yeni mesaj gelince veya ilk yüklemede en alta scroll
+  useEffect(() => {
+    if (messages.length === 0) return;
+    if (messages.length !== prevMessageCountRef.current) {
+      prevMessageCountRef.current = messages.length;
+      setTimeout(() => {
+        listRef.current?.scrollToEnd({ animated: messages.length > 1 });
+      }, 100);
+    }
+  }, [messages.length]);
 
   const handleSpeakToggle = useCallback(
     (messageId: string, text: string) => {
@@ -78,33 +91,9 @@ export const MessageList: React.FC<Props> = ({
     [speakingMessageId, currentLanguage, t],
   );
 
-  console.log('[MessageList] messages.length:', messages.length, 'isSessionLoading:', isSessionLoading, 'isTyping:', isTyping);
+  // messages: newest→oldest — ters çevir → oldest→newest, useMemo ile stabil referans
+  const orderedMessages = useMemo(() => [...messages].reverse(), [messages]);
 
-  // inverted FlashList renders item[0] at the visual bottom.
-  // messages is newest→oldest (direction: 'older'), so item[0]=newest = visual bottom. No reverse needed.
-  const invertedMessages = messages;
-
-  const renderItem = useCallback(
-    ({ item, index }: { item: Message; index: number }) => (
-      <MessageBubble
-        message={item}
-        onLike={onLike}
-        onRegenerate={onRegenerate}
-        index={index}
-        isSpeaking={speakingMessageId === item.id}
-        onSpeakToggle={
-          item.role === 'assistant' && item.content.trim().length > 0
-            ? () => handleSpeakToggle(item.id, item.content)
-            : undefined
-        }
-      />
-    ),
-    [onLike, onRegenerate, speakingMessageId, handleSpeakToggle],
-  );
-
-  const handleEndReached = useCallback(() => {
-    if (hasMore && !isLoadingMore && onLoadMore) onLoadMore();
-  }, [hasMore, isLoadingMore, onLoadMore]);
 
   if (isSessionLoading) {
     return (
@@ -142,23 +131,38 @@ export const MessageList: React.FC<Props> = ({
 
   return (
     <View style={styles.fill}>
-      <FlatList
+      <FlashList
         ref={listRef}
-        data={invertedMessages}
-        renderItem={renderItem}
+        data={orderedMessages}
+        renderItem={({ item, index }) => (
+          <MessageBubble
+            message={item}
+            onLike={onLike}
+            onRegenerate={onRegenerate}
+            index={index}
+            isSpeaking={speakingMessageId === item.id}
+            onSpeakToggle={
+              item.role === 'assistant' && item.content.trim().length > 0
+                ? () => handleSpeakToggle(item.id, item.content)
+                : undefined
+            }
+          />
+        )}
         keyExtractor={(item) => item.id}
-        inverted
+        estimatedItemSize={120}
         contentContainerStyle={styles.listContent}
-        ListHeaderComponent={isTyping ? <TypingIndicator /> : null}
-        ListFooterComponent={
+        ListHeaderComponent={
           isLoadingMore ? (
             <View style={styles.loadingMore}>
               <ActivityIndicator size="small" color={colors.primary} />
             </View>
           ) : null
         }
-        onEndReached={handleEndReached}
-        onEndReachedThreshold={0.3}
+        ListFooterComponent={isTyping ? <TypingIndicator /> : null}
+        onStartReached={() => {
+          if (hasMore && !isLoadingMore && onLoadMore) onLoadMore();
+        }}
+        onStartReachedThreshold={0.3}
         showsVerticalScrollIndicator={false}
         keyboardDismissMode="interactive"
         keyboardShouldPersistTaps="handled"

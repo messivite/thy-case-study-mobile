@@ -273,51 +273,46 @@ export const useSendMessageMutation = (chatId: string) => {
  * Realm sync  : API'den gelen mesajlar bu hook'un useEffect'iyle Realm'e yazilir.
  */
 export const useInfiniteMessagesQuery = (sessionId: string, isAnonymous = false) => {
+  // Realm'den senkron oku — mount anında initialData olarak ver
+  // useMemo: sessionId değişince yeniden oku, aynıysa tekrar okuma
+  const cached = useMemo(() => realmService.getMessages(sessionId), [sessionId]);
+
   const query = useInfiniteQuery<PaginatedMessagesResponse, Error>({
     queryKey: CHAT_QUERY_KEYS.messages(sessionId),
-    queryFn: async ({ pageParam }) => {
-      // İlk sayfa (pageParam yok) → önce Realm'e bak, varsa hemen dön, arka planda API fetch et
-      if (!pageParam) {
-        const { messages: cached } = realmService.getMessages(sessionId);
-        if (cached.length > 0) {
-          console.log('[MessagesQuery] Realm hit, count:', cached.length);
-          // Arka planda API'yi de fetch et (stale-while-revalidate)
-          getChatMessages(sessionId, { limit: 20, direction: 'older' })
-            .then((fresh) => {
-              // Bu promise resolve olunca React Query zaten invalidate ile günceller
-              // Burada bir şey yapmaya gerek yok — sadece Realm'i güncelle
-              if (fresh.messages.length > 0) {
-                realmService.saveMessages(sessionId, fresh.messages);
-              }
-            })
-            .catch(() => { /* sessizce geç */ });
-          return { messages: cached, nextCursor: null, hasMore: false };
-        }
-      }
-      // Realm boş veya sayfalama → API'ye git
-      const result = await getChatMessages(sessionId, {
+    queryFn: ({ pageParam }) =>
+      getChatMessages(sessionId, {
         limit: 20,
         cursor: pageParam as string | undefined,
         direction: 'older',
-      });
-      return result;
-    },
+      }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-    staleTime: 30_000,
+    // Realm'de veri varsa hemen göster — API fetch'i arka planda yap
+    initialData: cached.messages.length > 0
+      ? {
+          pages: [{ messages: cached.messages, nextCursor: null, hasMore: false }],
+          pageParams: [undefined],
+        }
+      : undefined,
+    // Realm syncedAt — React Query bunu staleTime ile karşılaştırır
+    // syncedAt + staleTime > now → fresh, API'ye gitme
+    // syncedAt + staleTime < now → stale, arka planda refetch
+    initialDataUpdatedAt: cached.syncedAt,
+    staleTime: 60_000, // 1dk — aktif sohbet sık değişir, fazla bekleme
     gcTime: 5 * 60_000,
     enabled: !!sessionId && !isAnonymous,
   });
 
-  // API'den gelen mesajlari Realm'e yaz — sadece yeni fetch oldugunda
+  // API'den fresh veri gelince Realm'e yaz — duplicate önleme: upsert ile
   const lastMsgSyncedAt = useRef(0);
   useEffect(() => {
     if (!sessionId || !query.data || !query.dataUpdatedAt) return;
     if (query.dataUpdatedAt <= lastMsgSyncedAt.current) return;
     lastMsgSyncedAt.current = query.dataUpdatedAt;
-    const allMessages = query.data.pages.flatMap((p) => p.messages);
-    if (allMessages.length > 0) {
-      realmService.saveMessages(sessionId, allMessages);
+    // Sadece ilk sayfa (en yeni 20) Realm'e yazılır — pagination için cache yeterli
+    const firstPage = query.data.pages[0]?.messages ?? [];
+    if (firstPage.length > 0) {
+      realmService.saveMessages(sessionId, firstPage);
     }
   }, [sessionId, query.dataUpdatedAt]);
 

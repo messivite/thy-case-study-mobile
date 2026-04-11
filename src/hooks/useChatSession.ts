@@ -135,17 +135,12 @@ export const useChatSession = () => {
   // ---------------------------------------------------------------------------
 
   const persistedMessages: Message[] = useMemo(() => {
-    console.log('[useChatSession] chatId:', chatId);
-    console.log('[useChatSession] messagesQuery.data:', JSON.stringify(messagesQuery.data?.pages?.map(p => p.messages?.length)));
-    console.log('[useChatSession] isLoading:', messagesQuery.isLoading, 'isFetching:', messagesQuery.isFetching);
     if (!messagesQuery.data) return [];
-    const flat = messagesQuery.data.pages
+    return messagesQuery.data.pages
       .flatMap((page) => page?.messages ?? [])
       .filter((msg): msg is ChatMessage => !!msg && typeof msg.role === 'string')
       .map(toLocalMessage);
-    console.log('[useChatSession] persistedMessages count:', flat.length);
-    return flat;
-  }, [messagesQuery.data, chatId]);
+  }, [messagesQuery.data]);
 
   // Stream mesajını geçici olarak listeye ekle
   const messages: Message[] = useMemo(() => {

@@ -205,10 +205,7 @@ export const realmService = {
   getMessages(sessionId: string): { messages: ChatMessage[]; syncedAt: number } {
     try {
       const realm = getRealmSync();
-      if (!realm) {
-        console.log('[Realm] getMessages — realm not ready, sessionId:', sessionId);
-        return { messages: [], syncedAt: 0 };
-      }
+      if (!realm) return { messages: [], syncedAt: 0 };
 
       // newest→oldest (descending createdAt) — inverted FlashList ile uyumlu
       const msgs = realm
@@ -216,7 +213,6 @@ export const realmService = {
         .filtered('sessionId == $0', sessionId)
         .sorted('createdAt', true);
 
-      console.log('[Realm] getMessages sessionId:', sessionId, 'count:', msgs.length);
       if (msgs.length === 0) return { messages: [], syncedAt: 0 };
 
       const arr = Array.from(msgs);
@@ -248,9 +244,10 @@ export const realmService = {
       realm.write(() => {
         for (let i = 0; i < messages.length; i++) {
           const msg = messages[i];
-          // Mesajın kendi id'si varsa kullan (API'den gelen), yoksa zaman+index bazlı üret
-          const msgId = msg.id ?? `${sessionId}_${now + i}_${msg.role}`;
           const msgCreatedAt = msg.createdAt ?? new Date(now + i).toISOString();
+          // _id: API id varsa kullan (upsert güvenli), yoksa sessionId+createdAt bazlı sabit key
+          // createdAt sabit olduğu sürece aynı mesaj her zaman aynı _id üretir → duplicate yok
+          const msgId = msg.id ?? `${sessionId}__${msgCreatedAt}__${msg.role}`;
           realm.create<RealmMessage>(
             'RealmMessage',
             {
@@ -261,14 +258,15 @@ export const realmService = {
               createdAt: msgCreatedAt,
               syncedAt: now,
             },
-            Realm.UpdateMode.Modified,
+            Realm.UpdateMode.Modified, // aynı _id varsa güncelle, yoksa ekle
           );
         }
 
+        // Max 20 kural — en eski mesajları sil
         const all = realm
           .objects<RealmMessage>('RealmMessage')
           .filtered('sessionId == $0', sessionId)
-          .sorted('createdAt', true);
+          .sorted('createdAt', true); // newest first
         if (all.length > MAX_MESSAGES_PER_SESSION) {
           const toDelete = Array.from(all).slice(MAX_MESSAGES_PER_SESSION);
           for (const m of toDelete) realm.delete(m);

@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, StyleSheet } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useTheme } from '@/hooks/useTheme';
 
 type Props = {
@@ -15,9 +16,8 @@ export const ChatLayout: React.FC<Props> = ({ header, children, input }) => {
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       {header}
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior="padding"
         style={styles.kav}
-        keyboardVerticalOffset={0}
       >
         <View style={styles.content}>{children}</View>
         <View style={[styles.inputArea, { backgroundColor: colors.background }]}>
