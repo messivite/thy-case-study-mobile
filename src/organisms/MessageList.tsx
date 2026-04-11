@@ -118,11 +118,13 @@ export const MessageList: React.FC<Props> = ({
 
   useEffect(() => () => { void Speech.stop(); }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     prevCountRef.current = 0;
     unreadCountRef.current = 0;
     isAtLatestRef.current = true;
     lastStreamingMsgIdRef.current = null;
+    welcomeShownRef.current = false;
+    exitingRef.current = false;
     onScrollStateChange?.(false, 0);
   }, [chatId]);
 

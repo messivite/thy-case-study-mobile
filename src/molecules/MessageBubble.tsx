@@ -19,7 +19,6 @@ import { MotiView } from '@/lib/motiView';
 import { Ionicons } from '@expo/vector-icons';
 import { Message } from '@/types/chat.types';
 import { Text } from '@/atoms/Text';
-import { ModelBadge } from '@/atoms/Badge';
 import { AttachmentPreview } from '@/molecules/AttachmentPreview';
 import { useTheme } from '@/hooks/useTheme';
 import { useHaptics } from '@/hooks/useHaptics';
@@ -151,7 +150,7 @@ const MessageBubbleInner: React.FC<Props> = ({
       transition={{ type: 'timing', duration: 200, delay: 0 }}
       style={[styles.row, isUser ? styles.rowRight : styles.rowLeft]}
     >
-      {/* Bubble + tail wrapper — alignItems flex-end ile dibe hizalı */}
+      {/* Bubble + tail + model label — alignItems flex-end ile dibe hizalı */}
       <View style={[styles.bubbleRow, isUser ? styles.bubbleRowUser : styles.bubbleRowAi]}>
 
 
@@ -163,11 +162,6 @@ const MessageBubbleInner: React.FC<Props> = ({
               : [styles.aiBubble, { backgroundColor: colors.surface, borderColor: colors.border }],
           ]}
         >
-          {/* AI model badge */}
-          {!isUser && message.modelId && (
-            <ModelBadge modelId={message.modelId} compact style={styles.badge} />
-          )}
-
           {/* Image attachments */}
           {imageAttachments.length > 0 && (
             <View style={styles.imageGrid}>
@@ -261,6 +255,13 @@ const MessageBubbleInner: React.FC<Props> = ({
 
         {/* User tail — bubble sağında */}
         {isUser && <UserTail color={colors.primary} />}
+
+        {/* Model label — bubble sağında, alta hizalı, sadece AI ve streaming olmayan mesajlarda */}
+        {!isUser && message.modelId && !hideFooter && (
+          <Text variant="micro" color={colors.textSecondary} style={styles.modelLabel}>
+            {message.modelId}
+          </Text>
+        )}
       </View>
     </MotiView>
   );
@@ -292,18 +293,20 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     marginHorizontal: spacing[2],
   },
-  // Bubble + tail yan yana, dibe hizalı
+  // Bubble + tail + model label yan yana, dibe hizalı
   bubbleRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
   },
   bubbleRowUser: {
-    flexDirection: 'row',
     maxWidth: '75%',
   },
   bubbleRowAi: {
-    flexDirection: 'row',
     maxWidth: '85%',
+  },
+  modelLabel: {
+    marginBottom: spacing[1],
+    marginLeft: spacing[2],
   },
   bubble: {
     padding: spacing[3],
@@ -316,9 +319,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: radius.lg,
     borderBottomLeftRadius: 4,
-  },
-  badge: {
-    marginBottom: spacing[2],
   },
   imageGrid: {
     flexDirection: 'row',
