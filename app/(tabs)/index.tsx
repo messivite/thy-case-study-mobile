@@ -22,6 +22,8 @@ export default function HomeScreen() {
   const { t } = useI18n();
   const {
     messages,
+    optimisticUserMsg,
+    streamingMessage,
     selectedAIModel,
     isTyping,
     isLoading,
@@ -32,6 +34,7 @@ export default function HomeScreen() {
     onStop,
     likeMessage,
     startNewChat,
+    loadSession,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
@@ -139,7 +142,7 @@ export default function HomeScreen() {
     <View style={styles.root}>
       <ChatLayout
         header={header}
-        input={
+input={
           <ChatInput
             onSend={handleSend}
             onStop={onStop}
@@ -151,7 +154,10 @@ export default function HomeScreen() {
         }
       >
         <MessageList
+          chatId={chatId}
           messages={messages}
+          optimisticUserMsg={optimisticUserMsg}
+          streamingMessage={streamingMessage}
           isTyping={isTyping}
           isSessionLoading={!!chatId && isSessionLoading}
           onLike={likeMessage}
@@ -177,6 +183,7 @@ export default function HomeScreen() {
         visible={drawerVisible}
         onClose={() => setDrawerVisible(false)}
         onNewChat={startNewChat}
+        onSelectChat={(chat) => { loadSession(chat.id); setDrawerVisible(false); }}
       />
     </View>
   );

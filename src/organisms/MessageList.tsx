@@ -1,10 +1,11 @@
-import React, { useRef, useCallback, useState, useEffect, useMemo } from 'react';
-import { View, StyleSheet, ActivityIndicator } from 'react-native';
+import React, { useRef, useCallback, useState, useEffect } from 'react';
+import { View, StyleSheet, ActivityIndicator, FlatList, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import * as Speech from 'expo-speech';
-import { FlashList } from '@shopify/flash-list';
 import { Message } from '@/types/chat.types';
 import { MessageBubble } from '@/molecules/MessageBubble';
 import { TypingIndicator } from '@/molecules/TypingIndicator';
+import { ScrollToBottomButton } from '@/molecules/ScrollToBottomButton';
+import { ActivityThyLoading } from '@/atoms/ActivityThyLoading';
 import { Text } from '@/atoms/Text';
 import { HomeWelcomePanel, WelcomeQuickAction } from '@/organisms/HomeWelcomePanel';
 import { useTheme } from '@/hooks/useTheme';
@@ -13,8 +14,13 @@ import { useI18n } from '@/hooks/useI18n';
 import { stripTextForSpeech, speechLocaleForAppLang } from '@/lib/chatSpeech';
 import { toast } from '@/lib/toast';
 
+const AT_BOTTOM_THRESHOLD = 80;
+
 type Props = {
+  chatId?: string | null;
   messages: Message[];
+  optimisticUserMsg?: Message | null;
+  streamingMessage?: Message | null;
   isTyping: boolean;
   isSessionLoading?: boolean;
   onLike?: (id: string, liked: boolean | null) => void;
@@ -30,7 +36,10 @@ type Props = {
 };
 
 export const MessageList: React.FC<Props> = ({
+  chatId,
   messages,
+  optimisticUserMsg,
+  streamingMessage,
   isTyping,
   isSessionLoading = false,
   onLike,
@@ -46,64 +55,92 @@ export const MessageList: React.FC<Props> = ({
 }) => {
   const { colors } = useTheme();
   const { t, currentLanguage } = useI18n();
-  const listRef = useRef<FlashList<Message>>(null);
+  const listRef = useRef<FlatList<Message>>(null);
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
-  const prevMessageCountRef = useRef(0);
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const isAtBottomRef = useRef(true);
+  const prevCountRef = useRef(0);
 
+  useEffect(() => () => { void Speech.stop(); }, []);
+
+  // Session değişince sıfırla
   useEffect(() => {
-    return () => { void Speech.stop(); };
+    prevCountRef.current = 0;
+    isAtBottomRef.current = true;
+    setShowScrollBtn(false);
+    setUnreadCount(0);
+  }, [chatId]);
+
+  // Yeni mesaj: alttaysa scroll et, değilse badge
+  useEffect(() => {
+    const total = messages.length + (optimisticUserMsg ? 1 : 0) + (streamingMessage ? 1 : 0);
+    const prev = prevCountRef.current;
+    if (total === prev || total === 0) return;
+    const added = total - prev;
+    prevCountRef.current = total;
+
+    if (isAtBottomRef.current) {
+      setTimeout(() => listRef.current?.scrollToEnd({ animated: prev > 0 }), 60);
+    } else if (added > 0) {
+      setUnreadCount((c) => c + added);
+      setShowScrollBtn(true);
+    }
+  }, [messages.length, optimisticUserMsg, streamingMessage]);
+
+  const handleScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+    const distanceFromBottom = contentSize.height - layoutMeasurement.height - contentOffset.y;
+    const atBottom = distanceFromBottom < AT_BOTTOM_THRESHOLD;
+    isAtBottomRef.current = atBottom;
+    if (atBottom) {
+      setShowScrollBtn(false);
+      setUnreadCount(0);
+    } else {
+      setShowScrollBtn(true);
+    }
   }, []);
 
-  // Yeni mesaj gelince veya ilk yüklemede en alta scroll
-  useEffect(() => {
-    if (messages.length === 0) return;
-    if (messages.length !== prevMessageCountRef.current) {
-      prevMessageCountRef.current = messages.length;
-      setTimeout(() => {
-        listRef.current?.scrollToEnd({ animated: messages.length > 1 });
-      }, 100);
-    }
-  }, [messages.length]);
+  const handleScrollToBottom = useCallback(() => {
+    listRef.current?.scrollToEnd({ animated: true });
+    setShowScrollBtn(false);
+    setUnreadCount(0);
+  }, []);
 
-  const handleSpeakToggle = useCallback(
-    (messageId: string, text: string) => {
-      if (speakingMessageId === messageId) {
-        void Speech.stop();
-        setSpeakingMessageId(null);
-        return;
-      }
+  const handleSpeakToggle = useCallback((messageId: string, text: string) => {
+    if (speakingMessageId === messageId) {
       void Speech.stop();
-      const plain = stripTextForSpeech(text);
-      if (!plain.trim()) return;
-      const locale = speechLocaleForAppLang(currentLanguage);
-      setSpeakingMessageId(messageId);
-      Speech.speak(plain, {
-        language: locale,
-        rate: 0.96,
-        onDone: () => setSpeakingMessageId((cur) => (cur === messageId ? null : cur)),
-        onStopped: () => setSpeakingMessageId((cur) => (cur === messageId ? null : cur)),
-        onError: () => {
-          setSpeakingMessageId((cur) => (cur === messageId ? null : cur));
-          toast.error(t('toast.speechError'));
-        },
-      });
-    },
-    [speakingMessageId, currentLanguage, t],
-  );
-
-  // messages: newest→oldest — ters çevir → oldest→newest, useMemo ile stabil referans
-  const orderedMessages = useMemo(() => [...messages].reverse(), [messages]);
-
+      setSpeakingMessageId(null);
+      return;
+    }
+    void Speech.stop();
+    const plain = stripTextForSpeech(text);
+    if (!plain.trim()) return;
+    const locale = speechLocaleForAppLang(currentLanguage);
+    setSpeakingMessageId(messageId);
+    Speech.speak(plain, {
+      language: locale,
+      rate: 0.96,
+      onDone: () => setSpeakingMessageId((cur) => (cur === messageId ? null : cur)),
+      onStopped: () => setSpeakingMessageId((cur) => (cur === messageId ? null : cur)),
+      onError: () => {
+        setSpeakingMessageId((cur) => (cur === messageId ? null : cur));
+        toast.error(t('toast.speechError'));
+      },
+    });
+  }, [speakingMessageId, currentLanguage, t]);
 
   if (isSessionLoading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color={colors.textSecondary} />
+        <ActivityThyLoading mode="float" size={48} />
       </View>
     );
   }
 
-  if (messages.length === 0 && !isTyping) {
+  const hasContent = messages.length > 0 || !!optimisticUserMsg || !!streamingMessage || isTyping;
+
+  if (!hasContent) {
     if (quickActions.length > 0 && welcomeGreeting && welcomeQuestion && onQuickActionPress) {
       const spaceIdx = welcomeGreeting.indexOf(' ');
       const greetingPrefix = spaceIdx !== -1 ? welcomeGreeting.slice(0, spaceIdx) : welcomeGreeting;
@@ -129,11 +166,19 @@ export const MessageList: React.FC<Props> = ({
     );
   }
 
+  // API newest→oldest döndürüyor → reverse ile oldest→newest yapıyoruz
+  // Geçici mesajlar en sona (en yeni)
+  const displayMessages: Message[] = [
+    ...messages.slice().reverse(),
+    ...(optimisticUserMsg ? [optimisticUserMsg] : []),
+    ...(streamingMessage ? [streamingMessage] : []),
+  ];
+
   return (
     <View style={styles.fill}>
-      <FlashList
+      <FlatList
         ref={listRef}
-        data={orderedMessages}
+        data={displayMessages}
         renderItem={({ item, index }) => (
           <MessageBubble
             message={item}
@@ -149,7 +194,6 @@ export const MessageList: React.FC<Props> = ({
           />
         )}
         keyExtractor={(item) => item.id}
-        estimatedItemSize={120}
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={
           isLoadingMore ? (
@@ -158,23 +202,32 @@ export const MessageList: React.FC<Props> = ({
             </View>
           ) : null
         }
-        ListFooterComponent={isTyping ? <TypingIndicator /> : null}
+        ListFooterComponent={
+          isTyping && !streamingMessage ? <TypingIndicator /> : null
+        }
         onStartReached={() => {
           if (hasMore && !isLoadingMore && onLoadMore) onLoadMore();
         }}
         onStartReachedThreshold={0.3}
+        onScroll={handleScroll}
+        scrollEventThrottle={100}
         showsVerticalScrollIndicator={false}
         keyboardDismissMode="interactive"
         keyboardShouldPersistTaps="handled"
+        maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+      />
+
+      <ScrollToBottomButton
+        visible={showScrollBtn}
+        unreadCount={unreadCount}
+        onPress={handleScrollToBottom}
       />
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  fill: {
-    flex: 1,
-  },
+  fill: { flex: 1 },
   center: {
     flex: 1,
     alignItems: 'center',

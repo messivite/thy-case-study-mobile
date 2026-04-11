@@ -20,11 +20,13 @@ import { toast } from '@/lib/toast';
 // Helpers
 // ---------------------------------------------------------------------------
 
-const toLocalMessage = (msg: ChatMessage, index: number): Message => ({
-  id: msg.id ?? `msg_${msg.createdAt ?? index}_${msg.role}`,
+// API newest→oldest sıralı döndürür, biz de aynı sırayı koruyoruz.
+// FlashList inverted=true ile gösterilir — hiç manipülasyon yok.
+const toLocalMessage = (msg: ChatMessage): Message => ({
+  id: msg.id ?? `msg_${msg.createdAt}_${msg.role}`,
   role: (msg.role === 'user' || msg.role === 'assistant') ? msg.role : 'assistant',
   content: msg.content ?? '',
-  timestamp: msg.createdAt ? new Date(msg.createdAt).getTime() : Date.now() - index * 1000,
+  timestamp: msg.createdAt ? new Date(msg.createdAt).getTime() : Date.now(),
 });
 
 // ---------------------------------------------------------------------------
@@ -49,6 +51,9 @@ export const useChatSession = () => {
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   // Ref — onDone closure'da güncel content'e erişmek için
   const streamingContentRef = useRef('');
+
+  // Optimistic user message — cache'e karıştırmadan ayrı tut
+  const [optimisticUserMsg, setOptimisticUserMsg] = useState<Message | null>(null);
 
   // AbortController — stream durdurma için
   const abortCtrlRef = useRef<AbortController | null>(null);
@@ -77,84 +82,29 @@ export const useChatSession = () => {
   // Optimistic helpers
   // ---------------------------------------------------------------------------
 
-  const addOptimisticUserMessage = useCallback(
-    (activeChatId: string, content: string) => {
-      const snapshot = queryClient.getQueryData<InfiniteData<PaginatedMessagesResponse>>(
-        CHAT_QUERY_KEYS.messages(activeChatId),
-      );
-
-      const optimisticMsg: ChatMessage = {
-        id: `optimistic_user_${Date.now()}`,
-        role: 'user',
-        content,
-        provider: selectedAIModel.provider,
-        model: selectedAIModel.model,
-        createdAt: new Date().toISOString(),
-      };
-
-      queryClient.setQueryData<InfiniteData<PaginatedMessagesResponse>>(
-        CHAT_QUERY_KEYS.messages(activeChatId),
-        (old) => {
-          // Yeni session için cache boş olabilir — başlat
-          const base: InfiniteData<PaginatedMessagesResponse> = old ?? {
-            pages: [{ messages: [], nextCursor: null, hasMore: false }],
-            pageParams: [undefined],
-          };
-          const newPages = [...base.pages];
-          // messages are newest→oldest (direction: 'older'), prepend = newest position
-          newPages[0] = {
-            ...newPages[0],
-            messages: [optimisticMsg, ...newPages[0].messages],
-          };
-          return { ...base, pages: newPages };
-        },
-      );
-
-      return snapshot;
-    },
-    [queryClient, selectedAIModel],
-  );
-
-  const rollbackOptimisticMessage = useCallback(
-    (
-      activeChatId: string,
-      snapshot: InfiniteData<PaginatedMessagesResponse> | undefined,
-    ) => {
-      if (snapshot !== undefined) {
-        queryClient.setQueryData(CHAT_QUERY_KEYS.messages(activeChatId), snapshot);
-      } else {
-        // Yeni session için oluşturulmuştu — tamamen kaldır
-        queryClient.removeQueries({ queryKey: CHAT_QUERY_KEYS.messages(activeChatId) });
-      }
-    },
-    [queryClient],
-  );
-
   // ---------------------------------------------------------------------------
-  // Flatten paginated messages — oldest first for display
+  // Flatten paginated messages
+  // API newest→oldest döndürür → biz aynı sırayı koruyoruz.
+  // FlashList inverted ile gösterilir — hiç sort/reverse yok.
   // ---------------------------------------------------------------------------
 
-  const persistedMessages: Message[] = useMemo(() => {
+  const messages: Message[] = useMemo(() => {
     if (!messagesQuery.data) return [];
+
+    // Tüm sayfaları birleştir — her page newest→oldest, pages[0] en yeni page
+    const seen = new Set<string>();
     return messagesQuery.data.pages
       .flatMap((page) => page?.messages ?? [])
       .filter((msg): msg is ChatMessage => !!msg && typeof msg.role === 'string')
+      .filter((msg) => {
+        // id bazlı duplicate temizle
+        const key = msg.id ?? `${msg.createdAt}_${msg.role}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
       .map(toLocalMessage);
   }, [messagesQuery.data]);
-
-  // Stream mesajını geçici olarak listeye ekle
-  const messages: Message[] = useMemo(() => {
-    if (!isStreamingActive || !streamingContent) return persistedMessages;
-
-    const streamMsg: Message = {
-      id: streamingMessageId ?? 'streaming',
-      role: 'assistant',
-      content: streamingContent,
-      timestamp: Date.now(),
-    };
-    // messages are newest→oldest, stream msg is newest so prepend
-    return [streamMsg, ...persistedMessages];
-  }, [persistedMessages, isStreamingActive, streamingContent, streamingMessageId]);
 
   // ---------------------------------------------------------------------------
   // sendMessage
@@ -182,13 +132,17 @@ export const useChatSession = () => {
         }
       }
 
-      // Her iki modda da kullanıcı mesajını anında cache'e ekle
-      const snapshot = addOptimisticUserMessage(activeChatId, content);
-
-      const userMsg: ChatMessage = { role: 'user', content, provider, model };
+      // Optimistic user mesajını göster — cache'e karıştırma
+      const optimisticUser: Message = {
+        id: `optimistic_user_${Date.now()}`,
+        role: 'user',
+        content,
+        timestamp: Date.now(),
+      };
+      setOptimisticUserMsg(optimisticUser);
 
       if (streamingEnabled) {
-        // ── Stream modu ──────────────────────────────────────────────
+        // ── Stream modu ─────────────────────────────────────────────
         setIsStreamingActive(true);
         setStreamingContent('');
         setStreamingMessageId(null);
@@ -215,61 +169,33 @@ export const useChatSession = () => {
                 setIsStreamingActive(false);
                 setStreamingContent('');
                 setStreamingMessageId(null);
+                setOptimisticUserMsg(null);
                 abortCtrlRef.current = null;
 
-                const now = Date.now();
-                const assistantMsg: ChatMessage = {
-                  role: 'assistant',
-                  content: assistantContent,
-                  provider,
-                  model,
-                };
-
-                const userMsgWithMeta: ChatMessage = {
-                  ...userMsg,
-                  id: `user_${now - 1}`,
-                  createdAt: new Date(now - 1).toISOString(),
-                };
-                const assistantMsgWithMeta: ChatMessage = {
-                  ...assistantMsg,
-                  id: `assistant_${now}`,
-                  createdAt: new Date(now).toISOString(),
-                };
-
-                // Cache'e direkt ekle — invalidateQueries yerine. Re-fetch duplicate'i önler.
-                // Optimistic user mesajı zaten cache[0] başında, assistant'ı da ekle.
-                queryClient.setQueryData<InfiniteData<PaginatedMessagesResponse>>(
-                  CHAT_QUERY_KEYS.messages(activeChatId!),
-                  (old) => {
-                    const base: InfiniteData<PaginatedMessagesResponse> = old ?? {
-                      pages: [{ messages: [], nextCursor: null, hasMore: false }],
-                      pageParams: [undefined],
-                    };
-                    const newPages = [...base.pages];
-                    // assistant mesajı en yeni → pages[0] başına ekle
-                    newPages[0] = {
-                      ...newPages[0],
-                      messages: [assistantMsgWithMeta, ...newPages[0].messages],
-                    };
-                    return { ...base, pages: newPages };
-                  },
-                );
-
-                // Realm'e kaydet
-                realmService.saveMessages(activeChatId!, [userMsgWithMeta, assistantMsgWithMeta]);
-
-                // Chat listesi güncelle (title refresh için)
+                // Stream tamamlandı — API'den gerçek mesajları çek
+                // Cache'e elle yazmıyoruz; invalidate ile API fetch tetiklenir,
+                // API newest→oldest döndürür, cache temiz kalır.
+                queryClient.invalidateQueries({
+                  queryKey: CHAT_QUERY_KEYS.messages(activeChatId!),
+                });
                 queryClient.invalidateQueries({
                   queryKey: CHAT_QUERY_KEYS.chatsList,
                 });
+
+                // Realm'e kaydet (offline için)
+                const now = Date.now();
+                realmService.saveMessages(activeChatId!, [
+                  { role: 'user', content, provider, model, id: `user_${now - 1}`, createdAt: new Date(now - 1).toISOString() },
+                  { role: 'assistant', content: assistantContent, provider, model, id: `assistant_${now}`, createdAt: new Date(now).toISOString() },
+                ]);
               },
               onError: (err) => {
                 streamingContentRef.current = '';
                 setIsStreamingActive(false);
                 setStreamingContent('');
                 setStreamingMessageId(null);
+                setOptimisticUserMsg(null);
                 abortCtrlRef.current = null;
-                rollbackOptimisticMessage(activeChatId!, snapshot);
                 if (err !== 'aborted') {
                   toast.error('Mesaj gönderilemedi');
                 }
@@ -281,34 +207,31 @@ export const useChatSession = () => {
           streamingContentRef.current = '';
           setIsStreamingActive(false);
           setStreamingContent('');
-          rollbackOptimisticMessage(activeChatId, snapshot);
+          setOptimisticUserMsg(null);
           toast.error('Mesaj gönderilemedi');
         }
       } else {
         // ── Non-stream modu ──────────────────────────────────────────
-        // cancelQueries önce çağrılır ki useSendMessageMutation.onMutate'in
-        // snapshot'ı optimistic state'i içersin (temiz rollback için)
-        await queryClient.cancelQueries({
-          queryKey: CHAT_QUERY_KEYS.messages(activeChatId),
-        });
-
         sendMessageMutation.mutate(
           { provider, model, messages: [{ role: 'user', content }] },
           {
             onSuccess: (data) => {
-              const assistantMsg: ChatMessage = {
-                role: data.assistantMessage.role,
-                content: data.assistantMessage.content,
-                provider: data.assistantMessage.provider,
-                model: data.assistantMessage.model,
-              };
-              realmService.saveMessages(activeChatId!, [userMsg, assistantMsg]);
+              setOptimisticUserMsg(null);
+              // API'den gerçek cevap geldi — cache'i invalide et, API fetch tetikle
+              queryClient.invalidateQueries({
+                queryKey: CHAT_QUERY_KEYS.messages(activeChatId!),
+              });
               queryClient.invalidateQueries({
                 queryKey: CHAT_QUERY_KEYS.chatsList,
               });
+              // Realm'e kaydet
+              realmService.saveMessages(activeChatId!, [
+                { role: 'user', content, provider, model },
+                { role: data.assistantMessage.role, content: data.assistantMessage.content, provider: data.assistantMessage.provider, model: data.assistantMessage.model },
+              ]);
             },
             onError: () => {
-              rollbackOptimisticMessage(activeChatId!, snapshot);
+              setOptimisticUserMsg(null);
               toast.error('Mesaj gönderilemedi');
             },
           },
@@ -323,8 +246,6 @@ export const useChatSession = () => {
       sendMessageMutation,
       queryClient,
       dispatch,
-      addOptimisticUserMessage,
-      rollbackOptimisticMessage,
     ],
   );
 
@@ -342,13 +263,11 @@ export const useChatSession = () => {
     abortCtrlRef.current = null;
     setIsStreamingActive(false);
     setStreamingContent('');
+    setOptimisticUserMsg(null);
     streamingContentRef.current = '';
-    if (sessionId) {
-      queryClient.removeQueries({ queryKey: CHAT_QUERY_KEYS.messages(sessionId) });
-    }
     dispatch(setSessionId(null));
     dispatch(clearMessages());
-  }, [sessionId, dispatch, queryClient]);
+  }, [dispatch]);
 
   const loadSession = useCallback(
     (id: string) => {
@@ -357,14 +276,11 @@ export const useChatSession = () => {
       abortCtrlRef.current = null;
       setIsStreamingActive(false);
       setStreamingContent('');
+      setOptimisticUserMsg(null);
       streamingContentRef.current = '';
-      // Eski (önceki) session'ın stale cache'ini temizle, yeni session'ın cache'ine dokunma
-      if (sessionId) {
-        queryClient.removeQueries({ queryKey: CHAT_QUERY_KEYS.messages(sessionId) });
-      }
       dispatch(setSessionId(id));
     },
-    [sessionId, dispatch, queryClient],
+    [sessionId, dispatch],
   );
 
   const likeMessage = useCallback((_id: string, _liked: boolean | null) => {
@@ -386,6 +302,10 @@ export const useChatSession = () => {
 
   return {
     messages,
+    optimisticUserMsg,
+    streamingMessage: (isStreamingActive && streamingContent)
+      ? { id: streamingMessageId ?? 'streaming', role: 'assistant' as const, content: streamingContent, timestamp: Date.now() }
+      : null,
     selectedAIModel,
     isTyping,
     chatId,

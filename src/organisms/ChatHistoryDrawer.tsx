@@ -814,9 +814,13 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
     setSearchFocused(false);
     setSearchQuery('');
     setDebouncedQuery('');
-    dispatch(setSessionId(item.sessionId));
-    onClose();
-  }, [dispatch, onClose]);
+    if (onSelectChat) {
+      onSelectChat({ id: item.sessionId } as ChatListItem);
+    } else {
+      dispatch(setSessionId(item.sessionId));
+      onClose();
+    }
+  }, [dispatch, onSelectChat, onClose]);
 
   // ---------------------------------------------------------------------------
   // Chat handlers
@@ -824,9 +828,13 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
 
   const handleSelectChat = useCallback(
     (chat: ChatListItem) => {
-      dispatch(setSessionId(chat.id));
-      onSelectChat?.(chat);
-      onClose();
+      if (onSelectChat) {
+        // Caller (index.tsx) loadSession ile yönetiyor — kendi dispatch'imizi çağırma
+        onSelectChat(chat);
+      } else {
+        dispatch(setSessionId(chat.id));
+        onClose();
+      }
     },
     [dispatch, onSelectChat, onClose],
   );
@@ -989,7 +997,7 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
                   style={styles.newChatBtn}
                   titleStyle={styles.newChatBtnText}
                   icon={<Ionicons name="create-outline" size={scale(20)} color={colors.primary} />}
-                  onPress={() => { dispatch(setSessionId(null)); onNewChat?.(); onClose(); }}
+                  onPress={() => { onNewChat?.(); onClose(); }}
                 />
               </Animated.View>
             </View>

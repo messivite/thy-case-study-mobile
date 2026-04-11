@@ -160,7 +160,10 @@ export type SyncChatRequest = AIProviderInfo & {
 export type SyncedMessage = AIMessage & AIProviderInfo;
 
 /** Assistant'ın döndürdüğü yanıt mesajı */
-export type AssistantMessage = AIMessage & AIProviderInfo;
+export type AssistantMessage = AIMessage & AIProviderInfo & {
+  id?: string;
+  createdAt?: string;
+};
 
 /** Sync endpoint'inin tam response modeli */
 export type SyncChatResponse = {
