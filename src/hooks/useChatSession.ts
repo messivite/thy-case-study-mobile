@@ -154,24 +154,22 @@ export const useChatSession = () => {
     const cid = activeChatIdRef.current;
     if (!cid) return;
 
+    // Önce streaming'i bitir — fetch bekletmesin
+    unstable_batchedUpdates(() => {
+      setIsStreamingActive(false);
+      setOptimisticUserMsg(null);
+    });
+
     const fetchLimit = Math.max(40, messagesCountRef.current + 2);
     getChatMessages(cid, { limit: fetchLimit, direction: 'older' })
       .then((result) => {
-        unstable_batchedUpdates(() => {
-          queryClient.setQueryData(
-            CHAT_QUERY_KEYS.messages(cid),
-            { pages: [result], pageParams: [undefined] },
-          );
-          setOptimisticUserMsg(null);
-          setIsStreamingActive(false);
-        });
+        queryClient.setQueryData(
+          CHAT_QUERY_KEYS.messages(cid),
+          { pages: [result], pageParams: [undefined] },
+        );
         queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
       })
       .catch(() => {
-        unstable_batchedUpdates(() => {
-          setIsStreamingActive(false);
-          setOptimisticUserMsg(null);
-        });
         queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.messages(cid) });
         queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
       });
@@ -187,25 +185,7 @@ export const useChatSession = () => {
 
       let activeChatId = chatId;
 
-      let newChatCreated = false;
-      if (!activeChatId) {
-        try {
-          const chat = await createChatMutateRef.current({
-            title: content.slice(0, 50),
-            provider,
-            model,
-          });
-          activeChatId = chat.id;
-          newChatCreated = true;
-        } catch {
-          toast.error('Sohbet oluşturulamadı');
-          return;
-        }
-      }
-
-      activeChatIdRef.current = activeChatId;
-
-      // Optimistic user mesajını göster
+      // Optimistic user mesajını hemen göster — chat oluşturmayı bekleme
       const optimisticUser: Message = {
         id: `optimistic_user_${Date.now()}`,
         role: 'user',
@@ -216,12 +196,33 @@ export const useChatSession = () => {
 
       if (streamingEnabledRef.current) {
         // ── Stream modu ─────────────────────────────────────────────
-        // dispatch(setSessionId) + setOptimisticUserMsg + setIsStreamingActive — tek render
+        // Hemen UI'ı güncelle
         unstable_batchedUpdates(() => {
-          if (newChatCreated) dispatch(setSessionId(activeChatId!));
           setOptimisticUserMsg(optimisticUser);
           setIsStreamingActive(true);
         });
+
+        // Yeni chat gerekiyorsa oluştur — UI zaten güncellendi
+        if (!activeChatId) {
+          try {
+            const chat = await createChatMutateRef.current({
+              title: content.slice(0, 50),
+              provider,
+              model,
+            });
+            activeChatId = chat.id;
+            dispatch(setSessionId(activeChatId));
+          } catch {
+            toast.error('Sohbet oluşturulamadı');
+            unstable_batchedUpdates(() => {
+              setOptimisticUserMsg(null);
+              setIsStreamingActive(false);
+            });
+            return;
+          }
+        }
+
+        activeChatIdRef.current = activeChatId;
 
         const ctrl = new AbortController();
         abortCtrlRef.current = ctrl;
@@ -254,7 +255,7 @@ export const useChatSession = () => {
 
         try {
           await streamChat(
-            activeChatId,
+            activeChatId!,
             { provider, model, messages: [{ role: 'user', content }] },
             {
               onMeta: (meta) => {
@@ -307,15 +308,32 @@ export const useChatSession = () => {
         }
       } else {
         // ── Non-stream modu ──────────────────────────────────────────
-        // activeChatId her zaman burada set edilmiş olacak (yukarıda oluşturuldu)
-        // useSendMessageMutation(chatId) hook'u null chatId ile kurulduğundan
-        // doğrudan API fonksiyonunu çağırmak daha güvenli
-        const nonStreamChatId = activeChatId;
         unstable_batchedUpdates(() => {
-          if (newChatCreated) dispatch(setSessionId(activeChatId!));
           setOptimisticUserMsg(optimisticUser);
           setIsNonStreamPending(true);
         });
+
+        if (!activeChatId) {
+          try {
+            const chat = await createChatMutateRef.current({
+              title: content.slice(0, 50),
+              provider,
+              model,
+            });
+            activeChatId = chat.id;
+            dispatch(setSessionId(activeChatId));
+          } catch {
+            toast.error('Sohbet oluşturulamadı');
+            unstable_batchedUpdates(() => {
+              setOptimisticUserMsg(null);
+              setIsNonStreamPending(false);
+            });
+            return;
+          }
+        }
+
+        activeChatIdRef.current = activeChatId;
+        const nonStreamChatId = activeChatId!;
         sendMessageApi(nonStreamChatId, { provider, model, messages: [{ role: 'user', content }] })
           .then(() => {
             unstable_batchedUpdates(() => {
