@@ -27,6 +27,8 @@ type Props = {
   index: number;
   isSpeaking?: boolean;
   onSpeakToggle?: () => void;
+  skipEntryAnimation?: boolean;
+  hideFooter?: boolean;
 };
 
 // Kullanıcı tail — bubble'ın sağ alt köşesine tam oturur
@@ -45,13 +47,15 @@ const AiTail = ({ color, borderColor }: { color: string; borderColor: string }) 
   </Svg>
 );
 
-export const MessageBubble: React.FC<Props> = React.memo(({
+const MessageBubbleInner: React.FC<Props> = ({
   message,
   onLike,
   onRegenerate,
   index,
   isSpeaking = false,
   onSpeakToggle,
+  skipEntryAnimation = false,
+  hideFooter = false,
 }) => {
   const { colors } = useTheme();
   const haptics = useHaptics();
@@ -90,7 +94,7 @@ export const MessageBubble: React.FC<Props> = React.memo(({
 
   return (
     <MotiView
-      from={{ opacity: 0, translateY: 6 }}
+      from={skipEntryAnimation ? { opacity: 1, translateY: 0 } : { opacity: 0, translateY: 6 }}
       animate={{ opacity: 1, translateY: 0 }}
       transition={{ type: 'timing', duration: 200, delay: 0 }}
       style={[styles.row, isUser ? styles.rowRight : styles.rowLeft]}
@@ -150,7 +154,7 @@ export const MessageBubble: React.FC<Props> = React.memo(({
           )}
 
           {/* Footer: time + actions */}
-          <View style={styles.footer}>
+          <View style={[styles.footer, hideFooter && styles.footerHidden]}>
             <Text
               variant="micro"
               color={isUser ? 'rgba(255,255,255,0.65)' : colors.textSecondary}
@@ -208,6 +212,18 @@ export const MessageBubble: React.FC<Props> = React.memo(({
       </View>
     </MotiView>
   );
+};
+
+export const MessageBubble = React.memo(MessageBubbleInner, (prev, next) => {
+  if (prev.message.content !== next.message.content) return false;
+  if (prev.message.liked !== next.message.liked) return false;
+  if (prev.isSpeaking !== next.isSpeaking) return false;
+  if (prev.onSpeakToggle !== next.onSpeakToggle) return false;
+  if (prev.onLike !== next.onLike) return false;
+  if (prev.onRegenerate !== next.onRegenerate) return false;
+  if (prev.skipEntryAnimation !== next.skipEntryAnimation) return false;
+  if (prev.hideFooter !== next.hideFooter) return false;
+  return true;
 });
 
 const styles = StyleSheet.create({
@@ -283,6 +299,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginTop: spacing[2],
+  },
+  footerHidden: {
+    opacity: 0,
   },
   actions: {
     flexDirection: 'row',

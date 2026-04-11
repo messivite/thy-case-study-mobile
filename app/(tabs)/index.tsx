@@ -24,7 +24,9 @@ export default function HomeScreen() {
   const {
     messages,
     optimisticUserMsg,
+    isStreamingActive,
     streamingMessage,
+    streamingMessageId,
     selectedAIModel,
     isTyping,
     isLoading,
@@ -42,7 +44,7 @@ export default function HomeScreen() {
   } = useChatSession();
 
   // Session seçilmiş ama mesajlar henüz yüklenmemiş → spinner göster
-  const isSessionLoading = !!chatId && (isLoading || (isFetching && messages.length === 0));
+  const isSessionLoading = !!chatId && (isLoading || (isFetching && messages.length === 0 && !isStreamingActive));
 
   const [scrolledUp, setScrolledUp] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -170,7 +172,9 @@ input={
           chatId={chatId}
           messages={messages}
           optimisticUserMsg={optimisticUserMsg}
+          isStreamingActive={isStreamingActive}
           streamingMessage={streamingMessage}
+          streamingMessageId={streamingMessageId}
           isTyping={isTyping}
           isSessionLoading={!!chatId && isSessionLoading}
           onLike={likeMessage}

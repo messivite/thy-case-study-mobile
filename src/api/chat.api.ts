@@ -110,27 +110,32 @@ export const streamChat = async (
           const lines = buffer.split('\n');
           buffer = lines.pop() ?? '';
 
-          // RN XHR tüm response'u tek chunk'ta getirir — typewriter efekti için
-          // her satırı sırayla setTimeout ile işle
           const isDelta = (l: string) => {
             const t = l.trim();
             const json = t.startsWith('data: ') ? t.slice(6) : t;
             return json.includes('"delta"') && json.includes('"type"');
           };
 
-          let delay = 0;
+          const isMeta = (l: string) => {
+            const t = l.trim();
+            const json = t.startsWith('data: ') ? t.slice(6) : t;
+            return json.includes('"meta"') && json.includes('"type"');
+          };
+
           for (const line of lines) {
-            if (isDelta(line)) {
-              const captured = line;
-              setTimeout(() => processLine(captured, callbacks), delay);
-              delay += 18;
+            const captured = line;
+            if (isMeta(line)) {
+              // meta → anında işle, ID'ler FlatList key'i için hemen lazım
+              processLine(captured, callbacks);
+            } else if (isDelta(line)) {
+              setTimeout(() => processLine(captured, callbacks), totalDelay);
+              totalDelay += 30;
             } else {
-              const captured = line;
-              setTimeout(() => processLine(captured, callbacks), delay);
-              delay += 1;
+              // done/error — son delta'dan sonra
+              const schedAt = totalDelay + 1;
+              setTimeout(() => processLine(captured, callbacks), schedAt);
             }
           }
-          totalDelay = delay;
         },
         signal: controller.signal,
       },

@@ -48,7 +48,9 @@ type Props = {
   chatId?: string | null;
   messages: Message[];
   optimisticUserMsg?: Message | null;
+  isStreamingActive?: boolean;
   streamingMessage?: Message | null;
+  streamingMessageId?: string | null;
   isTyping: boolean;
   isSessionLoading?: boolean;
   onLike?: (id: string, liked: boolean | null) => void;
@@ -69,7 +71,9 @@ export const MessageList: React.FC<Props> = ({
   chatId,
   messages,
   optimisticUserMsg,
+  isStreamingActive = false,
   streamingMessage,
+  streamingMessageId,
   isTyping,
   isSessionLoading = false,
   onLike,
@@ -166,20 +170,25 @@ export const MessageList: React.FC<Props> = ({
     });
   }, [speakingMessageId, currentLanguage, t]);
 
-  const renderItem = useCallback(({ item, index }: { item: Message; index: number }) => (
-    <MessageBubble
-      message={item}
-      onLike={onLike}
-      onRegenerate={onRegenerate}
-      index={index}
-      isSpeaking={speakingMessageId === item.id}
-      onSpeakToggle={
-        item.role === 'assistant' && item.content.trim().length > 0
-          ? () => handleSpeakToggle(item.id, item.content)
-          : undefined
-      }
-    />
-  ), [onLike, onRegenerate, speakingMessageId, handleSpeakToggle]);
+  const renderItem = useCallback(({ item, index }: { item: Message; index: number }) => {
+    const isStreamingItem = !!streamingMessageId && item.id === streamingMessageId;
+    return (
+      <MessageBubble
+        message={item}
+        onLike={onLike}
+        onRegenerate={onRegenerate}
+        index={index}
+        isSpeaking={speakingMessageId === item.id}
+        skipEntryAnimation={isStreamingItem}
+        hideFooter={isStreamingItem && isStreamingActive}
+        onSpeakToggle={
+          item.role === 'assistant' && item.content.trim().length > 0
+            ? () => handleSpeakToggle(item.id, item.content)
+            : undefined
+        }
+      />
+    );
+  }, [streamingMessageId, isStreamingActive, onLike, onRegenerate, speakingMessageId, handleSpeakToggle]);
 
   if (isSessionLoading) {
     return (
@@ -217,12 +226,11 @@ export const MessageList: React.FC<Props> = ({
     );
   }
 
-  // inverted=true → FlatList veriyi ters render eder.
-  // En yeni mesajın en üstte (görsel olarak en altta) olması için newest→oldest sırası gerekir.
-  // messages şu an oldest→newest → ters çevir.
-  // Geçici mesajlar (optimistic, streaming) en yeni → dizinin başına.
+  // inverted FlatList — en yeni mesaj dizinin başında (index 0), görsel olarak en altta
+  // Real message cache'e girince streaming item'ı gösterme — aynı ID zaten messages'ta var
+  const streamingAlreadyInMessages = !!streamingMessageId && messages.some((m) => m.id === streamingMessageId);
   const displayMessages: Message[] = [
-    ...(streamingMessage ? [streamingMessage] : []),
+    ...(!streamingAlreadyInMessages && streamingMessage ? [streamingMessage] : []),
     ...(optimisticUserMsg ? [optimisticUserMsg] : []),
     ...messages.slice().reverse(),
   ];
@@ -236,7 +244,7 @@ export const MessageList: React.FC<Props> = ({
         keyExtractor={(item) => item.id}
         inverted
         contentContainerStyle={styles.listContent}
-        // inverted'da footer görsel olarak en üstte (en eski mesajların üstünde)
+        ListHeaderComponent={isTyping && !streamingMessage && !streamingAlreadyInMessages ? <WaitingBubble /> : null}
         ListFooterComponent={
           isLoadingMore ? (
             <View style={styles.loadingMore}>
@@ -244,11 +252,6 @@ export const MessageList: React.FC<Props> = ({
             </View>
           ) : null
         }
-        // inverted'da header görsel olarak en altta (en yeni mesajın altı = input üstü)
-        ListHeaderComponent={
-          isTyping && !streamingMessage ? <WaitingBubble /> : null
-        }
-        // inverted'da "end" aslında en eski mesajlar — pagination için onEndReached
         onEndReached={() => {
           if (hasMore && !isLoadingMore && onLoadMore) onLoadMore();
         }}

@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { unstable_batchedUpdates } from 'react-native';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { setSessionId, clearMessages } from '@/store/slices/chatSlice';
 import {
@@ -9,7 +10,7 @@ import {
   CHAT_QUERY_KEYS,
 } from '@/hooks/api/useChats';
 import { useQueryClient } from '@tanstack/react-query';
-import { streamChat } from '@/api/chat.api';
+import { streamChat, getChatMessages } from '@/api/chat.api';
 import { Attachment, Message } from '@/types/chat.types';
 import { ChatMessage } from '@/types/chat.api.types';
 import { toast } from '@/lib/toast';
@@ -46,9 +47,15 @@ export const useChatSession = () => {
   // Stream state
   const [isStreamingActive, setIsStreamingActive] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
-  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
-  // Ref — onDelta/onDone closure'da güncel content'e erişmek için
   const streamingContentRef = useRef('');
+  // onMeta'dan gelen gerçek assistant message ID'si — FlatList key reuse için
+  const streamingMsgIdRef = useRef<string>('streaming');
+  // onMeta'dan gelen gerçek user message ID'si — optimistic key reuse için
+  const optimisticUserMsgRef = useRef<Message | null>(null);
+  // messages'ın güncel sayısını ref'te tut — sendMessage callback'i stale closure yakalamaz
+  const messagesCountRef = useRef(0);
+  // rAF throttle — her frame'de bir setState
+  const rafRef = useRef<number | null>(null);
   // Optimistic user message — cache'e karıştırmadan ayrı tut
   const [optimisticUserMsg, setOptimisticUserMsg] = useState<Message | null>(null);
 
@@ -95,7 +102,7 @@ export const useChatSession = () => {
     const allMsgs = [...messagesQuery.data.pages].reverse().flatMap((page) => page?.messages ?? []);
 
     const seen = new Set<string>();
-    return allMsgs
+    const result = allMsgs
       .filter((msg): msg is ChatMessage => !!msg && typeof msg.role === 'string')
       .filter((msg) => {
         const key = msg.id ?? `${msg.createdAt}_${msg.role}`;
@@ -104,6 +111,9 @@ export const useChatSession = () => {
         return true;
       })
       .map(toLocalMessage);
+
+    messagesCountRef.current = result.length;
+    return result;
   }, [messagesQuery.data]);
 
   // ---------------------------------------------------------------------------
@@ -139,47 +149,94 @@ export const useChatSession = () => {
         content,
         timestamp: Date.now(),
       };
+      optimisticUserMsgRef.current = optimisticUser;
       setOptimisticUserMsg(optimisticUser);
 
       if (streamingEnabled) {
         // ── Stream modu ─────────────────────────────────────────────
-        setIsStreamingActive(true);
-        setStreamingContent('');
-        setStreamingMessageId(null);
         streamingContentRef.current = '';
+        setStreamingContent('');
+        setIsStreamingActive(true);
 
         const ctrl = new AbortController();
         abortCtrlRef.current = ctrl;
 
+        streamingMsgIdRef.current = 'streaming'; // reset
         try {
           await streamChat(
             activeChatId,
             { provider, model, messages: [{ role: 'user', content }] },
             {
               onMeta: (meta) => {
-                setStreamingMessageId(meta.assistantMessageId);
+                // Assistant ID — bir kez set et, override etme (backend iki kez gönderebilir)
+                if (meta?.assistantMessageId && streamingMsgIdRef.current === 'streaming') {
+                  streamingMsgIdRef.current = meta.assistantMessageId;
+                }
+                // User ID — bir kez set et
+                if (meta?.userMessageId && optimisticUserMsgRef.current?.id !== meta.userMessageId) {
+                  const updated = { ...optimisticUserMsgRef.current!, id: meta.userMessageId };
+                  optimisticUserMsgRef.current = updated;
+                  setOptimisticUserMsg(updated);
+                }
               },
               onDelta: (delta) => {
                 streamingContentRef.current += delta;
-                setStreamingContent((prev) => prev + delta);
+                // rAF throttle — her frame'de bir kez React state güncelle (smooth typewriter)
+                if (rafRef.current === null) {
+                  rafRef.current = requestAnimationFrame(() => {
+                    rafRef.current = null;
+                    setStreamingContent(streamingContentRef.current);
+                  });
+                }
               },
               onDone: () => {
-                streamingContentRef.current = '';
                 abortCtrlRef.current = null;
-                setIsStreamingActive(false);
-                setStreamingContent('');
-                setStreamingMessageId(null);
-                setOptimisticUserMsg(null);
+                if (rafRef.current !== null) {
+                  cancelAnimationFrame(rafRef.current);
+                  rafRef.current = null;
+                }
+                // Son delta'ları flush et
+                setStreamingContent(streamingContentRef.current);
 
-                // Gerçek veriyi API'den çek — client'ta fake data üretme
-                queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.messages(activeChatId!) });
-                queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
+                // Fetch et, cache'e yaz → tek batch'te her şeyi kapat
+                // limit: mevcut mesaj sayısı + 2 (user+assistant) → liste kaymasın
+                const fetchLimit = Math.max(40, messagesCountRef.current + 2);
+                getChatMessages(activeChatId!, { limit: fetchLimit, direction: 'older' })
+                  .then((result) => {
+                    // Tek render: setQueryData + tüm state temizliği
+                    // filteredMessages=messages (optimistic null) + streamingAlreadyInMessages=true
+                    // → FlatList real user + real assistant'ı direkt görür, flash yok
+                    unstable_batchedUpdates(() => {
+                      queryClient.setQueryData(
+                        CHAT_QUERY_KEYS.messages(activeChatId!),
+                        { pages: [result], pageParams: [undefined] },
+                      );
+                      streamingContentRef.current = '';
+                      setStreamingContent('');
+                      setOptimisticUserMsg(null);
+                      setIsStreamingActive(false);
+                    });
+                    queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
+                  })
+                  .catch(() => {
+                    unstable_batchedUpdates(() => {
+                      streamingContentRef.current = '';
+                      setStreamingContent('');
+                      setIsStreamingActive(false);
+                      setOptimisticUserMsg(null);
+                    });
+                    queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.messages(activeChatId!) });
+                    queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
+                  });
               },
               onError: (err) => {
+                if (rafRef.current !== null) {
+                  cancelAnimationFrame(rafRef.current);
+                  rafRef.current = null;
+                }
                 streamingContentRef.current = '';
-                setIsStreamingActive(false);
                 setStreamingContent('');
-                setStreamingMessageId(null);
+                setIsStreamingActive(false);
                 setOptimisticUserMsg(null);
                 abortCtrlRef.current = null;
                 if (err !== 'aborted') {
@@ -192,8 +249,8 @@ export const useChatSession = () => {
           );
         } catch {
           streamingContentRef.current = '';
-          setIsStreamingActive(false);
           setStreamingContent('');
+          setIsStreamingActive(false);
           setOptimisticUserMsg(null);
           toast.error('Mesaj gönderilemedi');
         }
@@ -243,10 +300,13 @@ export const useChatSession = () => {
   const startNewChat = useCallback(() => {
     abortCtrlRef.current?.abort();
     abortCtrlRef.current = null;
-    setIsStreamingActive(false);
-    setStreamingContent('');
-    setOptimisticUserMsg(null);
+    if (rafRef.current !== null) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
     streamingContentRef.current = '';
+    streamingMsgIdRef.current = 'streaming';
+    optimisticUserMsgRef.current = null;
+    setStreamingContent('');
+    setIsStreamingActive(false);
+    setOptimisticUserMsg(null);
     dispatch(setSessionId(null));
     dispatch(clearMessages());
   }, [dispatch]);
@@ -256,11 +316,14 @@ export const useChatSession = () => {
       if (id === sessionId) return;
       abortCtrlRef.current?.abort();
       abortCtrlRef.current = null;
-      setIsStreamingActive(false);
-      setStreamingContent('');
-      setOptimisticUserMsg(null);
+      if (rafRef.current !== null) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
       streamingContentRef.current = '';
-        dispatch(setSessionId(id));
+      streamingMsgIdRef.current = 'streaming';
+      optimisticUserMsgRef.current = null;
+      setStreamingContent('');
+      setIsStreamingActive(false);
+      setOptimisticUserMsg(null);
+      dispatch(setSessionId(id));
     },
     [sessionId, dispatch],
   );
@@ -285,9 +348,12 @@ export const useChatSession = () => {
   return {
     messages,
     optimisticUserMsg,
-    streamingMessage: (isStreamingActive && streamingContent)
-      ? { id: streamingMessageId ?? 'streaming', role: 'assistant' as const, content: streamingContent, timestamp: Date.now() }
+    isStreamingActive,
+    // assistantMessageId gelene kadar streamingMessage gösterme — key değişimi flash yaratır
+    streamingMessage: (isStreamingActive && streamingContent && streamingMsgIdRef.current !== 'streaming')
+      ? { id: streamingMsgIdRef.current, role: 'assistant' as const, content: streamingContent, timestamp: Date.now() }
       : null,
+    streamingMessageId: (isStreamingActive && streamingMsgIdRef.current !== 'streaming') ? streamingMsgIdRef.current : null,
     selectedAIModel,
     isTyping,
     chatId,

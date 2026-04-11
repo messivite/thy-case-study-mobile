@@ -102,6 +102,7 @@ export type StreamMetaEvent = {
   type: 'meta';
   meta: AIProviderInfo & {
     assistantMessageId: string;
+    userMessageId?: string;
   };
 };
 
