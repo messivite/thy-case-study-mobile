@@ -52,7 +52,7 @@ type AnimatedItemProps = {
   children: React.ReactNode;
 };
 
-const AnimatedItem: React.FC<AnimatedItemProps> = ({ index, isExiting, onLastExitDone, isLast, children }) => {
+const AnimatedItem: React.FC<AnimatedItemProps> = React.memo(({ index, isExiting, onLastExitDone, isLast, children }) => {
   const opacity = useSharedValue(0);
   const translateY = useSharedValue(-20);
   const scale = useSharedValue(1);
@@ -92,7 +92,7 @@ const AnimatedItem: React.FC<AnimatedItemProps> = ({ index, isExiting, onLastExi
   }));
 
   return <Reanimated.View style={animStyle}>{children}</Reanimated.View>;
-};
+});
 
 export const HomeWelcomePanel: React.FC<Props> = ({
   greetingPrefix,
@@ -130,7 +130,8 @@ export const HomeWelcomePanel: React.FC<Props> = ({
           />
         </AnimatedItem>
       )),
-    [quickActions, handleQuickActionPress, isExiting, lastIndex, onExitComplete],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [quickActions, handleQuickActionPress, lastIndex],
   );
 
   return (

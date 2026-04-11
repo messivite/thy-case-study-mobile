@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { TouchableOpacity, StyleSheet, View } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { ChatLayout } from '@/templates/ChatLayout';
@@ -170,9 +171,10 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.root}>
+      <StatusBar style="light" />
       <ChatLayout
         header={header}
-input={
+        input={
           <ChatInput
             onSend={handleSend}
             onStop={onStop}

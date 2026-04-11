@@ -154,22 +154,23 @@ export const useChatSession = () => {
     const cid = activeChatIdRef.current;
     if (!cid) return;
 
-    // Önce streaming'i bitir — fetch bekletmesin
-    unstable_batchedUpdates(() => {
-      setIsStreamingActive(false);
-      setOptimisticUserMsg(null);
-    });
+    // Send button'u hemen aç — fetch bekleme
+    setIsStreamingActive(false);
 
     const fetchLimit = Math.max(40, messagesCountRef.current + 2);
     getChatMessages(cid, { limit: fetchLimit, direction: 'older' })
       .then((result) => {
+        // Fetch tamamlandı: önce cache'i doldur, sonra optimistic'i kaldır
+        // Sıra önemli — önce mesajlar cache'e girmeli ki hasContent=false anı olmasın
         queryClient.setQueryData(
           CHAT_QUERY_KEYS.messages(cid),
           { pages: [result], pageParams: [undefined] },
         );
+        setOptimisticUserMsg(null);
         queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
       })
       .catch(() => {
+        setOptimisticUserMsg(null);
         queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.messages(cid) });
         queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
       });

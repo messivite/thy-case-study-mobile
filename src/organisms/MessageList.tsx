@@ -12,6 +12,7 @@ import { spacing } from '@/constants/spacing';
 import { useI18n } from '@/hooks/useI18n';
 import { stripTextForSpeech, speechLocaleForAppLang } from '@/lib/chatSpeech';
 import { toast } from '@/lib/toast';
+import { ActivityThyLoading } from '@/atoms/ActivityThyLoading';
 
 const AT_TOP_THRESHOLD = 80;
 
@@ -85,34 +86,28 @@ export const MessageList: React.FC<Props> = ({
   const welcomeReady = quickActions.length > 0 && !!welcomeGreeting && !!welcomeQuestion && !!onQuickActionPress;
   const canShowWelcome = !hasContent && welcomeReady;
 
-  const [isWelcomeExiting, setIsWelcomeExiting] = useState(false);
-  // welcomeShownRef: welcome bir kez gösterildi mi — render sırasında set edilir
+  // welcomeShownRef: welcome bir kez gösterildi mi
   const welcomeShownRef = useRef(false);
-  // exitingRef: exit animasyonu devam ediyor mu — showWelcome hesabında kullanılır
-  const exitingRef = useRef(false);
+  // isWelcomeExiting: exit animasyonu devam ediyor mu — state olarak tut ki panel re-render alsın
+  const [isWelcomeExiting, setIsWelcomeExiting] = useState(false);
+  const isWelcomeExitingRef = useRef(false);
 
   if (canShowWelcome) welcomeShownRef.current = true;
 
-  // canShowWelcome false olur olmaz exitingRef'i render sırasında set et
-  // böylece aynı render'da showWelcome=true kalır, FlatList görünür, panel unmount olmaz
-  if (!canShowWelcome && welcomeShownRef.current && !exitingRef.current) {
-    exitingRef.current = true;
-  }
-
   // showWelcome: panel gösterilmişse ve exit tamamlanmadıysa mount'ta tut
-  const showWelcome = canShowWelcome || exitingRef.current;
+  const showWelcome = canShowWelcome || isWelcomeExitingRef.current;
 
-  // isWelcomeExiting state: HomeWelcomePanel'e prop olarak geçilir
-  // exitingRef true olduğu anda bir sonraki render'da state güncelle
-  useEffect(() => {
-    if (exitingRef.current && !isWelcomeExiting) {
-      setIsWelcomeExiting(true);
-    }
-  }, [isWelcomeExiting]);
+  // canShowWelcome false olur olmaz — aynı render'da isWelcomeExiting'i başlat
+  // useEffect gecikmesi yok: render sırasında ref + sonraki render'a state set
+  if (!canShowWelcome && welcomeShownRef.current && !isWelcomeExitingRef.current) {
+    isWelcomeExitingRef.current = true;
+    // Sonraki mikro-görevde state'i de güncelle (render-in-render yasak)
+    Promise.resolve().then(() => setIsWelcomeExiting(true));
+  }
 
   const handleWelcomeExitComplete = useCallback(() => {
     welcomeShownRef.current = false;
-    exitingRef.current = false;
+    isWelcomeExitingRef.current = false;
     setIsWelcomeExiting(false);
   }, []);
 
@@ -124,8 +119,10 @@ export const MessageList: React.FC<Props> = ({
     isAtLatestRef.current = true;
     lastStreamingMsgIdRef.current = null;
     welcomeShownRef.current = false;
-    exitingRef.current = false;
+    isWelcomeExitingRef.current = false;
+    setIsWelcomeExiting(false);
     onScrollStateChange?.(false, 0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatId]);
 
   useEffect(() => {
@@ -299,7 +296,7 @@ export const MessageList: React.FC<Props> = ({
           keyboardDismissMode="interactive"
           keyboardShouldPersistTaps="handled"
         />
-      ) : !showWelcome ? (
+      ) : !showWelcome && !isSessionLoading && !isWelcomeExiting ? (
         <View style={styles.center}>
           <Text variant="h4" align="center" color={colors.text}>{t('assistant.emptyTitle')}</Text>
           <Text variant="body" align="center" color={colors.textSecondary} style={styles.emptySubtitle}>
