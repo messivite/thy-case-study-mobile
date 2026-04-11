@@ -27,6 +27,7 @@ export default function HomeScreen() {
     isStreamingActive,
     streamingMessage,
     streamingMessageId,
+    optimisticUserMsgId,
     selectedAIModel,
     isTyping,
     isLoading,
@@ -175,6 +176,7 @@ input={
           isStreamingActive={isStreamingActive}
           streamingMessage={streamingMessage}
           streamingMessageId={streamingMessageId}
+          optimisticUserMsgId={optimisticUserMsgId}
           isTyping={isTyping}
           isSessionLoading={!!chatId && isSessionLoading}
           onLike={likeMessage}

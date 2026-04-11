@@ -51,6 +51,7 @@ type Props = {
   isStreamingActive?: boolean;
   streamingMessage?: Message | null;
   streamingMessageId?: string | null;
+  optimisticUserMsgId?: string | null;
   isTyping: boolean;
   isSessionLoading?: boolean;
   onLike?: (id: string, liked: boolean | null) => void;
@@ -74,6 +75,7 @@ export const MessageList: React.FC<Props> = ({
   isStreamingActive = false,
   streamingMessage,
   streamingMessageId,
+  optimisticUserMsgId,
   isTyping,
   isSessionLoading = false,
   onLike,
@@ -172,6 +174,7 @@ export const MessageList: React.FC<Props> = ({
 
   const renderItem = useCallback(({ item, index }: { item: Message; index: number }) => {
     const isStreamingItem = !!streamingMessageId && item.id === streamingMessageId;
+    const isOptimisticUserItem = !!optimisticUserMsgId && item.id === optimisticUserMsgId;
     return (
       <MessageBubble
         message={item}
@@ -179,8 +182,8 @@ export const MessageList: React.FC<Props> = ({
         onRegenerate={onRegenerate}
         index={index}
         isSpeaking={speakingMessageId === item.id}
-        skipEntryAnimation={isStreamingItem}
-        hideFooter={isStreamingItem && isStreamingActive}
+        skipEntryAnimation={isStreamingItem || isOptimisticUserItem}
+        hideFooter={(isStreamingItem && isStreamingActive) || isOptimisticUserItem}
         onSpeakToggle={
           item.role === 'assistant' && item.content.trim().length > 0
             ? () => handleSpeakToggle(item.id, item.content)
@@ -188,7 +191,7 @@ export const MessageList: React.FC<Props> = ({
         }
       />
     );
-  }, [streamingMessageId, isStreamingActive, onLike, onRegenerate, speakingMessageId, handleSpeakToggle]);
+  }, [streamingMessageId, isStreamingActive, optimisticUserMsgId, onLike, onRegenerate, speakingMessageId, handleSpeakToggle]);
 
   if (isSessionLoading) {
     return (

@@ -216,7 +216,7 @@ export const useChatSession = () => {
                       setOptimisticUserMsg(null);
                       setIsStreamingActive(false);
                     });
-                    queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
+                                    queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
                   })
                   .catch(() => {
                     unstable_batchedUpdates(() => {
@@ -354,6 +354,8 @@ export const useChatSession = () => {
       ? { id: streamingMsgIdRef.current, role: 'assistant' as const, content: streamingContent, timestamp: Date.now() }
       : null,
     streamingMessageId: (isStreamingActive && streamingMsgIdRef.current !== 'streaming') ? streamingMsgIdRef.current : null,
+    // optimisticUserMsgId: optimistic null olsa bile son ID'yi bir frame daha tut → footer flash yok
+    optimisticUserMsgId: optimisticUserMsg?.id ?? optimisticUserMsgRef.current?.id ?? null,
     selectedAIModel,
     isTyping,
     chatId,
