@@ -4,12 +4,10 @@ import { router } from 'expo-router';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { toast } from '@/lib/toast';
 import { ChatLayout } from '@/templates/ChatLayout';
 import { MessageList } from '@/organisms/MessageList';
 import { ChatInput } from '@/organisms/ChatInput';
 import { AppHeader } from '@/organisms/AppHeader';
-import { ModelSelector } from '@/molecules/ModelSelector';
 import { Avatar } from '@/atoms/Avatar';
 import { useChatSession } from '@/hooks/useChatSession';
 import { useAuth } from '@/hooks/useAuth';
@@ -19,7 +17,6 @@ import { palette } from '@/constants/colors';
 import { ChatHistoryDrawer } from '@/organisms/ChatHistoryDrawer';
 import { ModelPickerSheet } from '@/organisms/ModelPickerSheet';
 import { WelcomeQuickAction } from '@/organisms/HomeWelcomePanel';
-import { useAppSelector } from '@/store/hooks';
 
 export default function HomeScreen() {
   const { user, isGuest } = useAuth();
@@ -27,21 +24,20 @@ export default function HomeScreen() {
   const { t } = useI18n();
   const {
     messages,
-    selectedModel,
+    selectedAIModel,
     isTyping,
     sendMessage,
-    changeModel,
+    onStop,
     likeMessage,
+    startNewChat,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
   } = useChatSession();
 
-  const [modelSelectorVisible, setModelSelectorVisible] = useState(false);
   const [modelPickerVisible, setModelPickerVisible] = useState(false);
   const [drawerVisible, setDrawerVisible] = useState(false);
   const closeModelPicker = useCallback(() => setModelPickerVisible(false), []);
-  const selectedAIModel = useAppSelector((s) => s.chat.selectedAIModel);
 
   // Sol kenardan sağa swipe → drawer aç
   const openDrawer = useCallback(() => setDrawerVisible(true), []);
@@ -154,9 +150,8 @@ export default function HomeScreen() {
         input={
           <ChatInput
             onSend={handleSend}
-            onStop={() => {/* TODO: stream abort */}}
+            onStop={onStop}
             onModelSelectorPress={() => setModelPickerVisible(true)}
-            selectedModel={selectedModel}
             selectedAIModelName={selectedAIModel?.displayName}
             isStreaming={isTyping}
             placeholder={t('assistant.placeholder')}
@@ -179,16 +174,6 @@ export default function HomeScreen() {
 
       </ChatLayout>
 
-      <ModelSelector
-        visible={modelSelectorVisible}
-        selectedModel={selectedModel}
-        onSelect={(id) => {
-          changeModel(id);
-          toast.info(t('toast.modelChanged'));
-        }}
-        onClose={() => setModelSelectorVisible(false)}
-      />
-
       <ModelPickerSheet
         visible={modelPickerVisible}
         onClose={closeModelPicker}
@@ -198,6 +183,7 @@ export default function HomeScreen() {
       <ChatHistoryDrawer
         visible={drawerVisible}
         onClose={() => setDrawerVisible(false)}
+        onNewChat={startNewChat}
       />
       </View>
     </GestureDetector>

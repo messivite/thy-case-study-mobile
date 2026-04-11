@@ -68,6 +68,8 @@ import { AppHeader } from '@/organisms/AppHeader';
 import { useTheme } from '@/hooks/useTheme';
 import { useHaptics } from '@/hooks/useHaptics';
 import { useI18n } from '@/hooks/useI18n';
+import { useAppDispatch } from '@/store/hooks';
+import { setSessionId } from '@/store/slices/chatSlice';
 import { CHAT_QUERY_KEYS, useDeleteChatMutation } from '@/hooks/api/useChats';
 import { useChatHistory } from '@/hooks/useChatHistory';
 import { realmService } from '@/services/realm';
@@ -621,6 +623,7 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
   const { colors, isDark } = useTheme();
   const { t } = useI18n();
   const haptics = useHaptics();
+  const dispatch = useAppDispatch();
   const queryClient = useQueryClient();
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
@@ -814,18 +817,9 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
     setSearchFocused(false);
     setSearchQuery('');
     setDebouncedQuery('');
-    // ChatListItem shape'ine map et — sessionId → id
-    onSelectChat?.({
-      id: item.sessionId,
-      title: item.title,
-      provider: '',
-      model: '',
-      createdAt: item.sessionCreatedAt,
-      updatedAt: item.sessionUpdatedAt,
-      lastMessagePreview: item.matchedContent ?? '',
-    });
+    dispatch(setSessionId(item.sessionId));
     onClose();
-  }, [onSelectChat, onClose]);
+  }, [dispatch, onClose]);
 
   // ---------------------------------------------------------------------------
   // Chat handlers
@@ -833,10 +827,11 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
 
   const handleSelectChat = useCallback(
     (chat: ChatListItem) => {
+      dispatch(setSessionId(chat.id));
       onSelectChat?.(chat);
       onClose();
     },
-    [onSelectChat, onClose],
+    [dispatch, onSelectChat, onClose],
   );
 
   const handleLongPress = useCallback(
@@ -997,7 +992,7 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
                   style={styles.newChatBtn}
                   titleStyle={styles.newChatBtnText}
                   icon={<Ionicons name="create-outline" size={scale(20)} color={colors.primary} />}
-                  onPress={() => { onNewChat?.(); onClose(); }}
+                  onPress={() => { dispatch(setSessionId(null)); onNewChat?.(); onClose(); }}
                 />
               </Animated.View>
             </View>

@@ -349,7 +349,7 @@ type Props = {
   onSend: (text: string, attachments: Attachment[]) => void;
   onStop?: () => void;
   onModelSelectorPress: () => void;
-  selectedModel: AIModelId;
+  selectedModel?: AIModelId;
   selectedAIModelName?: string; // API'den gelen dinamik model adı
   disabled?: boolean;
   isStreaming?: boolean;

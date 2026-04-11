@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { InfiniteData } from '@tanstack/react-query';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { setSelectedModel, clearMessages } from '@/store/slices/chatSlice';
+import { setSessionId, clearMessages } from '@/store/slices/chatSlice';
 import {
   useCreateChatMutation,
   useInfiniteMessagesQuery,
@@ -9,53 +10,24 @@ import {
 } from '@/hooks/api/useChats';
 import { useQueryClient } from '@tanstack/react-query';
 import { streamChat } from '@/api/chat.api';
-import { AIModelId } from '@/constants/models';
-import { Attachment } from '@/types/chat.types';
-import { Message } from '@/types/chat.types';
-import { ChatMessage } from '@/types/chat.api.types';
+import { Attachment, Message } from '@/types/chat.types';
+import { ChatMessage, PaginatedMessagesResponse } from '@/types/chat.api.types';
 import { realmService } from '@/services/realm';
+import { toast } from '@/lib/toast';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-const toLocalMessage = (msg: ChatMessage, index: number): Message => ({
-  id: `msg_${index}_${msg.role}`,
+const toLocalMessage = (
+  msg: ChatMessage & { createdAt?: string; id?: string },
+  index: number,
+): Message => ({
+  id: msg.id ?? `msg_${index}_${msg.role}`,
   role: msg.role as 'user' | 'assistant',
   content: msg.content,
-  modelId: providerToModelId(msg.provider),
-  timestamp: Date.now() - index * 1000,
+  timestamp: msg.createdAt ? new Date(msg.createdAt).getTime() : Date.now() - index * 1000,
 });
-
-const providerToModelId = (provider: string): AIModelId => {
-  const map: Record<string, AIModelId> = {
-    google: 'gemini',
-    gemini: 'gemini',
-    openai: 'gpt',
-    anthropic: 'claude',
-  };
-  return map[provider?.toLowerCase()] ?? 'custom';
-};
-
-const modelIdToProvider = (modelId: AIModelId): string => {
-  const map: Record<AIModelId, string> = {
-    gemini: 'google',
-    gpt: 'openai',
-    claude: 'anthropic',
-    custom: 'custom',
-  };
-  return map[modelId];
-};
-
-const modelIdToModelName = (modelId: AIModelId): string => {
-  const map: Record<AIModelId, string> = {
-    gemini: 'gemini-2.5-flash',
-    gpt: 'gpt-4.1-mini',
-    claude: 'claude-sonnet-4-20250514',
-    custom: 'custom-model',
-  };
-  return map[modelId];
-};
 
 // ---------------------------------------------------------------------------
 // Hook
@@ -65,11 +37,12 @@ export const useChatSession = () => {
   const dispatch = useAppDispatch();
   const queryClient = useQueryClient();
 
-  const selectedModel = useAppSelector((s) => s.chat.selectedModel);
+  const selectedAIModel = useAppSelector((s) => s.chat.selectedAIModel);
+  const sessionId = useAppSelector((s) => s.chat.sessionId);
   const streamingEnabled = useAppSelector((s) => s.settings.streamingEnabled);
 
-  const [chatId, setChatId] = useState<string | null>(null);
-  const prevChatIdRef = useRef<string | null>(null);
+  // Okunabilirlik için alias — yazma hep dispatch(setSessionId(...)) ile
+  const chatId = sessionId;
 
   // Stream state
   const [isStreamingActive, setIsStreamingActive] = useState(false);
@@ -78,6 +51,12 @@ export const useChatSession = () => {
   // Ref — onDone closure'da güncel content'e erişmek için
   const streamingContentRef = useRef('');
 
+  // AbortController — stream durdurma için
+  const abortCtrlRef = useRef<AbortController | null>(null);
+
+  // Önceki session id — temizlik için
+  const prevSessionIdRef = useRef<string | null>(null);
+
   // Mutations
   const createChatMutation = useCreateChatMutation();
   const sendMessageMutation = useSendMessageMutation(chatId ?? '');
@@ -85,18 +64,75 @@ export const useChatSession = () => {
   // Messages query
   const messagesQuery = useInfiniteMessagesQuery(chatId ?? '');
 
-  // Session değişince eski session'ın mesajlarını Realm'den temizle
+  // Session değişince eski session'ı temizle ve in-flight stream'i kes
   useEffect(() => {
-    const prev = prevChatIdRef.current;
+    const prev = prevSessionIdRef.current;
     if (prev && prev !== chatId) {
+      abortCtrlRef.current?.abort();
+      abortCtrlRef.current = null;
       realmService.clearSessionMessages(prev);
     }
-    prevChatIdRef.current = chatId;
+    prevSessionIdRef.current = chatId;
   }, [chatId]);
 
-  // Not: Realm yazma useInfiniteMessagesQuery icindeki useEffect tarafindan yapiliyor.
+  // ---------------------------------------------------------------------------
+  // Optimistic helpers
+  // ---------------------------------------------------------------------------
 
+  const addOptimisticUserMessage = useCallback(
+    (activeChatId: string, content: string) => {
+      const snapshot = queryClient.getQueryData<InfiniteData<PaginatedMessagesResponse>>(
+        CHAT_QUERY_KEYS.messages(activeChatId),
+      );
+
+      const optimisticMsg: ChatMessage = {
+        role: 'user',
+        content,
+        provider: selectedAIModel.provider,
+        model: selectedAIModel.model,
+      };
+
+      queryClient.setQueryData<InfiniteData<PaginatedMessagesResponse>>(
+        CHAT_QUERY_KEYS.messages(activeChatId),
+        (old) => {
+          // Yeni session için cache boş olabilir — başlat
+          const base: InfiniteData<PaginatedMessagesResponse> = old ?? {
+            pages: [{ messages: [], nextCursor: null, hasMore: false }],
+            pageParams: [undefined],
+          };
+          const newPages = [...base.pages];
+          newPages[0] = {
+            ...newPages[0],
+            messages: [optimisticMsg, ...newPages[0].messages],
+          };
+          return { ...base, pages: newPages };
+        },
+      );
+
+      return snapshot;
+    },
+    [queryClient, selectedAIModel],
+  );
+
+  const rollbackOptimisticMessage = useCallback(
+    (
+      activeChatId: string,
+      snapshot: InfiniteData<PaginatedMessagesResponse> | undefined,
+    ) => {
+      if (snapshot !== undefined) {
+        queryClient.setQueryData(CHAT_QUERY_KEYS.messages(activeChatId), snapshot);
+      } else {
+        // Yeni session için oluşturulmuştu — tamamen kaldır
+        queryClient.removeQueries({ queryKey: CHAT_QUERY_KEYS.messages(activeChatId) });
+      }
+    },
+    [queryClient],
+  );
+
+  // ---------------------------------------------------------------------------
   // Flatten paginated messages — oldest first for display
+  // ---------------------------------------------------------------------------
+
   const persistedMessages: Message[] = useMemo(() => {
     if (!messagesQuery.data) return [];
     return messagesQuery.data.pages
@@ -113,11 +149,10 @@ export const useChatSession = () => {
       id: streamingMessageId ?? 'streaming',
       role: 'assistant',
       content: streamingContent,
-      modelId: selectedModel,
       timestamp: Date.now(),
     };
     return [...persistedMessages, streamMsg];
-  }, [persistedMessages, isStreamingActive, streamingContent, streamingMessageId, selectedModel]);
+  }, [persistedMessages, isStreamingActive, streamingContent, streamingMessageId]);
 
   // ---------------------------------------------------------------------------
   // sendMessage
@@ -125,8 +160,7 @@ export const useChatSession = () => {
 
   const sendMessage = useCallback(
     async (content: string, _attachments: Attachment[] = []) => {
-      const provider = modelIdToProvider(selectedModel);
-      const model = modelIdToModelName(selectedModel);
+      const { provider, model } = selectedAIModel;
 
       let activeChatId = chatId;
 
@@ -139,11 +173,15 @@ export const useChatSession = () => {
             model,
           });
           activeChatId = chat.id;
-          setChatId(chat.id);
+          dispatch(setSessionId(chat.id));
         } catch {
+          toast.error('Sohbet oluşturulamadı');
           return;
         }
       }
+
+      // Her iki modda da kullanıcı mesajını anında cache'e ekle
+      const snapshot = addOptimisticUserMessage(activeChatId, content);
 
       const userMsg: ChatMessage = { role: 'user', content, provider, model };
 
@@ -152,8 +190,10 @@ export const useChatSession = () => {
         setIsStreamingActive(true);
         setStreamingContent('');
         setStreamingMessageId(null);
-
         streamingContentRef.current = '';
+
+        const ctrl = new AbortController();
+        abortCtrlRef.current = ctrl;
 
         try {
           await streamChat(
@@ -173,8 +213,14 @@ export const useChatSession = () => {
                 setIsStreamingActive(false);
                 setStreamingContent('');
                 setStreamingMessageId(null);
-                // Realm'e user + assistant mesajlarını yaz
-                const assistantMsg: ChatMessage = { role: 'assistant', content: assistantContent, provider, model };
+                abortCtrlRef.current = null;
+
+                const assistantMsg: ChatMessage = {
+                  role: 'assistant',
+                  content: assistantContent,
+                  provider,
+                  model,
+                };
                 realmService.saveMessages(activeChatId!, [userMsg, assistantMsg]);
                 queryClient.invalidateQueries({
                   queryKey: CHAT_QUERY_KEYS.messages(activeChatId!),
@@ -183,19 +229,35 @@ export const useChatSession = () => {
                   queryKey: CHAT_QUERY_KEYS.chatsList,
                 });
               },
-              onError: () => {
+              onError: (err) => {
                 streamingContentRef.current = '';
                 setIsStreamingActive(false);
                 setStreamingContent('');
+                setStreamingMessageId(null);
+                abortCtrlRef.current = null;
+                rollbackOptimisticMessage(activeChatId!, snapshot);
+                if (err !== 'aborted') {
+                  toast.error('Mesaj gönderilemedi');
+                }
               },
             },
+            ctrl.signal,
           );
         } catch {
+          streamingContentRef.current = '';
           setIsStreamingActive(false);
           setStreamingContent('');
+          rollbackOptimisticMessage(activeChatId, snapshot);
+          toast.error('Mesaj gönderilemedi');
         }
       } else {
         // ── Non-stream modu ──────────────────────────────────────────
+        // cancelQueries önce çağrılır ki useSendMessageMutation.onMutate'in
+        // snapshot'ı optimistic state'i içersin (temiz rollback için)
+        await queryClient.cancelQueries({
+          queryKey: CHAT_QUERY_KEYS.messages(activeChatId),
+        });
+
         sendMessageMutation.mutate(
           { provider, model, messages: [{ role: 'user', content }] },
           {
@@ -211,30 +273,61 @@ export const useChatSession = () => {
                 queryKey: CHAT_QUERY_KEYS.chatsList,
               });
             },
+            onError: () => {
+              rollbackOptimisticMessage(activeChatId!, snapshot);
+              toast.error('Mesaj gönderilemedi');
+            },
           },
         );
       }
     },
-    [chatId, selectedModel, streamingEnabled, createChatMutation, sendMessageMutation, queryClient],
+    [
+      chatId,
+      selectedAIModel,
+      streamingEnabled,
+      createChatMutation,
+      sendMessageMutation,
+      queryClient,
+      dispatch,
+      addOptimisticUserMessage,
+      rollbackOptimisticMessage,
+    ],
   );
 
   // ---------------------------------------------------------------------------
   // Diğer aksiyonlar
   // ---------------------------------------------------------------------------
 
-  const changeModel = useCallback(
-    (modelId: AIModelId) => {
-      dispatch(setSelectedModel(modelId));
-    },
-    [dispatch],
-  );
+  const onStop = useCallback(() => {
+    abortCtrlRef.current?.abort();
+    // onError('aborted') tetiklenecek, oradan rollback + state temizliği yapılır
+  }, []);
 
   const startNewChat = useCallback(() => {
-    setChatId(null);
+    abortCtrlRef.current?.abort();
+    abortCtrlRef.current = null;
     setIsStreamingActive(false);
     setStreamingContent('');
+    streamingContentRef.current = '';
+    if (sessionId) {
+      queryClient.removeQueries({ queryKey: CHAT_QUERY_KEYS.messages(sessionId) });
+    }
+    dispatch(setSessionId(null));
     dispatch(clearMessages());
-  }, [dispatch]);
+  }, [sessionId, dispatch, queryClient]);
+
+  const loadSession = useCallback(
+    (id: string) => {
+      if (id === sessionId) return;
+      abortCtrlRef.current?.abort();
+      abortCtrlRef.current = null;
+      setIsStreamingActive(false);
+      setStreamingContent('');
+      streamingContentRef.current = '';
+      dispatch(setSessionId(id));
+    },
+    [sessionId, dispatch],
+  );
 
   const likeMessage = useCallback((_id: string, _liked: boolean | null) => {
     // TODO: API entegrasyonu
@@ -244,12 +337,13 @@ export const useChatSession = () => {
 
   return {
     messages,
-    selectedModel,
+    selectedAIModel,
     isTyping,
     chatId,
     sendMessage,
-    changeModel,
     startNewChat,
+    loadSession,
+    onStop,
     likeMessage,
     // Infinite scroll (eskiye doğru)
     fetchNextPage: messagesQuery.fetchNextPage,

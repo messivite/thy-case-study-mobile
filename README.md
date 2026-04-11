@@ -27,6 +27,7 @@ Proje; onboarding, kimlik doğrulama, asistan sohbet akışı, ayarlar, çoklu d
 - [Auth ve Welcome akışı](#auth-ve-welcome-akışı)
 - [CI/CD, Codecov ve Release](#cicd-codecov-ve-release)
 - [Roadmap](#roadmap)
+  - [Yol haritası](#yol-haritası)
 
 ---
 
@@ -252,6 +253,15 @@ Release workflow’u önce test + typecheck koşar; kırmızıysa APK üretilmez
 - [x] App icon/splash/adaptive icon seti
 - [x] MMKV web fallback kurgusu
 - [x] CI/CD, test, Codecov entegrasyonu ve release (tag veya elle tetikleme + debug APK)
+
+### Yol haritası
+
+- **Belge ile sohbet** — PDF yükleme; sunucuda metin çıkarıp mevcut sohbet API’siyle özet ve soru-cevap.
+- **Görüntü ile sohbet (vision)** — Fotoğrafı doğrudan destekleyen modellere güvenli şekilde iletme; çok modlu mesaj şeması.
+- **Bilgi artırma (RAG)** — Şirket / açık veri setleriyle vektör arama; cevapları kaynaklı gösterme.
+- **Yönetim paneli** — Rol, kota ve kota bypass gibi ayarların web üzerinden yönetimi (staging).
+- **Görüntü üretimi** — İsteğe bağlı üretim API’si (ör. logo / illüstrasyon); sohbetten ayrı uç.
+- **Model kataloğu** — Kısa açıklamalar, hangi modellerde stream / vision var bilgisi.
 
 ### Sıradakiler
 

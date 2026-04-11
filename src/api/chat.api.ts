@@ -38,6 +38,7 @@ export const streamChat = async (
   chatId: string,
   payload: StreamChatRequest,
   callbacks: StreamChatCallbacks,
+  signal?: AbortSignal,
 ): Promise<void> => {
   const { data: { session } } = await supabase.auth.getSession();
   const token = session?.access_token;
@@ -49,6 +50,7 @@ export const streamChat = async (
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: JSON.stringify(payload),
+    signal,
   });
 
   if (!response.ok) {
@@ -65,41 +67,49 @@ export const streamChat = async (
   const decoder = new TextDecoder();
   let buffer = '';
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
 
-    buffer += decoder.decode(value, { stream: true });
+      buffer += decoder.decode(value, { stream: true });
 
-    // Newline-delimited JSON: her satır ayrı bir event
-    const lines = buffer.split('\n');
-    buffer = lines.pop() ?? ''; // son yarım satırı sakla
+      // Newline-delimited JSON: her satır ayrı bir event
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? ''; // son yarım satırı sakla
 
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
 
-      try {
-        const event = JSON.parse(trimmed) as StreamEvent;
+        try {
+          const event = JSON.parse(trimmed) as StreamEvent;
 
-        switch (event.type) {
-          case 'meta':
-            callbacks.onMeta?.(event.meta);
-            break;
-          case 'delta':
-            callbacks.onDelta?.(event.delta);
-            break;
-          case 'done':
-            callbacks.onDone?.();
-            break;
-          case 'error':
-            callbacks.onError?.(event.error);
-            break;
+          switch (event.type) {
+            case 'meta':
+              callbacks.onMeta?.(event.meta);
+              break;
+            case 'delta':
+              callbacks.onDelta?.(event.delta);
+              break;
+            case 'done':
+              callbacks.onDone?.();
+              break;
+            case 'error':
+              callbacks.onError?.(event.error);
+              break;
+          }
+        } catch {
+          // Parse edilemeyen satır — yoksay
         }
-      } catch {
-        // Parse edilemeyen satır — yoksay
       }
     }
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      callbacks.onError?.('aborted');
+      return;
+    }
+    throw err;
   }
 
   // Buffer'da kalan veri varsa işle
