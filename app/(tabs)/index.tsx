@@ -96,24 +96,24 @@ export default function HomeScreen() {
   const quickActions = useMemo<WelcomeQuickAction[]>(
     () => [
       {
-        id: 'image',
-        label: `🖼️ ${t('assistant.quickActionImage')}`,
-        prompt: t('assistant.quickActionImagePrompt'),
+        id: 'flight',
+        label: `✈️ ${t('assistant.quickActionFlight')}`,
+        prompt: t('assistant.quickActionFlightPrompt'),
       },
       {
-        id: 'music',
-        label: `🎸 ${t('assistant.quickActionMusic')}`,
-        prompt: t('assistant.quickActionMusicPrompt'),
+        id: 'baggage',
+        label: `🧳 ${t('assistant.quickActionBaggage')}`,
+        prompt: t('assistant.quickActionBaggagePrompt'),
       },
       {
-        id: 'energy',
-        label: `✨ ${t('assistant.quickActionEnergy')}`,
-        prompt: t('assistant.quickActionEnergyPrompt'),
+        id: 'travel',
+        label: `🗺️ ${t('assistant.quickActionTravel')}`,
+        prompt: t('assistant.quickActionTravelPrompt'),
       },
       {
-        id: 'video',
-        label: `🎥 ${t('assistant.quickActionVideo')}`,
-        prompt: t('assistant.quickActionVideoPrompt'),
+        id: 'checkin',
+        label: `📋 ${t('assistant.quickActionCheckin')}`,
+        prompt: t('assistant.quickActionCheckinPrompt'),
       },
     ],
     [t],

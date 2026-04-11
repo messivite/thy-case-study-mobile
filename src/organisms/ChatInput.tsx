@@ -385,23 +385,21 @@ interface GrowingTextInputProps {
 const GrowingTextInput = React.memo(React.forwardRef<GrowingTextInputHandle, GrowingTextInputProps>(
   ({ placeholder, placeholderTextColor, editable, color, counterColor, onHasTextChange, onFocus, onBlur }, ref) => {
     const inputRef = useRef<TextInput>(null);
-    const valueRef = useRef('');
-    const charCountRef = useRef(0);
     const prevHasText = useRef(false);
     const prevShowCounter = useRef(false);
-    // counter: null=gizli, number=göster — sadece eşik geçilince re-render
+    const [value, setValue] = useState('');
     const [counterState, setCounterState] = useState<number | null>(null);
 
-    // Callback prop'larını ref'te tut — her render'da yeni closure yaratılmasın
     const onHasTextChangeRef = useRef(onHasTextChange);
     useEffect(() => { onHasTextChangeRef.current = onHasTextChange; }, [onHasTextChange]);
+
+    const valueRef = useRef('');
 
     React.useImperativeHandle(ref, () => ({
       getText: () => valueRef.current,
       clear: () => {
         valueRef.current = '';
-        charCountRef.current = 0;
-        inputRef.current?.clear();
+        setValue('');
         if (prevShowCounter.current) {
           prevShowCounter.current = false;
           setCounterState(null);
@@ -412,31 +410,20 @@ const GrowingTextInput = React.memo(React.forwardRef<GrowingTextInputHandle, Gro
         }
       },
       focus: () => inputRef.current?.focus(),
-      syncValue: (v: string) => { valueRef.current = v; },
+      syncValue: (v: string) => {
+        valueRef.current = v;
+        setValue(v);
+      },
     }), []);
 
-    const inputStyle = useMemo(() => ({
-      color,
-      fontFamily: fontFamily.regular,
-      fontSize: fontSize.base,
-      lineHeight: LINE_HEIGHT,
-      includeFontPadding: false,
-      paddingTop: 0,
-      paddingBottom: spacing[2],
-    }), [color]);
-
-    // Stable — dep yok, ref'ler güncel tutuluyor
-    // charCount state yok — her tuşta re-render olmaz.
-    // Sadece CHAR_WARN_THRESHOLD eşiği geçilince setCounterState tetiklenir.
     const handleChangeText = useCallback((t: string) => {
       valueRef.current = t;
-      charCountRef.current = t.length;
+      setValue(t);
       const nowShow = t.length >= MAX_CHARS - CHAR_WARN_THRESHOLD;
       if (nowShow !== prevShowCounter.current) {
         prevShowCounter.current = nowShow;
         setCounterState(nowShow ? t.length : null);
       } else if (nowShow) {
-        // Eşiğin üzerindeyiz ve sayı değişti — güncelle
         setCounterState(t.length);
       }
       const nowHas = t.trim().length > 0;
@@ -456,26 +443,24 @@ const GrowingTextInput = React.memo(React.forwardRef<GrowingTextInputHandle, Gro
 
     return (
       <View>
-        <View style={growingStyles.inputContainer}>
-          <TextInput
-            ref={inputRef}
-            style={inputStyle}
-            placeholder={placeholder}
-            placeholderTextColor={placeholderTextColor}
-            multiline
-            defaultValue=""
-            maxLength={MAX_CHARS}
-            onChangeText={handleChangeText}
-            onFocus={onFocus}
-            onBlur={onBlur}
-            returnKeyType="default"
-            editable={editable}
-            textAlignVertical="top"
-            scrollEnabled={false}
-            autoCorrect={false}
-            spellCheck={false}
-          />
-        </View>
+        <TextInput
+          ref={inputRef}
+          style={[growingStyles.input, { color }]}
+          placeholder={placeholder}
+          placeholderTextColor={placeholderTextColor}
+          multiline
+          value={value}
+          maxLength={MAX_CHARS}
+          onChangeText={handleChangeText}
+          onFocus={onFocus}
+          onBlur={onBlur}
+          returnKeyType="default"
+          editable={editable}
+          textAlignVertical="top"
+          scrollEnabled
+          autoCorrect={false}
+          spellCheck={false}
+        />
         {counterState !== null && (
           <Animated.Text style={[growingStyles.counter, { color: counterTextColor, alignSelf: 'flex-end' }]}>
             {counterState}/{MAX_CHARS}
@@ -487,7 +472,14 @@ const GrowingTextInput = React.memo(React.forwardRef<GrowingTextInputHandle, Gro
 ));
 
 const growingStyles = StyleSheet.create({
-  inputContainer: {
+  input: {
+    fontFamily: fontFamily.regular,
+    fontSize: fontSize.base,
+    lineHeight: LINE_HEIGHT,
+    includeFontPadding: false,
+    paddingTop: 0,
+    paddingBottom: spacing[2],
+    minHeight: LINE_HEIGHT,
     maxHeight: MAX_INPUT_HEIGHT,
   },
   counter: {
