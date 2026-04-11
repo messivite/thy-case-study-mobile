@@ -3,6 +3,7 @@ import { TouchableOpacity, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSharedValue } from 'react-native-reanimated';
 import { ChatLayout } from '@/templates/ChatLayout';
 import { MessageList } from '@/organisms/MessageList';
 import { ChatInput } from '@/organisms/ChatInput';
@@ -48,13 +49,15 @@ export default function HomeScreen() {
   } = useChatSession();
 
   const [scrolledUp, setScrolledUp] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
+  // unreadCount state yerine SharedValue — sayı değişince HomeScreen re-render olmaz,
+  // ScrollToBottomButton UI thread'de badge'i direkt günceller.
+  const unreadCountSV = useSharedValue(0);
   const scrollToLatestRef = useRef<(() => void) | null>(null);
 
   const handleScrollStateChange = useCallback((isScrolledUp: boolean, count: number) => {
+    unreadCountSV.value = count;
     setScrolledUp(isScrolledUp);
-    setUnreadCount(count);
-  }, []);
+  }, [unreadCountSV]);
 
   const handleScrollToLatest = useCallback(() => {
     scrollToLatestRef.current?.();
@@ -214,7 +217,7 @@ export default function HomeScreen() {
 
       <ScrollToBottomButton
         visible={scrolledUp}
-        unreadCount={unreadCount}
+        unreadCountSV={unreadCountSV}
         onPress={handleScrollToLatest}
       />
 

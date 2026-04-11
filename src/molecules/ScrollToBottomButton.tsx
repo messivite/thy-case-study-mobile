@@ -1,32 +1,36 @@
-import React, { useEffect } from 'react';
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useMemo } from 'react';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
   withTiming,
+  SharedValue,
+  useAnimatedReaction,
+  runOnJS,
 } from 'react-native-reanimated';
+import { useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { Text } from '@/atoms/Text';
 import { useTheme } from '@/hooks/useTheme';
 import { palette } from '@/constants/colors';
-import { radius } from '@/constants/spacing';
 
 type Props = {
   visible: boolean;
-  unreadCount: number;
+  unreadCountSV: SharedValue<number>;
   onPress: () => void;
 };
 
 /**
  * Aşağı in butonu — WhatsApp stili.
  * visible=true olunca scale+opacity ile aşağıdan fırlar.
- * unreadCount>0 ise üstünde kırmızı badge gösterir.
+ * unreadCountSV SharedValue — badge text'i useAnimatedReaction ile JS'e taşır,
+ * böylece HomeScreen re-render olmadan badge güncellenir.
  */
-export const ScrollToBottomButton: React.FC<Props> = ({ visible, unreadCount, onPress }) => {
+export const ScrollToBottomButton: React.FC<Props> = ({ visible, unreadCountSV, onPress }) => {
   const { colors, isDark } = useTheme();
   const scale = useSharedValue(0);
   const opacity = useSharedValue(0);
+  const [badgeText, setBadgeText] = useState('');
 
   useEffect(() => {
     if (visible) {
@@ -38,34 +42,43 @@ export const ScrollToBottomButton: React.FC<Props> = ({ visible, unreadCount, on
     }
   }, [visible, scale, opacity]);
 
+  // unreadCountSV değişince sadece bu component'i güncelle — HomeScreen re-render olmaz
+  useAnimatedReaction(
+    () => unreadCountSV.value,
+    (count) => {
+      const text = count <= 0 ? '' : count > 99 ? '99+' : String(count);
+      runOnJS(setBadgeText)(text);
+    },
+  );
+
   const animStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
     opacity: opacity.value,
   }));
+
+  const btnStyle = useMemo(() => ([
+    styles.btn,
+    {
+      backgroundColor: colors.surface,
+      borderColor: colors.border,
+      shadowColor: isDark ? '#000' : '#555',
+    },
+  ]), [colors.surface, colors.border, isDark]);
 
   return (
     <Animated.View style={[styles.wrapper, animStyle]} pointerEvents={visible ? 'auto' : 'none'}>
       <TouchableOpacity
         onPress={onPress}
         activeOpacity={0.85}
-        style={[
-          styles.btn,
-          {
-            backgroundColor: colors.surface,
-            borderColor: colors.border,
-            shadowColor: isDark ? '#000' : '#555',
-          },
-        ]}
+        style={btnStyle}
         accessibilityRole="button"
         accessibilityLabel="En alta git"
       >
         <Ionicons name="chevron-down" size={22} color={colors.text} />
 
-        {unreadCount > 0 && (
+        {badgeText.length > 0 && (
           <View style={styles.badge}>
-            <Text style={styles.badgeText}>
-              {unreadCount > 99 ? '99+' : String(unreadCount)}
-            </Text>
+            <Text style={styles.badgeText}>{badgeText}</Text>
           </View>
         )}
       </TouchableOpacity>

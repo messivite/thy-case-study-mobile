@@ -378,19 +378,19 @@ interface GrowingTextInputProps {
   color: string;
   counterColor: string;
   onHasTextChange: (hasText: boolean) => void;
-  onExpandVisibleChange: (visible: boolean) => void;
   onFocus: () => void;
   onBlur: () => void;
 }
 
 const GrowingTextInput = React.memo(React.forwardRef<GrowingTextInputHandle, GrowingTextInputProps>(
-  ({ placeholder, placeholderTextColor, editable, color, counterColor, onHasTextChange, onExpandVisibleChange, onFocus, onBlur }, ref) => {
+  ({ placeholder, placeholderTextColor, editable, color, counterColor, onHasTextChange, onFocus, onBlur }, ref) => {
     const inputRef = useRef<TextInput>(null);
     const valueRef = useRef('');
+    const charCountRef = useRef(0);
     const prevHasText = useRef(false);
-    const prevExpandVisible = useRef(false);
-    const [charCount, setCharCount] = useState(0);
-    const [atMax, setAtMax] = useState(false);
+    const prevShowCounter = useRef(false);
+    // counter: null=gizli, number=göster — sadece eşik geçilince re-render
+    const [counterState, setCounterState] = useState<number | null>(null);
 
     // Callback prop'larını ref'te tut — her render'da yeni closure yaratılmasın
     const onHasTextChangeRef = useRef(onHasTextChange);
@@ -400,8 +400,12 @@ const GrowingTextInput = React.memo(React.forwardRef<GrowingTextInputHandle, Gro
       getText: () => valueRef.current,
       clear: () => {
         valueRef.current = '';
+        charCountRef.current = 0;
         inputRef.current?.clear();
-        setCharCount(0);
+        if (prevShowCounter.current) {
+          prevShowCounter.current = false;
+          setCounterState(null);
+        }
         if (prevHasText.current) {
           prevHasText.current = false;
           onHasTextChangeRef.current(false);
@@ -422,9 +426,19 @@ const GrowingTextInput = React.memo(React.forwardRef<GrowingTextInputHandle, Gro
     }), [color]);
 
     // Stable — dep yok, ref'ler güncel tutuluyor
+    // charCount state yok — her tuşta re-render olmaz.
+    // Sadece CHAR_WARN_THRESHOLD eşiği geçilince setCounterState tetiklenir.
     const handleChangeText = useCallback((t: string) => {
       valueRef.current = t;
-      setCharCount(t.length);
+      charCountRef.current = t.length;
+      const nowShow = t.length >= MAX_CHARS - CHAR_WARN_THRESHOLD;
+      if (nowShow !== prevShowCounter.current) {
+        prevShowCounter.current = nowShow;
+        setCounterState(nowShow ? t.length : null);
+      } else if (nowShow) {
+        // Eşiğin üzerindeyiz ve sayı değişti — güncelle
+        setCounterState(t.length);
+      }
       const nowHas = t.trim().length > 0;
       if (nowHas !== prevHasText.current) {
         prevHasText.current = nowHas;
@@ -432,26 +446,17 @@ const GrowingTextInput = React.memo(React.forwardRef<GrowingTextInputHandle, Gro
       }
     }, []);
 
-    const handleContentSizeChange = useCallback((e: import('react-native').NativeSyntheticEvent<import('react-native').TextInputContentSizeChangeEventData>) => {
-      const rawH = e.nativeEvent.contentSize.height;
-      const nowAtMax = rawH >= MAX_INPUT_HEIGHT;
-      if (nowAtMax !== prevExpandVisible.current) {
-        prevExpandVisible.current = nowAtMax;
-        setAtMax(nowAtMax);
-        onExpandVisibleChange(nowAtMax);
-      }
-    }, [onExpandVisibleChange]);
-
-    const showCounter = charCount >= MAX_CHARS - CHAR_WARN_THRESHOLD;
-    const counterTextColor = charCount >= MAX_CHARS - 50
-      ? '#e53e3e'
-      : charCount >= MAX_CHARS - 100
-      ? '#dd6b20'
+    const counterTextColor = counterState !== null
+      ? counterState >= MAX_CHARS - 50
+        ? '#e53e3e'
+        : counterState >= MAX_CHARS - 100
+        ? '#dd6b20'
+        : counterColor
       : counterColor;
 
     return (
       <View>
-        <View style={{ maxHeight: MAX_INPUT_HEIGHT }}>
+        <View style={growingStyles.inputContainer}>
           <TextInput
             ref={inputRef}
             style={inputStyle}
@@ -463,16 +468,17 @@ const GrowingTextInput = React.memo(React.forwardRef<GrowingTextInputHandle, Gro
             onChangeText={handleChangeText}
             onFocus={onFocus}
             onBlur={onBlur}
-            onContentSizeChange={handleContentSizeChange}
             returnKeyType="default"
             editable={editable}
             textAlignVertical="top"
-            scrollEnabled={atMax}
+            scrollEnabled={false}
+            autoCorrect={false}
+            spellCheck={false}
           />
         </View>
-        {showCounter && (
+        {counterState !== null && (
           <Animated.Text style={[growingStyles.counter, { color: counterTextColor, alignSelf: 'flex-end' }]}>
-            {charCount}/{MAX_CHARS}
+            {counterState}/{MAX_CHARS}
           </Animated.Text>
         )}
       </View>
@@ -481,6 +487,9 @@ const GrowingTextInput = React.memo(React.forwardRef<GrowingTextInputHandle, Gro
 ));
 
 const growingStyles = StyleSheet.create({
+  inputContainer: {
+    maxHeight: MAX_INPUT_HEIGHT,
+  },
   counter: {
     fontSize: 11,
     fontFamily: fontFamily.regular,
@@ -521,22 +530,11 @@ const ChatInputInner: React.FC<Props> = ({
 
   const growingInputRef = useRef<GrowingTextInputHandle>(null);
   const [hasText, setHasText] = useState(false);
-  const [expandVisible, setExpandVisible] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [pickerVisible, setPickerVisible] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
   const focusProgress = useSharedValue(0);
-  const expandOpacity = useSharedValue(0);
-
-  useEffect(() => {
-    expandOpacity.value = withTiming(expandVisible ? 1 : 0, { duration: 180 });
-  }, [expandVisible, expandOpacity]);
-
-  const expandAnimStyle = useAnimatedStyle(() => ({
-    opacity: expandOpacity.value,
-    pointerEvents: expandOpacity.value > 0.5 ? 'auto' : 'none',
-  }));
 
   // String concat worklet içinde değil, colors değişince bir kez hesapla
   const primaryBorder = useMemo(() => colors.primary + '55', [colors.primary]);
@@ -654,7 +652,6 @@ const ChatInputInner: React.FC<Props> = ({
     haptics.medium();
     onSend(trimmed, attachments);
     growingInputRef.current?.clear();
-    setExpandVisible(false);
     setAttachments([]);
   }, [attachments, disabled, onSend, haptics]);
 
@@ -772,21 +769,20 @@ const ChatInputInner: React.FC<Props> = ({
               color={colors.text}
               counterColor={colors.textSecondary + '99'}
               onHasTextChange={setHasText}
-              onExpandVisibleChange={setExpandVisible}
               onFocus={handleFocus}
               onBlur={handleBlur}
             />
           </View>
 
-          {/* Expand — max satıra ulaşınca sağda görünür */}
-          <Animated.View style={[styles.expandSide, expandAnimStyle]} pointerEvents={expandVisible ? 'auto' : 'none'}>
+          {/* Expand — her zaman görünür, onContentSizeChange yükü kalktı */}
+          <View style={styles.expandSide}>
             <TouchableOpacity
               onPress={handleExpandPress}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <Ionicons name="expand-outline" size={scaleSize(18)} color={colors.textSecondary} />
             </TouchableOpacity>
-          </Animated.View>
+          </View>
         </View>
 
         {/* Bottom toolbar */}
