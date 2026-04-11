@@ -22,6 +22,7 @@ export const STORAGE_KEYS = {
   THEME: 'theme',
   LANGUAGE: 'language',
   SELECTED_MODEL: 'selected_model',
+  SELECTED_AI_MODEL: 'selected_ai_model',
   CHAT_MESSAGES: 'chat_messages',
   REACT_QUERY_CACHE: 'rq_cache',
   STREAMING: 'streaming_enabled',

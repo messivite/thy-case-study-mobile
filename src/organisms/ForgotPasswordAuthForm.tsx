@@ -23,6 +23,7 @@ import { WELCOME_GUEST_AUTH_FLOW } from '@/constants/welcomeGuestAuthFlow';
 import { WELCOME_LOGIN_BUTTON_DISABLED_OPACITY } from '@/constants/welcomeScreen';
 import { fontFamily } from '@/constants/typography';
 import { scale } from '@/lib/responsive';
+import { useHaptics } from '@/hooks/useHaptics';
 import { forgotPasswordSchema, type ForgotPasswordFormValues } from '@/forms/auth/forgotPassword/schema';
 
 type WebScaled = {
@@ -39,6 +40,7 @@ type Props = {
 export function ForgotPasswordAuthForm({ webScaled, footer }: Props) {
   const { t, currentLanguage } = useI18n();
   const { forgotPassword } = useSupabaseAuth();
+  const haptics = useHaptics();
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- t referansı stabil değil; dil değişince yeterli
   const schema = useMemo(() => forgotPasswordSchema(t), [currentLanguage]);
@@ -106,7 +108,7 @@ export function ForgotPasswordAuthForm({ webScaled, footer }: Props) {
               { opacity: submitOpacity },
               (!isValid || isSubmitting) && styles.submitBtnDisabled,
             ]}
-            onPress={handleSubmit(onSubmit)}
+            onPress={() => { haptics.medium(); handleSubmit(onSubmit)(); }}
             activeOpacity={0.85}
             disabled={!isValid || isSubmitting}
             accessibilityState={{ disabled: !isValid || isSubmitting }}

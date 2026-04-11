@@ -9,6 +9,7 @@
  */
 
 import React, { forwardRef, useCallback, useImperativeHandle, useRef, useState } from 'react';
+import { useHaptics } from '@/hooks/useHaptics';
 import {
   TextInput,
   TextInputProps,
@@ -60,6 +61,7 @@ export const SearchInput = forwardRef<SearchInputRef, Props>(({
   ...props
 }, ref) => {
   const colors = themeColors ?? lightColors;
+  const haptics = useHaptics();
   const inputRef = useRef<TextInput>(null);
   const [isFocused, setIsFocused] = useState(false);
   const progress = useSharedValue(0);
@@ -86,10 +88,11 @@ export const SearchInput = forwardRef<SearchInputRef, Props>(({
   }, [onFocusChange, progress]);
 
   const handleCancel = useCallback(() => {
+    haptics.light();
     onChangeText?.('');
     onClear?.();
     inputRef.current?.blur();
-  }, [onChangeText, onClear]);
+  }, [haptics, onChangeText, onClear]);
 
   const animatedContainer = useAnimatedStyle(() => ({
     borderColor: interpolateColor(
@@ -142,7 +145,7 @@ export const SearchInput = forwardRef<SearchInputRef, Props>(({
         {!!value && (
           <TouchableOpacity
             style={styles.clearBtn}
-            onPress={() => { onChangeText?.(''); onClear?.(); }}
+            onPress={() => { haptics.light(); onChangeText?.(''); onClear?.(); }}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <Ionicons name="close-circle" size={scale(16)} color={colors.textSecondary} />

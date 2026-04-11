@@ -17,7 +17,9 @@ import { useWhoIAm } from '@/hooks/useWhoIAm';
 import { useI18n } from '@/hooks/useI18n';
 import { palette } from '@/constants/colors';
 import { ChatHistoryDrawer } from '@/organisms/ChatHistoryDrawer';
+import { ModelPickerSheet } from '@/organisms/ModelPickerSheet';
 import { WelcomeQuickAction } from '@/organisms/HomeWelcomePanel';
+import { useAppSelector } from '@/store/hooks';
 
 export default function HomeScreen() {
   const { user, isGuest } = useAuth();
@@ -36,7 +38,10 @@ export default function HomeScreen() {
   } = useChatSession();
 
   const [modelSelectorVisible, setModelSelectorVisible] = useState(false);
+  const [modelPickerVisible, setModelPickerVisible] = useState(false);
   const [drawerVisible, setDrawerVisible] = useState(false);
+  const closeModelPicker = useCallback(() => setModelPickerVisible(false), []);
+  const selectedAIModel = useAppSelector((s) => s.chat.selectedAIModel);
 
   // Sol kenardan sağa swipe → drawer aç
   const openDrawer = useCallback(() => setDrawerVisible(true), []);
@@ -150,8 +155,9 @@ export default function HomeScreen() {
           <ChatInput
             onSend={handleSend}
             onStop={() => {/* TODO: stream abort */}}
-            onModelSelectorPress={() => setModelSelectorVisible(true)}
+            onModelSelectorPress={() => setModelPickerVisible(true)}
             selectedModel={selectedModel}
+            selectedAIModelName={selectedAIModel?.displayName}
             isStreaming={isTyping}
             placeholder={t('assistant.placeholder')}
           />
@@ -181,6 +187,12 @@ export default function HomeScreen() {
           toast.info(t('toast.modelChanged'));
         }}
         onClose={() => setModelSelectorVisible(false)}
+      />
+
+      <ModelPickerSheet
+        visible={modelPickerVisible}
+        onClose={closeModelPicker}
+        variant="liquidGlass"
       />
 
       <ChatHistoryDrawer

@@ -148,6 +148,8 @@
     "notificationsTurnOffMessage": "To turn off notifications, disable them for this app in your device settings.",
     "openSystemSettings": "Open settings",
     "chat": "Chat",
+    "model": "AI Model",
+    "modelDefault": "No model selected",
     "streaming": "Streaming Mode",
     "streamingDesc": "Receive AI responses token by token",
     "about": "About",
@@ -165,7 +167,23 @@
     "claude": "Claude",
     "custom": "Custom Model",
     "selectModel": "Select Model",
-    "currentModel": "Active Model"
+    "currentModel": "Active Model",
+    "descriptions": {
+      "gpt-4.1":              "Latest GPT-4 generation. Fast, accurate, excels at coding and reasoning.",
+      "gpt-4.1-mini":         "Lightweight GPT-4.1. Low cost, fast responses.",
+      "gpt-4.1-nano":         "Ultra-fast GPT-4.1 variant for simple, everyday tasks.",
+      "gpt-4o":               "Multimodal GPT-4. Handles text, images and audio.",
+      "gpt-4o-mini":          "Compact multimodal model. Efficient and affordable.",
+      "o3":                   "Advanced reasoning model. Solves complex problems step by step.",
+      "o4-mini":              "Lightweight reasoning model. Fast and cost-effective.",
+      "gemini-2.5-pro":       "Google's most capable model. Deep reasoning and analysis.",
+      "gemini-2.5-flash":     "Balanced speed and intelligence. Ideal for daily use.",
+      "gemini-2.0-flash":     "Fast and efficient Gemini. Great for real-time tasks.",
+      "gemini-2.0-flash-lite":"Ultra-lightweight Gemini for quick, simple requests.",
+      "claude-3-7-sonnet":    "Anthropic's latest Sonnet. Strong at writing and analysis.",
+      "claude-3-5-sonnet":    "Previous Sonnet generation. Balanced performance.",
+      "claude-3-5-haiku":     "Fast and lightweight Claude. Quick responses."
+    }
   },
   "errorBoundary": {
     "title": "Something Went Wrong",

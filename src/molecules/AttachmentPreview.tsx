@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import {
   View,
   Image,
@@ -18,6 +18,7 @@ import { MotiView } from '@/lib/motiView';
 import { Attachment } from '@/types/chat.types';
 import { Text } from '@/atoms/Text';
 import { useTheme } from '@/hooks/useTheme';
+import { useHaptics } from '@/hooks/useHaptics';
 import { palette } from '@/constants/colors';
 import { radius, spacing } from '@/constants/spacing';
 import { fontFamily, fontSize } from '@/constants/typography';
@@ -37,6 +38,12 @@ function formatBytes(bytes?: number): string {
 
 export const AttachmentPreview: React.FC<Props> = ({ attachment, onRemove, isInput }) => {
   const { colors } = useTheme();
+  const haptics = useHaptics();
+
+  const handleRemove = useCallback(() => {
+    haptics.light();
+    onRemove?.();
+  }, [haptics, onRemove]);
   const isImage = attachment.type === 'image';
   const isPDF = attachment.type === 'pdf';
   const isUploading = attachment.status === 'uploading';
@@ -79,7 +86,7 @@ export const AttachmentPreview: React.FC<Props> = ({ attachment, onRemove, isInp
 
         {/* Remove button (input mode) */}
         {isInput && onRemove && (
-          <TouchableOpacity style={styles.removeBtn} onPress={onRemove}>
+          <TouchableOpacity style={styles.removeBtn} onPress={handleRemove}>
             <Ionicons name="close-circle" size={20} color={palette.white} />
           </TouchableOpacity>
         )}
@@ -155,7 +162,7 @@ export const AttachmentPreview: React.FC<Props> = ({ attachment, onRemove, isInp
       </View>
 
       {isInput && onRemove && (
-        <TouchableOpacity onPress={onRemove} style={styles.fileRemoveBtn}>
+        <TouchableOpacity onPress={handleRemove} style={styles.fileRemoveBtn}>
           <Ionicons name="close" size={16} color={colors.textSecondary} />
         </TouchableOpacity>
       )}

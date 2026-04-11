@@ -22,6 +22,7 @@ import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { useNotificationPermission } from '@/hooks/useNotificationPermission';
 import { canDeliverPushNotifications } from '@/lib/notificationPermission';
 import { setTheme, setStreaming } from '@/store/slices/settingsSlice';
+import { ModelPickerSheet } from '@/organisms/ModelPickerSheet';
 import { spacing, radius } from '@/constants/spacing';
 import { palette } from '@/constants/colors';
 import { fontFamily } from '@/constants/typography';
@@ -156,6 +157,9 @@ export default function SettingsScreen() {
       handleNotificationToggle,
     ],
   );
+
+  const [modelPickerVisible, setModelPickerVisible] = useState(false);
+  const selectedAIModel = useAppSelector((s) => s.chat.selectedAIModel);
 
   const [shouldCrash, setShouldCrash] = useState(false);
   if (shouldCrash) {
@@ -303,6 +307,14 @@ export default function SettingsScreen() {
           <SettingsSection
             title={t('settings.chat')}
             items={[
+              {
+                id: 'model',
+                label: t('settings.model'),
+                subtitle: selectedAIModel?.displayName ?? t('settings.modelDefault'),
+                icon: 'hardware-chip-outline',
+                iconColor: palette.primary,
+                onPress: () => setModelPickerVisible(true),
+              },
               {
                 id: 'streaming',
                 label: t('settings.streaming'),
@@ -462,6 +474,12 @@ export default function SettingsScreen() {
         </MotiView>
         </View>
       </ScrollView>
+
+      <ModelPickerSheet
+        visible={modelPickerVisible}
+        onClose={() => setModelPickerVisible(false)}
+        variant="backdrop"
+      />
     </View>
   );
 }

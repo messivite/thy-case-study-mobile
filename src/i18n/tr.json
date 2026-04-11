@@ -148,6 +148,8 @@
     "notificationsTurnOffMessage": "Bildirimleri kapatmak için cihaz ayarlarından bu uygulama için bildirimleri devre dışı bırakın.",
     "openSystemSettings": "Ayarlara git",
     "chat": "Sohbet",
+    "model": "Yapay Zeka Modeli",
+    "modelDefault": "Model seçilmedi",
     "streaming": "Akış Modu",
     "streamingDesc": "Yapay zeka yanıtlarını anlık al",
     "about": "Hakkında",
@@ -165,7 +167,23 @@
     "claude": "Claude",
     "custom": "Özel Model",
     "selectModel": "Model Seçin",
-    "currentModel": "Aktif Model"
+    "currentModel": "Aktif Model",
+    "descriptions": {
+      "gpt-4.1":              "En yeni GPT-4 nesli. Hızlı, doğru; kod ve mantık yürütmede üstün.",
+      "gpt-4.1-mini":         "Hafif GPT-4.1. Düşük maliyet, hızlı yanıtlar.",
+      "gpt-4.1-nano":         "Basit, günlük işler için ultra-hızlı GPT-4.1 varyantı.",
+      "gpt-4o":               "Çok modlu GPT-4. Metin, görsel ve ses destekler.",
+      "gpt-4o-mini":          "Kompakt çok modlu model. Verimli ve ekonomik.",
+      "o3":                   "Gelişmiş akıl yürütme modeli. Karmaşık problemleri adım adım çözer.",
+      "o4-mini":              "Hafif akıl yürütme modeli. Hızlı ve maliyet etkin.",
+      "gemini-2.5-pro":       "Google'ın en yetenekli modeli. Derin analiz ve akıl yürütme.",
+      "gemini-2.5-flash":     "Hız ve zeka dengesi. Günlük kullanım için ideal.",
+      "gemini-2.0-flash":     "Hızlı ve verimli Gemini. Gerçek zamanlı görevler için.",
+      "gemini-2.0-flash-lite":"Basit ve hızlı istekler için ultra-hafif Gemini.",
+      "claude-3-7-sonnet":    "Anthropic'in son Sonnet'i. Yazı ve analizde güçlü.",
+      "claude-3-5-sonnet":    "Önceki Sonnet nesli. Dengeli performans.",
+      "claude-3-5-haiku":     "Hızlı ve hafif Claude. Anında yanıtlar."
+    }
   },
   "errorBoundary": {
     "title": "Bir Sorun Oluştu",

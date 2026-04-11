@@ -124,9 +124,14 @@ export const MessageList: React.FC<Props> = ({
 
   if (messages.length === 0 && !isTyping) {
     if (quickActions.length > 0 && welcomeGreeting && welcomeQuestion && onQuickActionPress) {
+      // "Merhaba Mustafa" → prefix="Merhaba", name="Mustafa"
+      const spaceIdx = welcomeGreeting.indexOf(' ');
+      const greetingPrefix = spaceIdx !== -1 ? welcomeGreeting.slice(0, spaceIdx) : welcomeGreeting;
+      const greetingName = spaceIdx !== -1 ? welcomeGreeting.slice(spaceIdx + 1) : '';
       return (
         <HomeWelcomePanel
-          greeting={welcomeGreeting}
+          greetingPrefix={greetingPrefix}
+          greetingName={greetingName}
           greetingReady={welcomeGreetingReady}
           question={welcomeQuestion}
           quickActions={quickActions}

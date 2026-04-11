@@ -32,9 +32,16 @@ export type Message = {
   attachments?: Attachment[];
 };
 
+export type SelectedAIModel = {
+  provider: string; // 'openai' | 'google' | 'anthropic' | ...
+  model: string;    // 'gpt-4o' | 'gemini-2.0-flash' | ...
+  displayName: string;
+};
+
 export type ChatState = {
   messages: Message[];
-  selectedModel: AIModelId;
+  selectedModel: AIModelId; // legacy — static model ID
+  selectedAIModel: SelectedAIModel; // default: gpt-4.1, kullanıcı seçimi MMKV'de persist
   isTyping: boolean;
   sessionId: string | null;
 };

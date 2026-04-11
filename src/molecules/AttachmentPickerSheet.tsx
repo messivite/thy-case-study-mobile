@@ -110,7 +110,7 @@ export const AttachmentPickerSheet: React.FC<Props> = ({
 
           <TouchableOpacity
             style={[styles.cancelBtn, { backgroundColor: colors.surfaceAlt }]}
-            onPress={onClose}
+            onPress={() => { haptics.light(); onClose(); }}
           >
             <Text variant="bodyMedium" color={colors.textSecondary}>
               İptal

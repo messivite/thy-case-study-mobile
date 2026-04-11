@@ -36,6 +36,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import { useHaptics } from '@/hooks/useHaptics';
+import { BlurView } from 'expo-blur';
 import { THYIcon } from '@/atoms/thy-icon';
 import { AI_MODELS, AIModelId } from '@/constants/models';
 import { Attachment } from '@/types/chat.types';
@@ -167,6 +168,77 @@ const SendButton = memo<SendButtonProps>(({ canSend, isStreaming, onSend, onStop
 
 const centerStyle = { alignItems: 'center' as const, justifyContent: 'center' as const };
 
+// ---------------------------------------------------------------------------
+// ModelChip — liquid glass chip, model adını gösterir
+// ---------------------------------------------------------------------------
+
+interface ModelChipProps {
+  modelName: string;
+  modelColor: string;
+  onPress: () => void;
+  isDark: boolean;
+}
+
+const ModelChip = memo<ModelChipProps>(({ modelName, modelColor, onPress, isDark }) => (
+  <TouchableOpacity
+    onPress={onPress}
+    activeOpacity={0.7}
+    hitSlop={{ top: 10, bottom: 10, left: 4, right: 10 }}
+    style={chipStyles.wrap}
+  >
+    {Platform.OS === 'ios' ? (
+      <BlurView
+        intensity={isDark ? 28 : 18}
+        tint={isDark ? 'dark' : 'light'}
+        style={chipStyles.chip}
+      >
+        <View style={[chipStyles.colorDot, { backgroundColor: modelColor }]} />
+        <Animated.Text numberOfLines={1} style={[chipStyles.label, { color: isDark ? '#fff' : '#111' }]}>
+          {modelName}
+        </Animated.Text>
+        <Ionicons name="chevron-down" size={scaleSize(11)} color={isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.3)'} />
+      </BlurView>
+    ) : (
+      <View style={[chipStyles.chip, { backgroundColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.06)' }]}>
+        <View style={[chipStyles.colorDot, { backgroundColor: modelColor }]} />
+        <Animated.Text numberOfLines={1} style={[chipStyles.label, { color: isDark ? '#fff' : '#111' }]}>
+          {modelName}
+        </Animated.Text>
+        <Ionicons name="chevron-down" size={scaleSize(11)} color={isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.3)'} />
+      </View>
+    )}
+  </TouchableOpacity>
+));
+
+const chipStyles = StyleSheet.create({
+  wrap: {
+    borderRadius: scaleSize(20),
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(128,128,128,0.25)',
+  },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: scaleSize(5),
+    paddingHorizontal: scaleSize(10),
+    paddingVertical: scaleSize(5),
+    maxWidth: scaleSize(130),
+  },
+  colorDot: {
+    width: scaleSize(7),
+    height: scaleSize(7),
+    borderRadius: scaleSize(4),
+    flexShrink: 0,
+  },
+  label: {
+    fontFamily: fontFamily.medium,
+    fontSize: scaleSize(11),
+    letterSpacing: 0.1,
+    flexShrink: 1,
+  },
+});
+
 // Gemini-style soft shadow — no harsh border, depth comes from shadow
 const cardShadow = {
   shadowColor: '#000',
@@ -278,6 +350,7 @@ type Props = {
   onStop?: () => void;
   onModelSelectorPress: () => void;
   selectedModel: AIModelId;
+  selectedAIModelName?: string; // API'den gelen dinamik model adı
   disabled?: boolean;
   isStreaming?: boolean;
   placeholder?: string;
@@ -288,11 +361,12 @@ export const ChatInput: React.FC<Props> = ({
   onStop,
   onModelSelectorPress,
   selectedModel,
+  selectedAIModelName,
   disabled = false,
   isStreaming = false,
   placeholder = 'Mesajınızı yazın...',
 }) => {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const haptics = useHaptics();
   const insets = useSafeAreaInsets();
 
@@ -594,18 +668,13 @@ export const ChatInput: React.FC<Props> = ({
               )}
             </TouchableOpacity>
 
-            {/* Model */}
-            <TouchableOpacity
-              style={styles.iconBtn}
+            {/* Model chip */}
+            <ModelChip
+              modelName={selectedAIModelName ?? model?.description ?? 'Model'}
+              modelColor={model?.color ?? colors.primary}
               onPress={onModelSelectorPress}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Ionicons
-                name={(model?.icon ?? 'flash-outline') as any}
-                size={scaleSize(17)}
-                color={model?.color ?? colors.primary}
-              />
-            </TouchableOpacity>
+              isDark={isDark}
+            />
           </View>
 
           <SendButton

@@ -1,4 +1,4 @@
-import { useState, type FC, type ReactNode } from 'react';
+import { useState, useCallback, type FC, type ReactNode } from 'react';
 import {
   TextInput,
   View,
@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { lightColors, type ThemeColors } from '@/constants/colors';
+import { useHaptics } from '@/hooks/useHaptics';
 import { radius, spacing } from '@/constants/spacing';
 import { fontFamily, fontSize } from '@/constants/typography';
 
@@ -34,8 +35,14 @@ export const Input: FC<Props> = ({
   ...props
 }) => {
   const colors = themeColors ?? lightColors;
+  const haptics = useHaptics();
   const [focused, setFocused] = useState(false);
   const [secureVisible, setSecureVisible] = useState(false);
+
+  const handleSecureToggle = useCallback(() => {
+    haptics.light();
+    setSecureVisible((v) => !v);
+  }, [haptics]);
 
   const hasError = typeof error === 'string' && error.length > 0;
 
@@ -84,7 +91,7 @@ export const Input: FC<Props> = ({
         {secure && (
           <TouchableOpacity
             style={styles.iconRight}
-            onPress={() => setSecureVisible((v) => !v)}
+            onPress={handleSecureToggle}
           >
             <Ionicons
               name={secureVisible ? 'eye-outline' : 'eye-off-outline'}

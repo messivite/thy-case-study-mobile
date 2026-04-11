@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { Pressable, StyleSheet } from 'react-native';
 import { Text } from '@/atoms/Text';
 import { spacing, radius } from '@/constants/spacing';
 import { useTheme } from '@/hooks/useTheme';
+import { useHaptics } from '@/hooks/useHaptics';
 import { fontFamily } from '@/constants/typography';
 
 type Props = {
@@ -12,10 +13,16 @@ type Props = {
 
 export const PromptChipButton: React.FC<Props> = ({ label, onPress }) => {
   const { colors } = useTheme();
+  const haptics = useHaptics();
+
+  const handlePress = useCallback(() => {
+    haptics.light();
+    onPress();
+  }, [haptics, onPress]);
 
   return (
     <Pressable
-      onPress={onPress}
+      onPress={handlePress}
       style={({ pressed }) => [
         styles.base,
         {
