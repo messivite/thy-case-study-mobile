@@ -39,6 +39,8 @@ export class RealmMessage extends Realm.Object<RealmMessage> {
   content!: string;
   createdAt!: string;
   syncedAt!: number;
+  provider?: string;
+  model?: string;
 
   static schema: Realm.ObjectSchema = {
     name: 'RealmMessage',
@@ -50,6 +52,8 @@ export class RealmMessage extends Realm.Object<RealmMessage> {
       content: 'string',
       createdAt: 'string',
       syncedAt: 'int',
+      provider: 'string?',
+      model: 'string?',
     },
   };
 }
@@ -75,7 +79,7 @@ export const openRealm = (): Promise<Realm> => {
 
   _realmPromise = Realm.open({
     schema: [RealmSession, RealmMessage],
-    schemaVersion: 6,
+    schemaVersion: 7,
     onMigration: (_oldRealm: Realm, newRealm: Realm) => {
       // v1 → v2: lastMessagePreview alani eklendi, mevcutlara bos string ver
       const sessions = newRealm.objects('RealmSession');
@@ -226,8 +230,8 @@ export const realmService = {
         id: m._id,
         role: m.role as 'user' | 'assistant',
         content: m.content,
-        provider: '' as string,
-        model: '' as string,
+        provider: m.provider ?? '',
+        model: m.model ?? '',
         createdAt: m.createdAt,
       }));
 
@@ -263,8 +267,10 @@ export const realmService = {
               content: msg.content,
               createdAt: msgCreatedAt,
               syncedAt: now,
+              provider: msg.provider ?? undefined,
+              model: msg.model ?? undefined,
             },
-            Realm.UpdateMode.Modified, // aynı _id varsa güncelle, yoksa ekle
+            Realm.UpdateMode.Modified,
           );
         }
 

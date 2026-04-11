@@ -25,7 +25,8 @@ export type Message = {
   id: string;
   role: MessageRole;
   content: string;
-  modelId?: AIModelId;
+  provider?: string;
+  model?: string;
   timestamp: number;
   isLoading?: boolean;
   liked?: boolean | null;

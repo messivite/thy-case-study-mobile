@@ -81,6 +81,7 @@ export const MessageList: React.FC<Props> = ({
   // Son streaming ID'yi bir render daha tut — StreamingBubble→MessageBubble
   // geçişinde MotiView entry animation'ı skip etmek için
   const lastStreamingMsgIdRef = useRef<string | null>(null);
+  const prevChatIdRef = useRef<string | null | undefined>(undefined);
 
   const hasContent = messages.length > 0 || !!optimisticUserMsg || !!streamingMessageId || isTyping;
   const welcomeReady = quickActions.length > 0 && !!welcomeGreeting && !!welcomeQuestion && !!onQuickActionPress;
@@ -114,6 +115,17 @@ export const MessageList: React.FC<Props> = ({
   useEffect(() => () => { void Speech.stop(); }, []);
 
   useLayoutEffect(() => {
+    const prev = prevChatIdRef.current;
+    prevChatIdRef.current = chatId ?? null;
+
+    // First mount — nothing to reset
+    if (prev === undefined) return;
+
+    // New chat creation (null → id) during active stream — skip reset
+    // so lastStreamingMsgIdRef / prevCountRef stay intact mid-stream.
+    // Reset only happens for real session switches (id → differentId).
+    if (prev === null && chatId != null && isStreamingActive) return;
+
     prevCountRef.current = 0;
     unreadCountRef.current = 0;
     isAtLatestRef.current = true;
@@ -205,6 +217,9 @@ export const MessageList: React.FC<Props> = ({
       );
     }
 
+    // FlatList inverted — index 0 en son mesaj
+    const isLastMessage = index === 0;
+
     return (
       <MessageBubble
         message={item}
@@ -214,6 +229,7 @@ export const MessageList: React.FC<Props> = ({
         isSpeaking={speakingMessageId === item.id}
         skipEntryAnimation={isStreamingItem || isOptimisticUserItem || wasStreamingItem}
         hideFooter={isStreamingItem}
+        hideModelLabel={isLastMessage || wasStreamingItem}
         onSpeakToggle={
           item.role === 'assistant' && item.content.trim().length > 0
             ? () => handleSpeakToggle(item.id, item.content)
@@ -269,43 +285,44 @@ export const MessageList: React.FC<Props> = ({
 
   return (
     <View style={styles.fill}>
-      {/* FlatList her zaman mount — mesajlar welcome animasyonu arkasında hazır */}
-      {hasContent ? (
-        <FlatList
-          ref={listRef}
-          data={displayMessages}
-          renderItem={renderItem}
-          keyExtractor={(item) => item.id}
-          inverted
-          contentContainerStyle={styles.listContent}
-          ListHeaderComponent={null}
-          ListFooterComponent={
-            isLoadingMore ? (
-              <View style={styles.loadingMore}>
-                <ActivityIndicator size="small" color={colors.primary} />
-              </View>
-            ) : null
-          }
-          onEndReached={() => {
-            if (hasMore && !isLoadingMore && onLoadMore) onLoadMore();
-          }}
-          onEndReachedThreshold={0.5}
-          onScroll={handleScroll}
-          scrollEventThrottle={100}
-          showsVerticalScrollIndicator={false}
-          keyboardDismissMode="interactive"
-          keyboardShouldPersistTaps="handled"
-        />
-      ) : !showWelcome && !isSessionLoading && !isWelcomeExiting ? (
-        <View style={styles.center}>
+      {/* FlatList always mounted — pre-warmed behind welcome overlay */}
+      <FlatList
+        ref={listRef}
+        data={displayMessages}
+        renderItem={renderItem}
+        keyExtractor={(item) => item.id}
+        inverted
+        contentContainerStyle={styles.listContent}
+        ListHeaderComponent={null}
+        ListFooterComponent={
+          isLoadingMore ? (
+            <View style={styles.loadingMore}>
+              <ActivityIndicator size="small" color={colors.primary} />
+            </View>
+          ) : null
+        }
+        onEndReached={() => {
+          if (hasMore && !isLoadingMore && onLoadMore) onLoadMore();
+        }}
+        onEndReachedThreshold={0.5}
+        onScroll={handleScroll}
+        scrollEventThrottle={100}
+        showsVerticalScrollIndicator={false}
+        keyboardDismissMode="interactive"
+        keyboardShouldPersistTaps="handled"
+      />
+
+      {/* Empty state overlay */}
+      {!hasContent && !showWelcome && !isSessionLoading && !isWelcomeExiting && (
+        <View style={[styles.center, styles.welcomeOverlay]} pointerEvents="none">
           <Text variant="h4" align="center" color={colors.text}>{t('assistant.emptyTitle')}</Text>
           <Text variant="body" align="center" color={colors.textSecondary} style={styles.emptySubtitle}>
             {t('assistant.emptySubtitle')}
           </Text>
         </View>
-      ) : null}
+      )}
 
-      {/* WelcomePanel: absolute overlay — FlatList ile aynı anda var olabilir */}
+      {/* WelcomePanel: absolute overlay — FlatList pre-warmed behind it */}
       {welcomeOverlay && (
         <View style={styles.welcomeOverlay}>
           <HomeWelcomePanel

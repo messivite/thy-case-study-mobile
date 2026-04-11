@@ -10,7 +10,8 @@ import {
   CHAT_QUERY_KEYS,
 } from '@/hooks/api/useChats';
 import { useQueryClient } from '@tanstack/react-query';
-import { streamChat, getChatMessages, sendMessage as sendMessageApi } from '@/api/chat.api';
+import { streamChat, sendMessage as sendMessageApi } from '@/api/chat.api';
+import { realmService } from '@/services/realm';
 import { Attachment, Message } from '@/types/chat.types';
 import { ChatMessage } from '@/types/chat.api.types';
 import { toast } from '@/lib/toast';
@@ -24,6 +25,8 @@ const toLocalMessage = (msg: ChatMessage): Message => ({
   role: (msg.role === 'user' || msg.role === 'assistant') ? msg.role : 'assistant',
   content: msg.content ?? '',
   timestamp: msg.createdAt ? new Date(msg.createdAt).getTime() : Date.now(),
+  provider: msg.provider,
+  model: msg.model,
 });
 
 // ---------------------------------------------------------------------------
@@ -76,6 +79,9 @@ export const useChatSession = () => {
 
   // onMeta'dan gelen gerçek assistant message ID'si — FlatList key reuse için
   const streamingMsgIdRef = useRef<string>('streaming');
+
+  // onMeta'dan gelen provider/model — cache yazımında kullanılır
+  const streamMetaRef = useRef<{ provider?: string; model?: string; userMessageId?: string }>({});
 
   // onMeta'dan gelen gerçek user message ID'si — optimistic key reuse için
   const optimisticUserMsgRef = useRef<Message | null>(null);
@@ -148,33 +154,47 @@ export const useChatSession = () => {
   // handleStreamingComplete — StreamingBubble'dan runOnJS ile çağrılır
   // ---------------------------------------------------------------------------
 
-  const handleStreamingComplete = useCallback((_finalText: string) => {
+  const handleStreamingComplete = useCallback((finalText: string) => {
     if (streamCancelledRef.current) return;
 
-    const cid = activeChatIdRef.current;
-    if (!cid) return;
+    const cid = activeChatIdRef.current ?? chatId ?? null;
+    const userMsg = optimisticUserMsgRef.current;
+    const { provider, model, userMessageId } = streamMetaRef.current;
+    const assistantMsgId = streamingMsgIdRef.current;
+    const now = Date.now();
 
-    // Send button'u hemen aç — fetch bekleme
-    setIsStreamingActive(false);
+    if (cid) {
+      const msgsToSave = [
+        {
+          id: userMessageId ?? userMsg?.id ?? `user_${now}`,
+          role: 'user' as const,
+          content: userMsg?.content ?? '',
+          createdAt: new Date(userMsg?.timestamp ?? now).toISOString(),
+          provider: provider ?? '',
+          model: model ?? '',
+        },
+        {
+          id: assistantMsgId !== 'streaming' ? assistantMsgId : `asst_${now}`,
+          role: 'assistant' as const,
+          content: finalText,
+          createdAt: new Date(now).toISOString(),
+          provider: provider ?? '',
+          model: model ?? '',
+        },
+      ];
 
-    const fetchLimit = Math.max(40, messagesCountRef.current + 2);
-    getChatMessages(cid, { limit: fetchLimit, direction: 'older' })
-      .then((result) => {
-        // Fetch tamamlandı: önce cache'i doldur, sonra optimistic'i kaldır
-        // Sıra önemli — önce mesajlar cache'e girmeli ki hasContent=false anı olmasın
-        queryClient.setQueryData(
-          CHAT_QUERY_KEYS.messages(cid),
-          { pages: [result], pageParams: [undefined] },
-        );
-        setOptimisticUserMsg(null);
-        queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
-      })
-      .catch(() => {
-        setOptimisticUserMsg(null);
+      // Realm'e yaz — React Query initialData Realm'den geliyor, invalidate sonrası güncel gelir
+      realmService.saveMessages(cid, msgsToSave).then(() => {
         queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.messages(cid) });
         queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
       });
-  }, [queryClient]);
+    }
+
+    unstable_batchedUpdates(() => {
+      setIsStreamingActive(false);
+      setOptimisticUserMsg(null);
+    });
+  }, [queryClient, chatId]);
 
   // ---------------------------------------------------------------------------
   // sendMessage
@@ -264,10 +284,13 @@ export const useChatSession = () => {
                   streamingMsgIdRef.current = meta.assistantMessageId;
                 }
                 if (meta?.userMessageId && optimisticUserMsgRef.current && optimisticUserMsgRef.current.id !== meta.userMessageId) {
-                  const updated = { ...optimisticUserMsgRef.current, id: meta.userMessageId };
-                  optimisticUserMsgRef.current = updated;
-                  setOptimisticUserMsg(updated);
+                  optimisticUserMsgRef.current = { ...optimisticUserMsgRef.current, id: meta.userMessageId };
                 }
+                streamMetaRef.current = {
+                  provider: meta?.provider,
+                  model: meta?.model,
+                  userMessageId: meta?.userMessageId,
+                };
               },
               onDelta: (delta) => {
                 if (streamCancelledRef.current) return;

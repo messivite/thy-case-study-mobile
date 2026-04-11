@@ -12,6 +12,7 @@ import Animated, {
   withSequence,
   withDelay,
   Easing,
+  FadeIn,
 } from 'react-native-reanimated';
 import Svg, { Path } from 'react-native-svg';
 import * as Clipboard from 'expo-clipboard';
@@ -36,6 +37,7 @@ type Props = {
   onSpeakToggle?: () => void;
   skipEntryAnimation?: boolean;
   hideFooter?: boolean;
+  hideModelLabel?: boolean;
 };
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -68,15 +70,12 @@ const AnimatedActionButton: React.FC<{
   );
 };
 
-// Kullanıcı tail — bubble'ın sağ alt köşesine tam oturur
-// Sol kenar düz (bubble'a yapışık), sağ alt sivri uç
 const UserTail = ({ color }: { color: string }) => (
   <Svg width={10} height={20} style={{ marginLeft: -1 }}>
     <Path d="M0 0 L0 20 L10 20 Q2 18 0 0 Z" fill={color} />
   </Svg>
 );
 
-// AI tail — bubble'ın sol alt köşesine tam oturur (user'ın ayna görüntüsü)
 const AiTail = ({ color, borderColor }: { color: string; borderColor: string }) => (
   <Svg width={10} height={20} style={{ marginRight: -1 }}>
     <Path d="M10 0 L10 20 L0 20 Q8 18 10 0 Z" fill={borderColor} />
@@ -93,6 +92,7 @@ const MessageBubbleInner: React.FC<Props> = ({
   onSpeakToggle,
   skipEntryAnimation = false,
   hideFooter = false,
+  hideModelLabel = false,
 }) => {
   const { colors } = useTheme();
   const haptics = useHaptics();
@@ -100,8 +100,6 @@ const MessageBubbleInner: React.FC<Props> = ({
 
   const isUser = message.role === 'user';
 
-  // Footer opacity — hideFooter=true iken 0, false olunca 300ms delay ile fade in
-  // delay: StreamingBubble→MessageBubble swap'ında layout settle etsin
   const footerOpacity = useSharedValue(hideFooter ? 0 : 1);
   const footerAnimStyle = useAnimatedStyle(() => ({ opacity: footerOpacity.value }));
 
@@ -143,6 +141,100 @@ const MessageBubbleInner: React.FC<Props> = ({
     onSpeakToggle?.();
   }, [onSpeakToggle, haptics]);
 
+  const bubbleContent = (
+    <View
+      style={[
+        styles.bubble,
+        isUser
+          ? [styles.userBubble, { backgroundColor: colors.primary }]
+          : [styles.aiBubble, { backgroundColor: colors.surface, borderColor: colors.border }, styles.aiBubbleFull],
+      ]}
+    >
+      {imageAttachments.length > 0 && (
+        <View style={styles.imageGrid}>
+          {imageAttachments.map((att) => (
+            <Image
+              key={att.id}
+              source={{ uri: att.remoteUrl ?? att.uri }}
+              style={[
+                styles.imageThumb,
+                imageAttachments.length === 1 && styles.imageThumbFull,
+              ]}
+              resizeMode="cover"
+            />
+          ))}
+        </View>
+      )}
+
+      {fileAttachments.length > 0 && (
+        <View style={styles.fileList}>
+          {fileAttachments.map((att) => (
+            <AttachmentPreview key={att.id} attachment={att} />
+          ))}
+        </View>
+      )}
+
+      {message.content.length > 0 && (
+        <Text
+          variant="body"
+          color={isUser ? palette.white : colors.text}
+          style={[styles.content, hasAttachments && styles.contentWithAttach]}
+        >
+          {message.content}
+        </Text>
+      )}
+
+      <Animated.View style={[styles.footer, isUser && styles.footerUser, footerAnimStyle]}>
+        <Text variant="micro" color={isUser ? 'rgba(255,255,255,0.65)' : colors.textSecondary}>
+          {formattedTime}
+        </Text>
+
+        {!isUser && (
+          <View style={styles.actions}>
+            {onSpeakToggle && (
+              <AnimatedActionButton
+                onPress={handleSpeak}
+                style={styles.actionBtn}
+                accessibilityRole="button"
+                accessibilityLabel={isSpeaking ? t('assistant.stopSpeaking') : t('assistant.speak')}
+              >
+                <Ionicons
+                  name={isSpeaking ? 'stop-circle-outline' : 'volume-high-outline'}
+                  size={14}
+                  color={isSpeaking ? colors.primary : colors.textSecondary}
+                />
+              </AnimatedActionButton>
+            )}
+            {message.content.length > 0 && (
+              <AnimatedActionButton onPress={handleCopy} style={styles.actionBtn}>
+                <Ionicons name="copy-outline" size={14} color={colors.textSecondary} />
+              </AnimatedActionButton>
+            )}
+            <AnimatedActionButton onPress={() => handleLike(true)} style={styles.actionBtn}>
+              <Ionicons
+                name={message.liked === true ? 'thumbs-up' : 'thumbs-up-outline'}
+                size={14}
+                color={message.liked === true ? palette.success : colors.textSecondary}
+              />
+            </AnimatedActionButton>
+            <AnimatedActionButton onPress={() => handleLike(false)} style={styles.actionBtn}>
+              <Ionicons
+                name={message.liked === false ? 'thumbs-down' : 'thumbs-down-outline'}
+                size={14}
+                color={message.liked === false ? palette.error : colors.textSecondary}
+              />
+            </AnimatedActionButton>
+            {onRegenerate && (
+              <AnimatedActionButton onPress={() => onRegenerate(message.id)} style={styles.actionBtn}>
+                <Ionicons name="refresh-outline" size={14} color={colors.textSecondary} />
+              </AnimatedActionButton>
+            )}
+          </View>
+        )}
+      </Animated.View>
+    </View>
+  );
+
   return (
     <MotiView
       from={skipEntryAnimation ? { opacity: 1, translateY: 0 } : { opacity: 0, translateY: 6 }}
@@ -150,119 +242,27 @@ const MessageBubbleInner: React.FC<Props> = ({
       transition={{ type: 'timing', duration: 200, delay: 0 }}
       style={[styles.row, isUser ? styles.rowRight : styles.rowLeft]}
     >
-      {/* Bubble + tail + model label — alignItems flex-end ile dibe hizalı */}
-      <View style={[styles.bubbleRow, isUser ? styles.bubbleRowUser : styles.bubbleRowAi]}>
-
-
-        <View
-          style={[
-            styles.bubble,
-            isUser
-              ? [styles.userBubble, { backgroundColor: colors.primary }]
-              : [styles.aiBubble, { backgroundColor: colors.surface, borderColor: colors.border }, styles.aiBubbleFull],
-          ]}
-        >
-          {/* Image attachments */}
-          {imageAttachments.length > 0 && (
-            <View style={styles.imageGrid}>
-              {imageAttachments.map((att) => (
-                <Image
-                  key={att.id}
-                  source={{ uri: att.remoteUrl ?? att.uri }}
-                  style={[
-                    styles.imageThumb,
-                    imageAttachments.length === 1 && styles.imageThumbFull,
-                  ]}
-                  resizeMode="cover"
-                />
-              ))}
-            </View>
-          )}
-
-          {/* File attachments */}
-          {fileAttachments.length > 0 && (
-            <View style={styles.fileList}>
-              {fileAttachments.map((att) => (
-                <AttachmentPreview key={att.id} attachment={att} />
-              ))}
-            </View>
-          )}
-
-          {/* Text content */}
-          {message.content.length > 0 && (
-            <Text
-              variant="body"
-              color={isUser ? palette.white : colors.text}
-              style={[styles.content, hasAttachments && styles.contentWithAttach]}
-            >
-              {message.content}
-            </Text>
-          )}
-
-          {/* Footer: time + actions — opacity ile fade in, layout sabit kalır */}
-          <Animated.View style={[styles.footer, isUser && styles.footerUser, footerAnimStyle]}>
-            <Text
-              variant="micro"
-              color={isUser ? 'rgba(255,255,255,0.65)' : colors.textSecondary}
-            >
-              {formattedTime}
-            </Text>
-
-            {!isUser && (
-              <View style={styles.actions}>
-                {onSpeakToggle && (
-                  <AnimatedActionButton
-                    onPress={handleSpeak}
-                    style={styles.actionBtn}
-                    accessibilityRole="button"
-                    accessibilityLabel={isSpeaking ? t('assistant.stopSpeaking') : t('assistant.speak')}
-                  >
-                    <Ionicons
-                      name={isSpeaking ? 'stop-circle-outline' : 'volume-high-outline'}
-                      size={14}
-                      color={isSpeaking ? colors.primary : colors.textSecondary}
-                    />
-                  </AnimatedActionButton>
-                )}
-                {message.content.length > 0 && (
-                  <AnimatedActionButton onPress={handleCopy} style={styles.actionBtn}>
-                    <Ionicons name="copy-outline" size={14} color={colors.textSecondary} />
-                  </AnimatedActionButton>
-                )}
-                <AnimatedActionButton onPress={() => handleLike(true)} style={styles.actionBtn}>
-                  <Ionicons
-                    name={message.liked === true ? 'thumbs-up' : 'thumbs-up-outline'}
-                    size={14}
-                    color={message.liked === true ? palette.success : colors.textSecondary}
-                  />
-                </AnimatedActionButton>
-                <AnimatedActionButton onPress={() => handleLike(false)} style={styles.actionBtn}>
-                  <Ionicons
-                    name={message.liked === false ? 'thumbs-down' : 'thumbs-down-outline'}
-                    size={14}
-                    color={message.liked === false ? palette.error : colors.textSecondary}
-                  />
-                </AnimatedActionButton>
-                {onRegenerate && (
-                  <AnimatedActionButton onPress={() => onRegenerate(message.id)} style={styles.actionBtn}>
-                    <Ionicons name="refresh-outline" size={14} color={colors.textSecondary} />
-                  </AnimatedActionButton>
-                )}
-              </View>
-            )}
-          </Animated.View>
+      {isUser ? (
+        // Kullanıcı: bubble + tail yan yana
+        <View style={[styles.bubbleRow, styles.bubbleRowUser]}>
+          {bubbleContent}
+          <UserTail color={colors.primary} />
         </View>
-
-        {/* User tail — bubble sağında */}
-        {isUser && <UserTail color={colors.primary} />}
-
-        {/* Model label — bubble sağında, alta hizalı, sadece AI ve streaming olmayan mesajlarda */}
-        {!isUser && message.modelId && !hideFooter && (
-          <Text variant="micro" color={colors.textSecondary} style={styles.modelLabel}>
-            {message.modelId}
-          </Text>
-        )}
-      </View>
+      ) : (
+        // AI: üstte bubble, altta model label
+        <View style={[styles.bubbleRowAi]}>
+          <View style={styles.aiBubbleInnerRow}>
+            {bubbleContent}
+          </View>
+          {!hideFooter && !hideModelLabel && message.model && (
+            <Animated.View entering={FadeIn.duration(200).delay(80)}>
+              <Text variant="micro" color={colors.textSecondary} style={styles.modelLabel}>
+                {`Bu mesaj ${message.model} ile üretildi`}
+              </Text>
+            </Animated.View>
+          )}
+        </View>
+      )}
     </MotiView>
   );
 };
@@ -270,6 +270,7 @@ const MessageBubbleInner: React.FC<Props> = ({
 export const MessageBubble = React.memo(MessageBubbleInner, (prev, next) => {
   if (prev.message.content !== next.message.content) return false;
   if (prev.message.timestamp !== next.message.timestamp) return false;
+  if (prev.message.model !== next.message.model) return false;
   if (prev.message.liked !== next.message.liked) return false;
   if (prev.isSpeaking !== next.isSpeaking) return false;
   if (prev.onSpeakToggle !== next.onSpeakToggle) return false;
@@ -277,6 +278,7 @@ export const MessageBubble = React.memo(MessageBubbleInner, (prev, next) => {
   if (prev.onRegenerate !== next.onRegenerate) return false;
   if (prev.skipEntryAnimation !== next.skipEntryAnimation) return false;
   if (prev.hideFooter !== next.hideFooter) return false;
+  if (prev.hideModelLabel !== next.hideModelLabel) return false;
   return true;
 });
 
@@ -293,7 +295,6 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     marginHorizontal: spacing[2],
   },
-  // Bubble + tail + model label yan yana, dibe hizalı
   bubbleRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -303,10 +304,15 @@ const styles = StyleSheet.create({
   },
   bubbleRowAi: {
     flex: 1,
+    flexDirection: 'column',
+  },
+  aiBubbleInnerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
   },
   modelLabel: {
-    marginBottom: spacing[1],
-    marginLeft: spacing[2],
+    marginTop: spacing[1],
+    textAlign: 'right',
   },
   bubble: {
     padding: spacing[3],
