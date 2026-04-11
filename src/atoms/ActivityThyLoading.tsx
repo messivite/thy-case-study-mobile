@@ -29,7 +29,7 @@ const FLOAT_PERIOD_MS = 3600;
  * thy-loading SVG + Reanimated.
  * Float: faz 0→1 **lineer** + sin(2π·faz) — bezier faz sinüsü ortada hızı bozup takılıyormuş gibi yapar; lineer yağ gibi akar.
  */
-export const ActivityThyLoading: React.FC<ActivityThyLoadingProps> = ({
+const ActivityThyLoadingInner: React.FC<ActivityThyLoadingProps> = ({
   mode = 'pulse',
   size = 32,
   fill,
@@ -94,6 +94,8 @@ export const ActivityThyLoading: React.FC<ActivityThyLoadingProps> = ({
     </Animated.View>
   );
 };
+
+export const ActivityThyLoading = React.memo(ActivityThyLoadingInner);
 
 const styles = StyleSheet.create({
   wrap: {

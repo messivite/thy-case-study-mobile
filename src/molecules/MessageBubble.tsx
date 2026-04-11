@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import {
   View,
   StyleSheet,
@@ -6,12 +6,6 @@ import {
   Image,
 } from 'react-native';
 import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  withSequence,
-  withDelay,
-  Easing,
   FadeIn,
 } from 'react-native-reanimated';
 import Svg, { Path } from 'react-native-svg';
@@ -26,13 +20,11 @@ import { useHaptics } from '@/hooks/useHaptics';
 import { palette } from '@/constants/colors';
 import { radius, spacing } from '@/constants/spacing';
 import { toast } from '@/lib/toast';
-import { useI18n } from '@/hooks/useI18n';
 
 type Props = {
   message: Message;
   onLike?: (id: string, liked: boolean | null) => void;
   onRegenerate?: (id: string) => void;
-  index: number;
   isSpeaking?: boolean;
   onSpeakToggle?: () => void;
   skipEntryAnimation?: boolean;
@@ -40,35 +32,24 @@ type Props = {
   hideModelLabel?: boolean;
 };
 
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
-
-const AnimatedActionButton: React.FC<{
+// Basit Pressable — SharedValue yok, scale animasyonu yok.
+// Her MessageBubble için 4-5 adet SharedValue + worklet açmak birikimli yük yaratıyordu.
+const ActionButton: React.FC<{
   onPress: () => void;
   children: React.ReactNode;
-  style?: object;
   accessibilityRole?: 'button' | 'link' | 'none';
   accessibilityLabel?: string;
-}> = ({ onPress, children, style, accessibilityRole, accessibilityLabel }) => {
-  const scale = useSharedValue(1);
-  const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
-
-  return (
-    <AnimatedPressable
-      onPress={() => {
-        scale.value = withSequence(
-          withTiming(0.75, { duration: 80, easing: Easing.out(Easing.quad) }),
-          withTiming(1, { duration: 120, easing: Easing.out(Easing.quad) }),
-        );
-        onPress();
-      }}
-      style={[style, animStyle]}
-      accessibilityRole={accessibilityRole}
-      accessibilityLabel={accessibilityLabel}
-    >
-      {children}
-    </AnimatedPressable>
-  );
-};
+}> = ({ onPress, children, accessibilityRole, accessibilityLabel }) => (
+  <Pressable
+    onPress={onPress}
+    style={styles.actionBtn}
+    accessibilityRole={accessibilityRole}
+    accessibilityLabel={accessibilityLabel}
+    hitSlop={4}
+  >
+    {children}
+  </Pressable>
+);
 
 const UserTail = ({ color }: { color: string }) => (
   <Svg width={10} height={20} style={{ marginLeft: -1 }}>
@@ -76,18 +57,11 @@ const UserTail = ({ color }: { color: string }) => (
   </Svg>
 );
 
-const AiTail = ({ color, borderColor }: { color: string; borderColor: string }) => (
-  <Svg width={10} height={20} style={{ marginRight: -1 }}>
-    <Path d="M10 0 L10 20 L0 20 Q8 18 10 0 Z" fill={borderColor} />
-    <Path d="M10 0 L10 20 L1 20 Q8 17 10 0 Z" fill={color} />
-  </Svg>
-);
 
 const MessageBubbleInner: React.FC<Props> = ({
   message,
   onLike,
   onRegenerate,
-  index,
   isSpeaking = false,
   onSpeakToggle,
   skipEntryAnimation = false,
@@ -96,26 +70,20 @@ const MessageBubbleInner: React.FC<Props> = ({
 }) => {
   const { colors } = useTheme();
   const haptics = useHaptics();
-  const { t } = useI18n();
 
   const isUser = message.role === 'user';
 
-  const footerOpacity = useSharedValue(hideFooter ? 0 : 1);
-  const footerAnimStyle = useAnimatedStyle(() => ({ opacity: footerOpacity.value }));
+  const formattedTime = useMemo(() =>
+    new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+  [message.timestamp]);
 
-  React.useEffect(() => {
-    if (!hideFooter) {
-      footerOpacity.value = withDelay(120, withTiming(1, { duration: 200, easing: Easing.out(Easing.quad) }));
-    } else {
-      footerOpacity.value = 0;
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hideFooter]);
-
-  const formattedTime = new Date(message.timestamp).toLocaleTimeString([], {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  // Inline object yaratımını önle — colors değişmedikçe aynı referans
+  const userBubbleStyle = useMemo(() => [
+    styles.bubble, styles.userBubble, { backgroundColor: colors.primary },
+  ], [colors.primary]);
+  const aiBubbleStyle = useMemo(() => [
+    styles.bubble, styles.aiBubble, { backgroundColor: colors.surface, borderColor: colors.border }, styles.aiBubbleFull,
+  ], [colors.surface, colors.border]);
 
   const imageAttachments = message.attachments?.filter((a) => a.type === 'image') ?? [];
   const fileAttachments = message.attachments?.filter((a) => a.type !== 'image') ?? [];
@@ -125,15 +93,15 @@ const MessageBubbleInner: React.FC<Props> = ({
     if (!message.content) return;
     await Clipboard.setStringAsync(message.content);
     haptics.success();
-    toast.success(t('toast.copied'));
-  }, [message.content]);
+    toast.success('Kopyalandı');
+  }, [message.content, haptics]);
 
   const handleLike = useCallback(
     (liked: boolean) => {
       haptics.light();
       onLike?.(message.id, message.liked === liked ? null : liked);
     },
-    [message.id, message.liked, onLike],
+    [message.id, message.liked, onLike, haptics],
   );
 
   const handleSpeak = useCallback(() => {
@@ -143,12 +111,7 @@ const MessageBubbleInner: React.FC<Props> = ({
 
   const bubbleContent = (
     <View
-      style={[
-        styles.bubble,
-        isUser
-          ? [styles.userBubble, { backgroundColor: colors.primary }]
-          : [styles.aiBubble, { backgroundColor: colors.surface, borderColor: colors.border }, styles.aiBubbleFull],
-      ]}
+      style={isUser ? userBubbleStyle : aiBubbleStyle}
     >
       {imageAttachments.length > 0 && (
         <View style={styles.imageGrid}>
@@ -184,7 +147,8 @@ const MessageBubbleInner: React.FC<Props> = ({
         </Text>
       )}
 
-      <Animated.View style={[styles.footer, isUser && styles.footerUser, footerAnimStyle]}>
+      {/* Footer: hideFooter ise display:none ile DOM'dan çıkarmak yerine opacity=0 + pointerEvents=none */}
+      <View style={[styles.footer, isUser && styles.footerUser, hideFooter && styles.footerHidden]}>
         <Text variant="micro" color={isUser ? 'rgba(255,255,255,0.65)' : colors.textSecondary}>
           {formattedTime}
         </Text>
@@ -192,65 +156,71 @@ const MessageBubbleInner: React.FC<Props> = ({
         {!isUser && (
           <View style={styles.actions}>
             {onSpeakToggle && (
-              <AnimatedActionButton
+              <ActionButton
                 onPress={handleSpeak}
-                style={styles.actionBtn}
                 accessibilityRole="button"
-                accessibilityLabel={isSpeaking ? t('assistant.stopSpeaking') : t('assistant.speak')}
+                accessibilityLabel={isSpeaking ? 'Sesi durdur' : 'Sesli oku'}
               >
                 <Ionicons
                   name={isSpeaking ? 'stop-circle-outline' : 'volume-high-outline'}
                   size={14}
                   color={isSpeaking ? colors.primary : colors.textSecondary}
                 />
-              </AnimatedActionButton>
+              </ActionButton>
             )}
             {message.content.length > 0 && (
-              <AnimatedActionButton onPress={handleCopy} style={styles.actionBtn}>
+              <ActionButton onPress={handleCopy}>
                 <Ionicons name="copy-outline" size={14} color={colors.textSecondary} />
-              </AnimatedActionButton>
+              </ActionButton>
             )}
-            <AnimatedActionButton onPress={() => handleLike(true)} style={styles.actionBtn}>
+            <ActionButton onPress={() => handleLike(true)}>
               <Ionicons
                 name={message.liked === true ? 'thumbs-up' : 'thumbs-up-outline'}
                 size={14}
                 color={message.liked === true ? palette.success : colors.textSecondary}
               />
-            </AnimatedActionButton>
-            <AnimatedActionButton onPress={() => handleLike(false)} style={styles.actionBtn}>
+            </ActionButton>
+            <ActionButton onPress={() => handleLike(false)}>
               <Ionicons
                 name={message.liked === false ? 'thumbs-down' : 'thumbs-down-outline'}
                 size={14}
                 color={message.liked === false ? palette.error : colors.textSecondary}
               />
-            </AnimatedActionButton>
+            </ActionButton>
             {onRegenerate && (
-              <AnimatedActionButton onPress={() => onRegenerate(message.id)} style={styles.actionBtn}>
+              <ActionButton onPress={() => onRegenerate(message.id)}>
                 <Ionicons name="refresh-outline" size={14} color={colors.textSecondary} />
-              </AnimatedActionButton>
+              </ActionButton>
             )}
           </View>
         )}
-      </Animated.View>
+      </View>
     </View>
   );
 
+  // skipEntryAnimation=true → düz View (Moti worklet yok)
+  // skipEntryAnimation=false → sadece yeni gelen mesajlar için MotiView
+  const Wrapper = skipEntryAnimation ? View : MotiView;
+  const wrapperProps = skipEntryAnimation
+    ? {}
+    : {
+        from: { opacity: 0, translateY: 6 },
+        animate: { opacity: 1, translateY: 0 },
+        transition: { type: 'timing' as const, duration: 200, delay: 0 },
+      };
+
   return (
-    <MotiView
-      from={skipEntryAnimation ? { opacity: 1, translateY: 0 } : { opacity: 0, translateY: 6 }}
-      animate={{ opacity: 1, translateY: 0 }}
-      transition={{ type: 'timing', duration: 200, delay: 0 }}
+    <Wrapper
+      {...wrapperProps}
       style={[styles.row, isUser ? styles.rowRight : styles.rowLeft]}
     >
       {isUser ? (
-        // Kullanıcı: bubble + tail yan yana
         <View style={[styles.bubbleRow, styles.bubbleRowUser]}>
           {bubbleContent}
           <UserTail color={colors.primary} />
         </View>
       ) : (
-        // AI: üstte bubble, altta model label
-        <View style={[styles.bubbleRowAi]}>
+        <View style={styles.bubbleRowAi}>
           <View style={styles.aiBubbleInnerRow}>
             {bubbleContent}
           </View>
@@ -263,7 +233,7 @@ const MessageBubbleInner: React.FC<Props> = ({
           )}
         </View>
       )}
-    </MotiView>
+    </Wrapper>
   );
 };
 
@@ -365,6 +335,10 @@ const styles = StyleSheet.create({
   footerUser: {
     justifyContent: 'flex-end',
     marginTop: spacing[1],
+  },
+  footerHidden: {
+    opacity: 0,
+    pointerEvents: 'none',
   },
   actions: {
     flexDirection: 'row',

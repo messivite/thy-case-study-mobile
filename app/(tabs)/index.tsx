@@ -34,8 +34,7 @@ export default function HomeScreen() {
     handleStreamingComplete,
     selectedAIModel,
     isTyping,
-    isLoading,
-    isFetching,
+    isSessionLoading,
     chatId,
     sessionTitle,
     sendMessage,
@@ -47,9 +46,6 @@ export default function HomeScreen() {
     hasNextPage,
     isFetchingNextPage,
   } = useChatSession();
-
-  // Session seçilmiş ama mesajlar henüz yüklenmemiş → spinner göster
-  const isSessionLoading = !!chatId && !isStreamingActive && !optimisticUserMsg && (isLoading || (isFetching && messages.length === 0));
 
   const [scrolledUp, setScrolledUp] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -135,6 +131,17 @@ export default function HomeScreen() {
     [handleSend],
   );
 
+  const chatInput = useMemo(() => (
+    <ChatInput
+      onSend={handleSend}
+      onStop={onStop}
+      onModelSelectorPress={openModelPicker}
+      selectedAIModelName={aiModelName}
+      isStreaming={isTyping}
+      placeholder={chatPlaceholder}
+    />
+  ), [handleSend, onStop, openModelPicker, aiModelName, isTyping, chatPlaceholder]);
+
   const header = useMemo(() => (
     <AppHeader
       title={sessionTitle ?? t('assistant.title')}
@@ -175,16 +182,7 @@ export default function HomeScreen() {
       <StatusBar style="light" />
       <ChatLayout
         header={header}
-        input={
-          <ChatInput
-            onSend={handleSend}
-            onStop={onStop}
-            onModelSelectorPress={openModelPicker}
-            selectedAIModelName={aiModelName}
-            isStreaming={isTyping}
-            placeholder={chatPlaceholder}
-          />
-        }
+        input={chatInput}
       >
         <MessageList
           chatId={chatId}

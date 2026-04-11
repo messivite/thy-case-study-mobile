@@ -9,8 +9,8 @@ import { Text } from '@/atoms/Text';
 import { HomeWelcomePanel, WelcomeQuickAction } from '@/organisms/HomeWelcomePanel';
 import { useTheme } from '@/hooks/useTheme';
 import { spacing } from '@/constants/spacing';
-import { useI18n } from '@/hooks/useI18n';
 import { stripTextForSpeech, speechLocaleForAppLang } from '@/lib/chatSpeech';
+import i18n from '@/i18n';
 import { toast } from '@/lib/toast';
 import { ActivityThyLoading } from '@/atoms/ActivityThyLoading';
 
@@ -42,7 +42,7 @@ type Props = {
   quickActions?: WelcomeQuickAction[];
   onQuickActionPress?: (action: WelcomeQuickAction) => void;
   onScrollStateChange?: (scrolledUp: boolean, unreadCount: number) => void;
-  onScrollToLatestRef?: React.MutableRefObject<(() => void) | null>;
+  onScrollToLatestRef?: React.RefObject<(() => void) | null>;
 };
 
 export const MessageList: React.FC<Props> = ({
@@ -72,7 +72,6 @@ export const MessageList: React.FC<Props> = ({
   onScrollToLatestRef,
 }) => {
   const { colors } = useTheme();
-  const { t, currentLanguage } = useI18n();
   const listRef = useRef<FlatList<Message>>(null);
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
   const isAtLatestRef = useRef(true);
@@ -191,7 +190,7 @@ export const MessageList: React.FC<Props> = ({
     void Speech.stop();
     const plain = stripTextForSpeech(text);
     if (!plain.trim()) return;
-    const locale = speechLocaleForAppLang(currentLanguage);
+    const locale = speechLocaleForAppLang(i18n.language);
     setSpeakingMessageId(messageId);
     Speech.speak(plain, {
       language: locale,
@@ -200,19 +199,27 @@ export const MessageList: React.FC<Props> = ({
       onStopped: () => setSpeakingMessageId((cur) => (cur === messageId ? null : cur)),
       onError: () => {
         setSpeakingMessageId((cur) => (cur === messageId ? null : cur));
-        toast.error(t('toast.speechError'));
+        toast.error('Ses çalınamadı');
       },
     });
-  }, [speakingMessageId, currentLanguage, t]);
+  }, [speakingMessageId]);
+
+  // lastStreamingMsgIdRef'i renderItem dışında güncelle — render sırasında side-effect yasak
+  useEffect(() => {
+    if (streamingMessageId) {
+      lastStreamingMsgIdRef.current = streamingMessageId;
+    }
+  }, [streamingMessageId]);
+
+  // speakingMessageId'yi ref'te tut — renderItem dep array'inden çıkar
+  const speakingMessageIdRef = useRef(speakingMessageId);
+  useEffect(() => { speakingMessageIdRef.current = speakingMessageId; }, [speakingMessageId]);
+  const handleSpeakToggleRef = useRef(handleSpeakToggle);
+  useEffect(() => { handleSpeakToggleRef.current = handleSpeakToggle; }, [handleSpeakToggle]);
 
   const renderItem = useCallback(({ item, index }: { item: Message; index: number }) => {
     const isStreamingItem = !!streamingMessageId && item.id === streamingMessageId;
     const isOptimisticUserItem = !!optimisticUserMsgId && item.id === optimisticUserMsgId;
-
-    // streamingMessageId aktifken güncelle, null olunca bir render daha eski ID'yi koru
-    if (streamingMessageId) {
-      lastStreamingMsgIdRef.current = streamingMessageId;
-    }
     const wasStreamingItem = item.id === lastStreamingMsgIdRef.current;
 
     // Streaming item → StreamingBubble (UI thread animasyonu)
@@ -235,14 +242,13 @@ export const MessageList: React.FC<Props> = ({
         message={item}
         onLike={onLike}
         onRegenerate={onRegenerate}
-        index={index}
-        isSpeaking={speakingMessageId === item.id}
+        isSpeaking={speakingMessageIdRef.current === item.id}
         skipEntryAnimation={isStreamingItem || isOptimisticUserItem || wasStreamingItem}
         hideFooter={isStreamingItem}
         hideModelLabel={isLastMessage || wasStreamingItem}
         onSpeakToggle={
           item.role === 'assistant' && item.content.trim().length > 0
-            ? () => handleSpeakToggle(item.id, item.content)
+            ? () => handleSpeakToggleRef.current(item.id, item.content)
             : undefined
         }
       />
@@ -257,8 +263,6 @@ export const MessageList: React.FC<Props> = ({
     onStreamingComplete,
     onLike,
     onRegenerate,
-    speakingMessageId,
-    handleSpeakToggle,
   ]);
 
   if (isSessionLoading) {
@@ -322,14 +326,18 @@ export const MessageList: React.FC<Props> = ({
         showsVerticalScrollIndicator={false}
         keyboardDismissMode="interactive"
         keyboardShouldPersistTaps="handled"
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={5}
+        windowSize={5}
+        initialNumToRender={10}
       />
 
       {/* Empty state overlay */}
       {!hasContent && !showWelcome && !isSessionLoading && !isWelcomeExiting && (
         <View style={[styles.center, styles.welcomeOverlay]} pointerEvents="none">
-          <Text variant="h4" align="center" color={colors.text}>{t('assistant.emptyTitle')}</Text>
+          <Text variant="h4" align="center" color={colors.text}>Nasıl yardımcı olabilirim?</Text>
           <Text variant="body" align="center" color={colors.textSecondary} style={styles.emptySubtitle}>
-            {t('assistant.emptySubtitle')}
+            Bir şeyler sormaya başlayın
           </Text>
         </View>
       )}

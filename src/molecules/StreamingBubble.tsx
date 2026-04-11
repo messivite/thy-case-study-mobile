@@ -12,7 +12,6 @@ import Svg, { Path } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
 import { Text } from '@/atoms/Text';
-import { useI18n } from '@/hooks/useI18n';
 import { ActivityThyLoading } from '@/atoms/ActivityThyLoading';
 import { radius, spacing } from '@/constants/spacing';
 import { fontFamily, fontSize } from '@/constants/typography';
@@ -37,7 +36,6 @@ type Props = {
 
 const StreamingBubbleInner: React.FC<Props> = ({ pendingSV, isStreamingDoneSV, streamResetCountSV, onComplete }) => {
   const { colors } = useTheme();
-  const { t } = useI18n();
   const completedSV = useSharedValue(false);
   const lastResetCountSV = useSharedValue(0);
   const textArrivedSV = useSharedValue(false);
@@ -112,7 +110,7 @@ const StreamingBubbleInner: React.FC<Props> = ({ pendingSV, isStreamingDoneSV, s
       {/* Loading — absolutely positioned, fades out when text arrives */}
       <Reanimated.View style={[styles.waitingRow, loadingStyle]} pointerEvents="none">
         <ActivityThyLoading mode="pulse" size={20} />
-        <Text variant="caption" color={colors.textSecondary}>{t('assistant.awaitingResponse')}</Text>
+        <Text variant="caption" color={colors.textSecondary}>Yanıt bekleniyor...</Text>
       </Reanimated.View>
     </View>
   );

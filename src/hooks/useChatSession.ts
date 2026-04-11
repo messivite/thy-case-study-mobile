@@ -2,6 +2,7 @@ import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { unstable_batchedUpdates } from 'react-native';
 import { useSharedValue } from 'react-native-reanimated';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
+import { shallowEqual } from 'react-redux';
 import { setSessionId, clearMessages } from '@/store/slices/chatSlice';
 import {
   useCreateChatMutation,
@@ -36,15 +37,20 @@ export const useChatSession = () => {
   const dispatch = useAppDispatch();
   const queryClient = useQueryClient();
 
-  const selectedAIModel = useAppSelector((s) => s.chat.selectedAIModel);
-  // Ref: sendMessage closure'u stale selectedAIModel tutmasın, dep array'e gerek yok
+  // Tek subscription — 4 ayrı useAppSelector yerine bir kez Redux store'u dinle.
+  // Her biri ayrı subscription açsaydı, birisi değişince 4 ayrı re-render tetiklerdi.
+  const { selectedAIModel, sessionId, streamingEnabled, isGuest } = useAppSelector((s) => ({
+    selectedAIModel: s.chat.selectedAIModel,
+    sessionId: s.chat.sessionId,
+    streamingEnabled: s.settings.streamingEnabled,
+    isGuest: s.auth.status === 'guest',
+  }), shallowEqual);
+
+  // Ref: sendMessage/stream closure'ları stale değer tutmasın
   const selectedAIModelRef = useRef(selectedAIModel);
   useEffect(() => { selectedAIModelRef.current = selectedAIModel; }, [selectedAIModel]);
-  const sessionId = useAppSelector((s) => s.chat.sessionId);
-  const streamingEnabled = useAppSelector((s) => s.settings.streamingEnabled);
   const streamingEnabledRef = useRef(streamingEnabled);
   useEffect(() => { streamingEnabledRef.current = streamingEnabled; }, [streamingEnabled]);
-  const isGuest = useAppSelector((s) => s.auth.status === 'guest');
 
   const chatId = sessionId;
 
@@ -129,8 +135,9 @@ export const useChatSession = () => {
   // Flatten paginated messages
   // ---------------------------------------------------------------------------
 
+  const prevMessagesRef = useRef<Message[]>([]);
   const messages: Message[] = useMemo(() => {
-    if (!messagesQuery.data) return [];
+    if (!messagesQuery.data) return prevMessagesRef.current.length ? [] : prevMessagesRef.current;
 
     const allMsgs = [...messagesQuery.data.pages].reverse().flatMap((page) => page?.messages ?? []);
 
@@ -145,7 +152,17 @@ export const useChatSession = () => {
       })
       .map(toLocalMessage);
 
+    // İçerik değişmediyse aynı referansı döndür — downstream useMemo/memo re-render'ını önle
+    const prev = prevMessagesRef.current;
+    if (
+      result.length === prev.length &&
+      result.every((m, i) => m.id === prev[i]?.id && m.content === prev[i]?.content && m.liked === prev[i]?.liked)
+    ) {
+      return prev;
+    }
+
     messagesCountRef.current = result.length;
+    prevMessagesRef.current = result;
     return result;
   }, [messagesQuery.data]);
 
@@ -153,66 +170,23 @@ export const useChatSession = () => {
   // handleStreamingComplete — StreamingBubble'dan runOnJS ile çağrılır
   // ---------------------------------------------------------------------------
 
-  const handleStreamingComplete = useCallback((finalText: string) => {
+  const handleStreamingComplete = useCallback((_finalText: string) => {
     if (streamCancelledRef.current) return;
 
     const cid = activeChatIdRef.current ?? null;
-    const userMsg = optimisticUserMsgRef.current;
-    const { provider, model, userMessageId } = streamMetaRef.current;
-    const assistantMsgId = streamingMsgIdRef.current;
-    const now = Date.now();
 
-    if (cid) {
-      // Realm'e yazmıyoruz — useInfiniteMessagesQuery'nin useEffect'i invalidate
-      // sonrası gelen fresh API verisini Realm'e yazacak. Double-write yok.
-      // Cache'e optimistic olarak iki mesajı ekle — API'den gelen veriyle merge edilecek.
-      const userMsgId = userMessageId ?? userMsg?.id ?? `user_${now}`;
-      const asstMsgId = assistantMsgId !== 'streaming' ? assistantMsgId : `asst_${now}`;
-      queryClient.setQueryData(
-        CHAT_QUERY_KEYS.messages(cid),
-        (old: import('@tanstack/react-query').InfiniteData<import('@/types/chat.api.types').PaginatedMessagesResponse> | undefined) => {
-          if (!old) return old;
-          const newMsgs: import('@/types/chat.api.types').ChatMessage[] = [
-            {
-              id: userMsgId,
-              role: 'user',
-              content: userMsg?.content ?? '',
-              createdAt: new Date(userMsg?.timestamp ?? now).toISOString(),
-              provider: provider ?? '',
-              model: model ?? '',
-            },
-            {
-              id: asstMsgId,
-              role: 'assistant',
-              content: finalText,
-              createdAt: new Date(now).toISOString(),
-              provider: provider ?? '',
-              model: model ?? '',
-            },
-          ];
-          // pages[0] = en yeni sayfa; başına ekle (duplicate guard: aynı id varsa skip)
-          const existingIds = new Set(old.pages[0]?.messages.map((m) => m.id) ?? []);
-          const toAdd = newMsgs.filter((m) => !existingIds.has(m.id));
-          if (toAdd.length === 0) return old;
-          return {
-            ...old,
-            pages: [
-              { ...old.pages[0], messages: [...(old.pages[0]?.messages ?? []), ...toAdd] },
-              ...old.pages.slice(1),
-            ],
-          };
-        },
-      );
-
-      // invalidate → API refetch → useEffect Realm'e yazar
-      queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.messages(cid) });
-      queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
-    }
-
+    // State'i önce sıfırla — StreamingBubble unmount olsun, optimistic kaldırılsın
     unstable_batchedUpdates(() => {
       setIsStreamingActive(false);
       setOptimisticUserMsg(null);
     });
+
+    if (cid) {
+      // setQueryData yok — intermediate re-render tetiklemez.
+      // invalidate → arka planda refetch → data gelince tek bir render.
+      queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.messages(cid) });
+      queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queryClient]);
 
@@ -277,14 +251,15 @@ export const useChatSession = () => {
         pendingStreamSV.value = '';
         streamResetCountSV.value = streamResetCountSV.value + 1;
 
-        // Typewriter interval: her 16ms'de buffer'dan 3 karakter SV'ye yaz.
+        // Typewriter interval: her 32ms'de buffer'dan 6 karakter SV'ye yaz.
+        // 16ms/3char → JS bridge'e çok yük bindiriyordu; 32ms/6char aynı hızı verir, yük yarı.
         // Backend onDone geldi ve buffer tamamen yazıldıysa → isStreamingDoneSV set et, interval dur.
         if (typewriterIntervalRef.current) clearInterval(typewriterIntervalRef.current);
         typewriterIntervalRef.current = setInterval(() => {
           const buf = pendingBufferRef.current;
           const written = writtenLenRef.current;
           if (written < buf.length) {
-            const next = Math.min(written + 3, buf.length);
+            const next = Math.min(written + 6, buf.length);
             writtenLenRef.current = next;
             pendingStreamSV.value = buf.slice(0, next);
           } else if (streamDoneRef.current) {
@@ -292,7 +267,7 @@ export const useChatSession = () => {
             typewriterIntervalRef.current = null;
             isStreamingDoneSV.value = true;
           }
-        }, 16);
+        }, 32);
 
         try {
           await streamChat(
@@ -463,13 +438,16 @@ export const useChatSession = () => {
   const isTyping = streamingEnabled ? isStreamingActive : isNonStreamPending;
 
   const { data: chatsData } = useInfiniteChatsQuery(isGuest);
-  const sessionTitle = useMemo(() => {
-    if (!chatId || !chatsData) return null;
+  // sessionTitle: chatsData her invalidate'de yeni referans üretir.
+  // useState ile stabil tut — gerçek string değişince setState, yoksa re-render yok.
+  const [sessionTitle, setSessionTitle] = useState<string | null>(null);
+  useEffect(() => {
+    if (!chatId || !chatsData) { setSessionTitle(null); return; }
     for (const page of chatsData.pages) {
       const found = page.items?.find((s) => s.id === chatId);
-      if (found) return found.title;
+      if (found) { setSessionTitle((prev) => prev === found.title ? prev : found.title); return; }
     }
-    return null;
+    setSessionTitle(null);
   }, [chatId, chatsData]);
 
   // streamingMessageId: isStreamingActive olduğu sürece gerçek assistant mesaj ID'sini
@@ -478,20 +456,27 @@ export const useChatSession = () => {
   // → StreamingBubble→MessageBubble geçişi anlık değil, key korunuyor.
   const streamingMessageId = isStreamingActive ? streamingMsgIdRef.current : null;
 
+  // Hook içinde hesapla — isFetching/isLoading'i dışarı sızdırmak HomeScreen'i
+  // her refetch'te re-render eder (mesaj gönderme anında çakışır).
+  const isSessionLoading =
+    !!chatId &&
+    !isStreamingActive &&
+    !optimisticUserMsg &&
+    (messagesQuery.isLoading || (messagesQuery.isFetching && messages.length === 0));
+
   return {
     messages,
     optimisticUserMsg,
     isStreamingActive,
     streamingMessageId,
-    // StreamingBubble'a geçilen UI-thread değerleri
     pendingStreamSV,
     isStreamingDoneSV,
     streamResetCountSV,
     handleStreamingComplete,
-    // optimisticUserMsgId: bir frame daha tut → footer flash yok
     optimisticUserMsgId: optimisticUserMsg?.id ?? optimisticUserMsgRef.current?.id ?? null,
     selectedAIModel,
     isTyping,
+    isSessionLoading,
     chatId,
     sessionTitle,
     sendMessage,
@@ -502,7 +487,5 @@ export const useChatSession = () => {
     fetchNextPage: messagesQuery.fetchNextPage,
     hasNextPage: messagesQuery.hasNextPage ?? false,
     isFetchingNextPage: messagesQuery.isFetchingNextPage,
-    isLoading: messagesQuery.isLoading,
-    isFetching: messagesQuery.isFetching,
   };
 };

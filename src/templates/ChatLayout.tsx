@@ -9,7 +9,7 @@ type Props = {
   input: React.ReactNode;
 };
 
-export const ChatLayout: React.FC<Props> = ({ header, children, input }) => {
+const ChatLayoutInner: React.FC<Props> = ({ header, children, input }) => {
   const { colors } = useTheme();
 
   return (
@@ -27,6 +27,8 @@ export const ChatLayout: React.FC<Props> = ({ header, children, input }) => {
     </View>
   );
 };
+
+export const ChatLayout = React.memo(ChatLayoutInner);
 
 const styles = StyleSheet.create({
   root: { flex: 1 },

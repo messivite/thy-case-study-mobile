@@ -240,6 +240,11 @@ const chipStyles = StyleSheet.create({
   },
 });
 
+// MotiView animation props — modül seviyesinde sabit, her render'da yeni object yaratılmaz
+const ATTACHMENT_MOTI_FROM = { opacity: 0, translateY: 8 } as const;
+const ATTACHMENT_MOTI_ANIMATE = { opacity: 1, translateY: 0 } as const;
+const ATTACHMENT_MOTI_TRANSITION = { type: 'timing' as const, duration: 200 };
+
 // Gemini-style soft shadow — no harsh border, depth comes from shadow
 const cardShadow = {
   shadowColor: '#000',
@@ -510,6 +515,9 @@ const ChatInputInner: React.FC<Props> = ({
   const { colors, isDark } = useTheme();
   const haptics = useHaptics();
   const insets = useSafeAreaInsets();
+  // insets.bottom keyboard açılınca değişmez — bir kez ref'e al, style recompute tetiklemesin
+  const bottomInsetRef = useRef(insets.bottom);
+  if (insets.bottom > 0) bottomInsetRef.current = insets.bottom;
 
   const growingInputRef = useRef<GrowingTextInputHandle>(null);
   const [hasText, setHasText] = useState(false);
@@ -530,11 +538,13 @@ const ChatInputInner: React.FC<Props> = ({
     pointerEvents: expandOpacity.value > 0.5 ? 'auto' : 'none',
   }));
 
+  // String concat worklet içinde değil, colors değişince bir kez hesapla
+  const primaryBorder = useMemo(() => colors.primary + '55', [colors.primary]);
   const containerBorderStyle = useAnimatedStyle(() => ({
     borderColor: interpolateColor(
       focusProgress.value,
       [0, 1],
-      ['rgba(0,0,0,0.06)', colors.primary + '55'],
+      ['rgba(0,0,0,0.06)', primaryBorder],
     ),
   }));
 
@@ -707,18 +717,19 @@ const ChatInputInner: React.FC<Props> = ({
 
   const cardStyle = useMemo(() => ([
     styles.card,
-    { backgroundColor: colors.inputBg, paddingBottom: insets.bottom },
+    { backgroundColor: colors.inputBg, paddingBottom: bottomInsetRef.current },
     cardShadow,
-  ]), [colors.inputBg, insets.bottom]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  ]), [colors.inputBg]);
 
   return (
     <View style={wrapperStyle}>
       {/* Attachment previews */}
       {hasAttachments && (
         <MotiView
-          from={{ opacity: 0, translateY: 8 }}
-          animate={{ opacity: 1, translateY: 0 }}
-          transition={{ type: 'timing', duration: 200 }}
+          from={ATTACHMENT_MOTI_FROM}
+          animate={ATTACHMENT_MOTI_ANIMATE}
+          transition={ATTACHMENT_MOTI_TRANSITION}
           style={styles.previewArea}
         >
           {imageAttachments.length > 0 && (
