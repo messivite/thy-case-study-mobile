@@ -128,8 +128,8 @@ export const streamChat = async (
               // meta → anında işle, ID'ler FlatList key'i için hemen lazım
               processLine(captured, callbacks);
             } else if (isDelta(line)) {
-              setTimeout(() => processLine(captured, callbacks), totalDelay);
-              totalDelay += 30;
+              // Tüm delta'ları anında gönder — karakter yayma onDelta'da yapılır
+              processLine(captured, callbacks);
             } else {
               // done/error — son delta'dan sonra
               const schedAt = totalDelay + 1;

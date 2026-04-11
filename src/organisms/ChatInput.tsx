@@ -356,7 +356,7 @@ type Props = {
   placeholder?: string;
 };
 
-export const ChatInput: React.FC<Props> = ({
+const ChatInputInner: React.FC<Props> = ({
   onSend,
   onStop,
   onModelSelectorPress,
@@ -708,6 +708,8 @@ export const ChatInput: React.FC<Props> = ({
     </View>
   );
 };
+
+export const ChatInput = memo(ChatInputInner);
 
 // ---------------------------------------------------------------------------
 // Styles

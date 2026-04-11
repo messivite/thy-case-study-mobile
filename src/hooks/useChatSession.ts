@@ -54,8 +54,11 @@ export const useChatSession = () => {
   const optimisticUserMsgRef = useRef<Message | null>(null);
   // messages'ın güncel sayısını ref'te tut — sendMessage callback'i stale closure yakalamaz
   const messagesCountRef = useRef(0);
-  // rAF throttle — her frame'de bir setState
-  const rafRef = useRef<number | null>(null);
+  // Typewriter queue — gelen karakterler sıraya girer, interval teker teker yazar
+  const typewriterQueueRef = useRef<string[]>([]);
+  const typewriterIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Stream iptal flag — onDone/waitForQueue döngüsünü durdurur
+  const streamCancelledRef = useRef(false);
   // Optimistic user message — cache'e karıştırmadan ayrı tut
   const [optimisticUserMsg, setOptimisticUserMsg] = useState<Message | null>(null);
 
@@ -162,6 +165,19 @@ export const useChatSession = () => {
         abortCtrlRef.current = ctrl;
 
         streamingMsgIdRef.current = 'streaming'; // reset
+        typewriterQueueRef.current = [];
+        streamCancelledRef.current = false;
+
+        // Typewriter'ı anında durduran yardımcı
+        const stopTypewriter = () => {
+          streamCancelledRef.current = true;
+          if (typewriterIntervalRef.current !== null) {
+            clearInterval(typewriterIntervalRef.current);
+            typewriterIntervalRef.current = null;
+          }
+          typewriterQueueRef.current = [];
+        };
+
         try {
           await streamChat(
             activeChatId,
@@ -180,60 +196,78 @@ export const useChatSession = () => {
                 }
               },
               onDelta: (delta) => {
-                streamingContentRef.current += delta;
-                // rAF throttle — her frame'de bir kez React state güncelle (smooth typewriter)
-                if (rafRef.current === null) {
-                  rafRef.current = requestAnimationFrame(() => {
-                    rafRef.current = null;
+                if (streamCancelledRef.current) return;
+                // Karakterleri kuyruğa ekle — tek interval teker teker yazar
+                for (const char of delta) {
+                  typewriterQueueRef.current.push(char);
+                }
+                if (typewriterIntervalRef.current === null) {
+                  typewriterIntervalRef.current = setInterval(() => {
+                    if (streamCancelledRef.current) {
+                      clearInterval(typewriterIntervalRef.current!);
+                      typewriterIntervalRef.current = null;
+                      return;
+                    }
+                    const char = typewriterQueueRef.current.shift();
+                    if (char === undefined) return; // interval onDone'da temizlenir
+                    streamingContentRef.current += char;
                     setStreamingContent(streamingContentRef.current);
-                  });
+                  }, 25);
                 }
               },
               onDone: () => {
                 abortCtrlRef.current = null;
-                if (rafRef.current !== null) {
-                  cancelAnimationFrame(rafRef.current);
-                  rafRef.current = null;
-                }
-                // Son delta'ları flush et
-                setStreamingContent(streamingContentRef.current);
+                // Kuyruk boşalana kadar bekle, sonra fetch yap
+                const doFetch = () => {
+                  stopTypewriter();
+                  // Kalan karakterleri tek seferde yaz
+                  const remaining = typewriterQueueRef.current.splice(0).join('');
+                  if (remaining) {
+                    streamingContentRef.current += remaining;
+                    setStreamingContent(streamingContentRef.current);
+                  }
 
-                // Fetch et, cache'e yaz → tek batch'te her şeyi kapat
-                // limit: mevcut mesaj sayısı + 2 (user+assistant) → liste kaymasın
-                const fetchLimit = Math.max(40, messagesCountRef.current + 2);
-                getChatMessages(activeChatId!, { limit: fetchLimit, direction: 'older' })
-                  .then((result) => {
-                    // Tek render: setQueryData + tüm state temizliği
-                    // filteredMessages=messages (optimistic null) + streamingAlreadyInMessages=true
-                    // → FlatList real user + real assistant'ı direkt görür, flash yok
-                    unstable_batchedUpdates(() => {
-                      queryClient.setQueryData(
-                        CHAT_QUERY_KEYS.messages(activeChatId!),
-                        { pages: [result], pageParams: [undefined] },
-                      );
-                      streamingContentRef.current = '';
-                      setStreamingContent('');
-                      setOptimisticUserMsg(null);
-                      setIsStreamingActive(false);
+                  // Fetch et, cache'e yaz → tek batch'te her şeyi kapat
+                  const fetchLimit = Math.max(40, messagesCountRef.current + 2);
+                  getChatMessages(activeChatId!, { limit: fetchLimit, direction: 'older' })
+                    .then((result) => {
+                      unstable_batchedUpdates(() => {
+                        queryClient.setQueryData(
+                          CHAT_QUERY_KEYS.messages(activeChatId!),
+                          { pages: [result], pageParams: [undefined] },
+                        );
+                        streamingContentRef.current = '';
+                        setStreamingContent('');
+                        setOptimisticUserMsg(null);
+                        setIsStreamingActive(false);
+                      });
+                      queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
+                    })
+                    .catch(() => {
+                      unstable_batchedUpdates(() => {
+                        streamingContentRef.current = '';
+                        setStreamingContent('');
+                        setIsStreamingActive(false);
+                        setOptimisticUserMsg(null);
+                      });
+                      queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.messages(activeChatId!) });
+                      queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
                     });
-                                    queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
-                  })
-                  .catch(() => {
-                    unstable_batchedUpdates(() => {
-                      streamingContentRef.current = '';
-                      setStreamingContent('');
-                      setIsStreamingActive(false);
-                      setOptimisticUserMsg(null);
-                    });
-                    queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.messages(activeChatId!) });
-                    queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
-                  });
+                };
+
+                // Kuyrukta karakter varsa bitene kadar 25ms'de bir kontrol et
+                const waitForQueue = () => {
+                  if (streamCancelledRef.current) return; // abort geldi, dur
+                  if (typewriterQueueRef.current.length === 0) {
+                    doFetch();
+                  } else {
+                    setTimeout(waitForQueue, 25);
+                  }
+                };
+                setTimeout(waitForQueue, 50);
               },
               onError: (err) => {
-                if (rafRef.current !== null) {
-                  cancelAnimationFrame(rafRef.current);
-                  rafRef.current = null;
-                }
+                stopTypewriter();
                 streamingContentRef.current = '';
                 setStreamingContent('');
                 setIsStreamingActive(false);
@@ -248,6 +282,7 @@ export const useChatSession = () => {
             ctrl.signal,
           );
         } catch {
+          stopTypewriter();
           streamingContentRef.current = '';
           setStreamingContent('');
           setIsStreamingActive(false);
@@ -298,9 +333,14 @@ export const useChatSession = () => {
   }, []);
 
   const startNewChat = useCallback(() => {
+    streamCancelledRef.current = true;
     abortCtrlRef.current?.abort();
     abortCtrlRef.current = null;
-    if (rafRef.current !== null) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+    if (typewriterIntervalRef.current !== null) {
+      clearInterval(typewriterIntervalRef.current);
+      typewriterIntervalRef.current = null;
+    }
+    typewriterQueueRef.current = [];
     streamingContentRef.current = '';
     streamingMsgIdRef.current = 'streaming';
     optimisticUserMsgRef.current = null;
@@ -314,9 +354,14 @@ export const useChatSession = () => {
   const loadSession = useCallback(
     (id: string) => {
       if (id === sessionId) return;
+      streamCancelledRef.current = true;
       abortCtrlRef.current?.abort();
       abortCtrlRef.current = null;
-      if (rafRef.current !== null) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+      if (typewriterIntervalRef.current !== null) {
+        clearInterval(typewriterIntervalRef.current);
+        typewriterIntervalRef.current = null;
+      }
+      typewriterQueueRef.current = [];
       streamingContentRef.current = '';
       streamingMsgIdRef.current = 'streaming';
       optimisticUserMsgRef.current = null;
