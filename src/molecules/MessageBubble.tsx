@@ -10,6 +10,7 @@ import Animated, {
   useAnimatedStyle,
   withTiming,
   withSequence,
+  withDelay,
   Easing,
 } from 'react-native-reanimated';
 import Svg, { Path } from 'react-native-svg';
@@ -99,6 +100,20 @@ const MessageBubbleInner: React.FC<Props> = ({
   const { t } = useI18n();
 
   const isUser = message.role === 'user';
+
+  // Footer opacity — hideFooter=true iken 0, false olunca 300ms delay ile fade in
+  // delay: StreamingBubble→MessageBubble swap'ında layout settle etsin
+  const footerOpacity = useSharedValue(hideFooter ? 0 : 1);
+  const footerAnimStyle = useAnimatedStyle(() => ({ opacity: footerOpacity.value }));
+
+  React.useEffect(() => {
+    if (!hideFooter) {
+      footerOpacity.value = withDelay(120, withTiming(1, { duration: 200, easing: Easing.out(Easing.quad) }));
+    } else {
+      footerOpacity.value = 0;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hideFooter]);
 
   const formattedTime = new Date(message.timestamp).toLocaleTimeString([], {
     hour: '2-digit',
@@ -190,8 +205,8 @@ const MessageBubbleInner: React.FC<Props> = ({
             </Text>
           )}
 
-          {/* Footer: time + actions */}
-          <View style={[styles.footer, hideFooter && styles.footerHidden]}>
+          {/* Footer: time + actions — opacity ile fade in, layout sabit kalır */}
+          <Animated.View style={[styles.footer, isUser && styles.footerUser, footerAnimStyle]}>
             <Text
               variant="micro"
               color={isUser ? 'rgba(255,255,255,0.65)' : colors.textSecondary}
@@ -241,7 +256,7 @@ const MessageBubbleInner: React.FC<Props> = ({
                 )}
               </View>
             )}
-          </View>
+          </Animated.View>
         </View>
 
         {/* User tail — bubble sağında */}
@@ -253,6 +268,7 @@ const MessageBubbleInner: React.FC<Props> = ({
 
 export const MessageBubble = React.memo(MessageBubbleInner, (prev, next) => {
   if (prev.message.content !== next.message.content) return false;
+  if (prev.message.timestamp !== next.message.timestamp) return false;
   if (prev.message.liked !== next.message.liked) return false;
   if (prev.isSpeaking !== next.isSpeaking) return false;
   if (prev.onSpeakToggle !== next.onSpeakToggle) return false;
@@ -337,8 +353,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginTop: spacing[2],
   },
-  footerHidden: {
-    opacity: 0,
+  footerUser: {
+    justifyContent: 'flex-end',
+    marginTop: spacing[1],
   },
   actions: {
     flexDirection: 'row',

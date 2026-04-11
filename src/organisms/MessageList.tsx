@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, useState, useEffect } from 'react';
+import React, { useRef, useCallback, useState, useEffect, useLayoutEffect } from 'react';
 import { View, StyleSheet, ActivityIndicator, FlatList, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { SharedValue } from 'react-native-reanimated';
 import * as Speech from 'expo-speech';
@@ -86,27 +86,33 @@ export const MessageList: React.FC<Props> = ({
   const canShowWelcome = !hasContent && welcomeReady;
 
   const [isWelcomeExiting, setIsWelcomeExiting] = useState(false);
-  const isWelcomeExitingRef = useRef(false);
-  // welcomeShownRef: panel bir kez gösterildikten sonra DOM'da tut
+  // welcomeShownRef: welcome bir kez gösterildi mi — render sırasında set edilir
   const welcomeShownRef = useRef(false);
+  // exitingRef: exit animasyonu devam ediyor mu — showWelcome hesabında kullanılır
+  const exitingRef = useRef(false);
 
-  // render sırasında sync: canShowWelcome true iken shown=true yap
   if (canShowWelcome) welcomeShownRef.current = true;
 
-  // canShowWelcome false olduğu ilk render'da hemen exiting=true olarak işaretle
-  // useEffect bir sonraki render'da çalışır — biz render sırasında hesaplıyoruz
-  if (!canShowWelcome && welcomeShownRef.current && !isWelcomeExitingRef.current) {
-    isWelcomeExitingRef.current = true;
-    // state update → ikinci render tetikler, ama ref zaten true
-    setIsWelcomeExiting(true);
+  // canShowWelcome false olur olmaz exitingRef'i render sırasında set et
+  // böylece aynı render'da showWelcome=true kalır, FlatList görünür, panel unmount olmaz
+  if (!canShowWelcome && welcomeShownRef.current && !exitingRef.current) {
+    exitingRef.current = true;
   }
 
-  // showWelcome: welcome gösterilmişse ve exit tamamlanmadıysa mount'ta tut
-  const showWelcome = canShowWelcome || isWelcomeExitingRef.current;
+  // showWelcome: panel gösterilmişse ve exit tamamlanmadıysa mount'ta tut
+  const showWelcome = canShowWelcome || exitingRef.current;
+
+  // isWelcomeExiting state: HomeWelcomePanel'e prop olarak geçilir
+  // exitingRef true olduğu anda bir sonraki render'da state güncelle
+  useEffect(() => {
+    if (exitingRef.current && !isWelcomeExiting) {
+      setIsWelcomeExiting(true);
+    }
+  }, [isWelcomeExiting]);
 
   const handleWelcomeExitComplete = useCallback(() => {
     welcomeShownRef.current = false;
-    isWelcomeExitingRef.current = false;
+    exitingRef.current = false;
     setIsWelcomeExiting(false);
   }, []);
 
@@ -208,7 +214,7 @@ export const MessageList: React.FC<Props> = ({
         index={index}
         isSpeaking={speakingMessageId === item.id}
         skipEntryAnimation={isStreamingItem || isOptimisticUserItem || wasStreamingItem}
-        hideFooter={isStreamingItem || isOptimisticUserItem}
+        hideFooter={isStreamingItem}
         onSpeakToggle={
           item.role === 'assistant' && item.content.trim().length > 0
             ? () => handleSpeakToggle(item.id, item.content)
