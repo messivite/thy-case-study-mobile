@@ -10,7 +10,6 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { Path } from 'react-native-svg';
 import * as Clipboard from 'expo-clipboard';
-import { MotiView } from '@/lib/motiView';
 import { Ionicons } from '@expo/vector-icons';
 import { Message } from '@/types/chat.types';
 import { Text } from '@/atoms/Text';
@@ -27,7 +26,6 @@ type Props = {
   onRegenerate?: (id: string) => void;
   isSpeaking?: boolean;
   onSpeakToggle?: () => void;
-  skipEntryAnimation?: boolean;
   hideFooter?: boolean;
   hideModelLabel?: boolean;
 };
@@ -64,7 +62,6 @@ const MessageBubbleInner: React.FC<Props> = ({
   onRegenerate,
   isSpeaking = false,
   onSpeakToggle,
-  skipEntryAnimation = false,
   hideFooter = false,
   hideModelLabel = false,
 }) => {
@@ -200,20 +197,8 @@ const MessageBubbleInner: React.FC<Props> = ({
     </View>
   );
 
-  // skipEntryAnimation=true → düz View (Moti worklet yok)
-  // skipEntryAnimation=false → sadece yeni gelen mesajlar için MotiView
-  const Wrapper = skipEntryAnimation ? View : MotiView;
-  const wrapperProps = skipEntryAnimation
-    ? {}
-    : {
-        from: { opacity: 0, translateY: 6 },
-        animate: { opacity: 1, translateY: 0 },
-        transition: { type: 'timing' as const, duration: 200, delay: 0 },
-      };
-
   return (
-    <Wrapper
-      {...wrapperProps}
+    <View
       style={[styles.row, isUser ? styles.rowRight : styles.rowLeft]}
     >
       {isUser ? (
@@ -235,7 +220,7 @@ const MessageBubbleInner: React.FC<Props> = ({
           )}
         </View>
       )}
-    </Wrapper>
+    </View>
   );
 };
 
@@ -248,7 +233,6 @@ export const MessageBubble = React.memo(MessageBubbleInner, (prev, next) => {
   if (prev.onSpeakToggle !== next.onSpeakToggle) return false;
   if (prev.onLike !== next.onLike) return false;
   if (prev.onRegenerate !== next.onRegenerate) return false;
-  if (prev.skipEntryAnimation !== next.skipEntryAnimation) return false;
   if (prev.hideFooter !== next.hideFooter) return false;
   if (prev.hideModelLabel !== next.hideModelLabel) return false;
   return true;
