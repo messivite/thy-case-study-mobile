@@ -1,3 +1,4 @@
+import axios from 'axios';
 import { privateApi } from '@/services/api';
 import { supabase } from '@/services/supabase';
 import {
@@ -19,7 +20,6 @@ import {
   SyncChatResponse,
 } from '@/types/chat.api.types';
 
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'https://api.example.com';
 
 /**
  * POST /api/chats/:chatId/stream
@@ -34,6 +34,28 @@ const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'https://api.example.com';
  *     onError: (err) => ...,
  *   });
  */
+/**
+ * Newline-delimited JSON satırını parse edip callback'leri tetikler.
+ */
+function processLine(line: string, callbacks: StreamChatCallbacks): void {
+  let trimmed = line.trim();
+  if (!trimmed) return;
+  // SSE format: lines start with "data: "
+  if (trimmed.startsWith('data: ')) trimmed = trimmed.slice(6);
+  if (!trimmed) return;
+  try {
+    const event = JSON.parse(trimmed) as StreamEvent;
+    switch (event.type) {
+      case 'meta':  callbacks.onMeta?.(event.meta);   break;
+      case 'delta': callbacks.onDelta?.(event.delta); break;
+      case 'done':  callbacks.onDone?.();             break;
+      case 'error': callbacks.onError?.(event.error); break;
+    }
+  } catch {
+    // Parse edilemeyen satır — yoksay
+  }
+}
+
 export const streamChat = async (
   chatId: string,
   payload: StreamChatRequest,
@@ -43,86 +65,98 @@ export const streamChat = async (
   const { data: { session } } = await supabase.auth.getSession();
   const token = session?.access_token;
 
-  const response = await fetch(`${BASE_URL}/api/chats/${chatId}/stream`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify(payload),
-    signal,
-  });
+  return new Promise<void>((resolve) => {
+    let buffer = '';
+    let processedLength = 0;
+    let settled = false;
+    let totalDelay = 0; // typewriter animation toplam gecikme
 
-  if (!response.ok) {
-    callbacks.onError?.(`HTTP ${response.status}: ${response.statusText}`);
-    return;
-  }
+    const settle = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
 
-  const reader = response.body?.getReader();
-  if (!reader) {
-    callbacks.onError?.('ReadableStream desteklenmiyor.');
-    return;
-  }
-
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-
-      // Newline-delimited JSON: her satır ayrı bir event
-      const lines = buffer.split('\n');
-      buffer = lines.pop() ?? ''; // son yarım satırı sakla
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-
-        try {
-          const event = JSON.parse(trimmed) as StreamEvent;
-
-          switch (event.type) {
-            case 'meta':
-              callbacks.onMeta?.(event.meta);
-              break;
-            case 'delta':
-              callbacks.onDelta?.(event.delta);
-              break;
-            case 'done':
-              callbacks.onDone?.();
-              break;
-            case 'error':
-              callbacks.onError?.(event.error);
-              break;
-          }
-        } catch {
-          // Parse edilemeyen satır — yoksay
-        }
+    // AbortSignal → axios CancelToken'a bağla
+    const controller = new AbortController();
+    if (signal) {
+      if (signal.aborted) {
+        callbacks.onError?.('aborted');
+        resolve();
+        return;
       }
+      signal.addEventListener('abort', () => controller.abort());
     }
-  } catch (err: unknown) {
-    if (err instanceof Error && err.name === 'AbortError') {
-      callbacks.onError?.('aborted');
-      return;
-    }
-    throw err;
-  }
 
-  // Buffer'da kalan veri varsa işle
-  const remaining = buffer.trim();
-  if (remaining) {
-    try {
-      const event = JSON.parse(remaining) as StreamEvent;
-      if (event.type === 'done') callbacks.onDone?.();
-      else if (event.type === 'error') callbacks.onError?.(event.error);
-    } catch {
-      // yoksay
-    }
-  }
+    privateApi.post(
+      `/api/chats/${chatId}/stream`,
+      payload,
+      {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        responseType: 'text',
+        transformResponse: [(data) => data],
+        // onDownloadProgress: RN'de XHR onprogress — her chunk'ta çağrılır
+        // event.target.responseText birikimli tüm text'i içerir
+        onDownloadProgress: (progressEvent) => {
+          const xhr = progressEvent.event?.target as XMLHttpRequest | undefined;
+          const xhrAlt = progressEvent.event?.currentTarget as XMLHttpRequest | undefined;
+          const fullText: string = xhr?.responseText ?? xhrAlt?.responseText ?? (progressEvent as any).responseText ?? '';
+          if (!fullText || fullText.length <= processedLength) return;
+
+          const newChunk = fullText.slice(processedLength);
+          processedLength = fullText.length;
+
+          buffer += newChunk;
+          const lines = buffer.split('\n');
+          buffer = lines.pop() ?? '';
+
+          // RN XHR tüm response'u tek chunk'ta getirir — typewriter efekti için
+          // her satırı sırayla setTimeout ile işle
+          const isDelta = (l: string) => {
+            const t = l.trim();
+            const json = t.startsWith('data: ') ? t.slice(6) : t;
+            return json.includes('"delta"') && json.includes('"type"');
+          };
+
+          let delay = 0;
+          for (const line of lines) {
+            if (isDelta(line)) {
+              const captured = line;
+              setTimeout(() => processLine(captured, callbacks), delay);
+              delay += 18;
+            } else {
+              const captured = line;
+              setTimeout(() => processLine(captured, callbacks), delay);
+              delay += 1;
+            }
+          }
+          totalDelay = delay;
+        },
+        signal: controller.signal,
+      },
+    ).then((response) => {
+      // Response tamamlandı — onDownloadProgress hiç tetiklenmediyse
+      // (bazı RN ortamlarında) tüm text burada gelir
+      if (processedLength === 0 && response.data) {
+        const allText: string = typeof response.data === 'string' ? response.data : '';
+        const lines = allText.split('\n');
+        for (const line of lines) processLine(line, callbacks);
+      } else if (buffer.trim()) {
+        processLine(buffer, callbacks);
+      }
+      // Typewriter animation bitene kadar bekle
+      setTimeout(settle, totalDelay + 50);
+    }).catch((err) => {
+      if (axios.isCancel(err) || (err as Error)?.name === 'CanceledError' || (err as Error)?.name === 'AbortError') {
+        callbacks.onError?.('aborted');
+      } else {
+        const status = (err as { response?: { status: number } })?.response?.status;
+        console.error('[streamChat] error:', status, err);
+        callbacks.onError?.(`HTTP ${status ?? 'network'}`);
+      }
+      settle();
+    });
+  });
 };
 
 /**

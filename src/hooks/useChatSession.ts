@@ -1,5 +1,4 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { InfiniteData } from '@tanstack/react-query';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { setSessionId, clearMessages } from '@/store/slices/chatSlice';
 import {
@@ -12,8 +11,7 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import { streamChat } from '@/api/chat.api';
 import { Attachment, Message } from '@/types/chat.types';
-import { ChatMessage, PaginatedMessagesResponse } from '@/types/chat.api.types';
-import { realmService } from '@/services/realm';
+import { ChatMessage } from '@/types/chat.api.types';
 import { toast } from '@/lib/toast';
 
 // ---------------------------------------------------------------------------
@@ -49,9 +47,8 @@ export const useChatSession = () => {
   const [isStreamingActive, setIsStreamingActive] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
-  // Ref — onDone closure'da güncel content'e erişmek için
+  // Ref — onDelta/onDone closure'da güncel content'e erişmek için
   const streamingContentRef = useRef('');
-
   // Optimistic user message — cache'e karıştırmadan ayrı tut
   const [optimisticUserMsg, setOptimisticUserMsg] = useState<Message | null>(null);
 
@@ -78,26 +75,29 @@ export const useChatSession = () => {
     prevSessionIdRef.current = chatId;
   }, [chatId]);
 
+
   // ---------------------------------------------------------------------------
   // Optimistic helpers
   // ---------------------------------------------------------------------------
 
   // ---------------------------------------------------------------------------
   // Flatten paginated messages
-  // API newest→oldest döndürür → biz aynı sırayı koruyoruz.
-  // FlashList inverted ile gösterilir — hiç sort/reverse yok.
+  // API eski→yeni sıralı döndürür (direction=older + sunucu tarafı reverse).
+  // pages[0] = en yeni blok, pages[1] = daha eski blok (yukarı scroll ile gelir).
+  // flatMap sonrası: pages[0] eski→yeni, pages[1] daha eski→yeni — ters sırada birleşir.
   // ---------------------------------------------------------------------------
 
   const messages: Message[] = useMemo(() => {
     if (!messagesQuery.data) return [];
 
-    // Tüm sayfaları birleştir — her page newest→oldest, pages[0] en yeni page
+    // pages[0] = en yeni blok, pages[1+] = daha eski bloklar (yukarı scroll ile eklenir)
+    // Eski bloklar önce, yeni blok sonda olacak şekilde pages'i ters çevir
+    const allMsgs = [...messagesQuery.data.pages].reverse().flatMap((page) => page?.messages ?? []);
+
     const seen = new Set<string>();
-    return messagesQuery.data.pages
-      .flatMap((page) => page?.messages ?? [])
+    return allMsgs
       .filter((msg): msg is ChatMessage => !!msg && typeof msg.role === 'string')
       .filter((msg) => {
-        // id bazlı duplicate temizle
         const key = msg.id ?? `${msg.createdAt}_${msg.role}`;
         if (seen.has(key)) return false;
         seen.add(key);
@@ -164,30 +164,16 @@ export const useChatSession = () => {
                 setStreamingContent((prev) => prev + delta);
               },
               onDone: () => {
-                const assistantContent = streamingContentRef.current;
                 streamingContentRef.current = '';
+                abortCtrlRef.current = null;
                 setIsStreamingActive(false);
                 setStreamingContent('');
                 setStreamingMessageId(null);
                 setOptimisticUserMsg(null);
-                abortCtrlRef.current = null;
 
-                // Stream tamamlandı — API'den gerçek mesajları çek
-                // Cache'e elle yazmıyoruz; invalidate ile API fetch tetiklenir,
-                // API newest→oldest döndürür, cache temiz kalır.
-                queryClient.invalidateQueries({
-                  queryKey: CHAT_QUERY_KEYS.messages(activeChatId!),
-                });
-                queryClient.invalidateQueries({
-                  queryKey: CHAT_QUERY_KEYS.chatsList,
-                });
-
-                // Realm'e kaydet (offline için)
-                const now = Date.now();
-                realmService.saveMessages(activeChatId!, [
-                  { role: 'user', content, provider, model, id: `user_${now - 1}`, createdAt: new Date(now - 1).toISOString() },
-                  { role: 'assistant', content: assistantContent, provider, model, id: `assistant_${now}`, createdAt: new Date(now).toISOString() },
-                ]);
+                // Gerçek veriyi API'den çek — client'ta fake data üretme
+                queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.messages(activeChatId!) });
+                queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
               },
               onError: (err) => {
                 streamingContentRef.current = '';
@@ -197,6 +183,7 @@ export const useChatSession = () => {
                 setOptimisticUserMsg(null);
                 abortCtrlRef.current = null;
                 if (err !== 'aborted') {
+                  console.error('[useChatSession] stream error:', err);
                   toast.error('Mesaj gönderilemedi');
                 }
               },
@@ -224,11 +211,6 @@ export const useChatSession = () => {
               queryClient.invalidateQueries({
                 queryKey: CHAT_QUERY_KEYS.chatsList,
               });
-              // Realm'e kaydet
-              realmService.saveMessages(activeChatId!, [
-                { role: 'user', content, provider, model },
-                { role: data.assistantMessage.role, content: data.assistantMessage.content, provider: data.assistantMessage.provider, model: data.assistantMessage.model },
-              ]);
             },
             onError: () => {
               setOptimisticUserMsg(null);
@@ -278,7 +260,7 @@ export const useChatSession = () => {
       setStreamingContent('');
       setOptimisticUserMsg(null);
       streamingContentRef.current = '';
-      dispatch(setSessionId(id));
+        dispatch(setSessionId(id));
     },
     [sessionId, dispatch],
   );

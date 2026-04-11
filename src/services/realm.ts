@@ -6,7 +6,7 @@ import { ChatListItem, ChatMessage } from '@/types/chat.api.types';
 // ---------------------------------------------------------------------------
 
 const MAX_SESSIONS = 20;
-const MAX_MESSAGES_PER_SESSION = 20;
+const MAX_MESSAGES_PER_SESSION = 40;
 
 export class RealmSession extends Realm.Object<RealmSession> {
   _id!: string;
@@ -75,7 +75,7 @@ export const openRealm = (): Promise<Realm> => {
 
   _realmPromise = Realm.open({
     schema: [RealmSession, RealmMessage],
-    schemaVersion: 2,
+    schemaVersion: 6,
     onMigration: (_oldRealm: Realm, newRealm: Realm) => {
       // v1 → v2: lastMessagePreview alani eklendi, mevcutlara bos string ver
       const sessions = newRealm.objects('RealmSession');
@@ -84,6 +84,12 @@ export const openRealm = (): Promise<Realm> => {
           (s as unknown as RealmSession).lastMessagePreview = '';
         }
       }
+      // v2 → v3: kirlenmiş optimistic/timestamp ID'li mesajları temizle
+      // v3 → v4: limit 20→100 oldu, eski cache'i temizle
+      // v4 → v5: API artık id+createdAt dönüyor, eski composite-key kayıtları temizle
+      // v5 → v6: Realm sıralama newest→oldest'ten oldest→newest'e değişti
+      const messages = newRealm.objects('RealmMessage');
+      newRealm.delete(messages);
     },
   }).then((realm) => {
     _realm = realm;
@@ -207,11 +213,11 @@ export const realmService = {
       const realm = getRealmSync();
       if (!realm) return { messages: [], syncedAt: 0 };
 
-      // newest→oldest (descending createdAt) — inverted FlashList ile uyumlu
+      // oldest→newest (ascending createdAt) — API ile aynı sıra
       const msgs = realm
         .objects<RealmMessage>('RealmMessage')
         .filtered('sessionId == $0', sessionId)
-        .sorted('createdAt', true);
+        .sorted('createdAt', false);
 
       if (msgs.length === 0) return { messages: [], syncedAt: 0 };
 

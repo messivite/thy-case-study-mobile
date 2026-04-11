@@ -3,9 +3,9 @@ import { View, StyleSheet, ActivityIndicator, FlatList, NativeSyntheticEvent, Na
 import * as Speech from 'expo-speech';
 import { Message } from '@/types/chat.types';
 import { MessageBubble } from '@/molecules/MessageBubble';
-import { TypingIndicator } from '@/molecules/TypingIndicator';
 import { ScrollToBottomButton } from '@/molecules/ScrollToBottomButton';
 import { ActivityThyLoading } from '@/atoms/ActivityThyLoading';
+import { radius } from '@/constants/spacing';
 import { Text } from '@/atoms/Text';
 import { HomeWelcomePanel, WelcomeQuickAction } from '@/organisms/HomeWelcomePanel';
 import { useTheme } from '@/hooks/useTheme';
@@ -14,7 +14,36 @@ import { useI18n } from '@/hooks/useI18n';
 import { stripTextForSpeech, speechLocaleForAppLang } from '@/lib/chatSpeech';
 import { toast } from '@/lib/toast';
 
-const AT_BOTTOM_THRESHOLD = 80;
+// inverted FlatList'te "aşağı" aslında offset=0 (en üst görsel = en yeni mesaj)
+// Kullanıcı "yukarı" kaydırınca eski mesajlara gider
+const AT_TOP_THRESHOLD = 80; // inverted'da "bottom" aslında offset=0 yani top
+
+const WaitingBubble: React.FC = () => {
+  const { colors } = useTheme();
+  const { t } = useI18n();
+  return (
+    <View style={[waitingStyles.bubble, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      <ActivityThyLoading mode="pulse" size={20} />
+      <Text variant="caption" color={colors.textSecondary}>{t('assistant.awaitingResponse')}</Text>
+    </View>
+  );
+};
+
+const waitingStyles = StyleSheet.create({
+  bubble: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    marginHorizontal: spacing[4],
+    marginVertical: spacing[1],
+    borderRadius: radius.lg,
+    borderBottomLeftRadius: radius.sm,
+    borderWidth: 1,
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
+    gap: spacing[2],
+  },
+});
 
 type Props = {
   chatId?: string | null;
@@ -57,9 +86,11 @@ export const MessageList: React.FC<Props> = ({
   const { t, currentLanguage } = useI18n();
   const listRef = useRef<FlatList<Message>>(null);
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
+  // inverted modda offset=0 = en yeni mesaj (görsel olarak en altta)
+  // Kullanıcı eski mesajlara kaydırınca offset artar
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
-  const isAtBottomRef = useRef(true);
+  const isAtLatestRef = useRef(true); // offset=0 → en yeni mesajda mı?
   const prevCountRef = useRef(0);
 
   useEffect(() => () => { void Speech.stop(); }, []);
@@ -67,12 +98,12 @@ export const MessageList: React.FC<Props> = ({
   // Session değişince sıfırla
   useEffect(() => {
     prevCountRef.current = 0;
-    isAtBottomRef.current = true;
+    isAtLatestRef.current = true;
     setShowScrollBtn(false);
     setUnreadCount(0);
   }, [chatId]);
 
-  // Yeni mesaj: alttaysa scroll et, değilse badge
+  // Yeni mesaj gelince: en yenideyse badge yok (zaten görüyor), değilse badge göster
   useEffect(() => {
     const total = messages.length + (optimisticUserMsg ? 1 : 0) + (streamingMessage ? 1 : 0);
     const prev = prevCountRef.current;
@@ -80,29 +111,25 @@ export const MessageList: React.FC<Props> = ({
     const added = total - prev;
     prevCountRef.current = total;
 
-    if (isAtBottomRef.current) {
-      setTimeout(() => listRef.current?.scrollToEnd({ animated: prev > 0 }), 60);
-    } else if (added > 0) {
+    if (!isAtLatestRef.current && added > 0) {
       setUnreadCount((c) => c + added);
       setShowScrollBtn(true);
     }
   }, [messages.length, optimisticUserMsg, streamingMessage]);
 
+  // inverted modda scroll event: contentOffset.y=0 → en yeni mesajda
   const handleScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
-    const distanceFromBottom = contentSize.height - layoutMeasurement.height - contentOffset.y;
-    const atBottom = distanceFromBottom < AT_BOTTOM_THRESHOLD;
-    isAtBottomRef.current = atBottom;
-    if (atBottom) {
+    const offsetY = e.nativeEvent.contentOffset.y;
+    const atLatest = offsetY < AT_TOP_THRESHOLD;
+    isAtLatestRef.current = atLatest;
+    if (atLatest) {
       setShowScrollBtn(false);
       setUnreadCount(0);
-    } else {
-      setShowScrollBtn(true);
     }
   }, []);
 
-  const handleScrollToBottom = useCallback(() => {
-    listRef.current?.scrollToEnd({ animated: true });
+  const handleScrollToLatest = useCallback(() => {
+    listRef.current?.scrollToOffset({ offset: 0, animated: true });
     setShowScrollBtn(false);
     setUnreadCount(0);
   }, []);
@@ -129,6 +156,21 @@ export const MessageList: React.FC<Props> = ({
       },
     });
   }, [speakingMessageId, currentLanguage, t]);
+
+  const renderItem = useCallback(({ item, index }: { item: Message; index: number }) => (
+    <MessageBubble
+      message={item}
+      onLike={onLike}
+      onRegenerate={onRegenerate}
+      index={index}
+      isSpeaking={speakingMessageId === item.id}
+      onSpeakToggle={
+        item.role === 'assistant' && item.content.trim().length > 0
+          ? () => handleSpeakToggle(item.id, item.content)
+          : undefined
+      }
+    />
+  ), [onLike, onRegenerate, speakingMessageId, handleSpeakToggle]);
 
   if (isSessionLoading) {
     return (
@@ -166,12 +208,14 @@ export const MessageList: React.FC<Props> = ({
     );
   }
 
-  // API newest→oldest döndürüyor → reverse ile oldest→newest yapıyoruz
-  // Geçici mesajlar en sona (en yeni)
+  // inverted=true → FlatList veriyi ters render eder.
+  // En yeni mesajın en üstte (görsel olarak en altta) olması için newest→oldest sırası gerekir.
+  // messages şu an oldest→newest → ters çevir.
+  // Geçici mesajlar (optimistic, streaming) en yeni → dizinin başına.
   const displayMessages: Message[] = [
-    ...messages.slice().reverse(),
-    ...(optimisticUserMsg ? [optimisticUserMsg] : []),
     ...(streamingMessage ? [streamingMessage] : []),
+    ...(optimisticUserMsg ? [optimisticUserMsg] : []),
+    ...messages.slice().reverse(),
   ];
 
   return (
@@ -179,48 +223,38 @@ export const MessageList: React.FC<Props> = ({
       <FlatList
         ref={listRef}
         data={displayMessages}
-        renderItem={({ item, index }) => (
-          <MessageBubble
-            message={item}
-            onLike={onLike}
-            onRegenerate={onRegenerate}
-            index={index}
-            isSpeaking={speakingMessageId === item.id}
-            onSpeakToggle={
-              item.role === 'assistant' && item.content.trim().length > 0
-                ? () => handleSpeakToggle(item.id, item.content)
-                : undefined
-            }
-          />
-        )}
+        renderItem={renderItem}
         keyExtractor={(item) => item.id}
+        inverted
         contentContainerStyle={styles.listContent}
-        ListHeaderComponent={
+        // inverted'da header aşağıda (en eski mesajların üstünde = görsel olarak üst)
+        ListFooterComponent={
           isLoadingMore ? (
             <View style={styles.loadingMore}>
               <ActivityIndicator size="small" color={colors.primary} />
             </View>
           ) : null
         }
-        ListFooterComponent={
-          isTyping && !streamingMessage ? <TypingIndicator /> : null
+        // inverted'da header görsel olarak en altta (en yeni mesajın altı = input üstü)
+        ListHeaderComponent={
+          isTyping && !streamingMessage ? <WaitingBubble /> : null
         }
-        onStartReached={() => {
+        // inverted'da "end" aslında en eski mesajlar — pagination için onEndReached
+        onEndReached={() => {
           if (hasMore && !isLoadingMore && onLoadMore) onLoadMore();
         }}
-        onStartReachedThreshold={0.3}
+        onEndReachedThreshold={0.3}
         onScroll={handleScroll}
         scrollEventThrottle={100}
         showsVerticalScrollIndicator={false}
         keyboardDismissMode="interactive"
         keyboardShouldPersistTaps="handled"
-        maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
       />
 
       <ScrollToBottomButton
         visible={showScrollBtn}
         unreadCount={unreadCount}
-        onPress={handleScrollToBottom}
+        onPress={handleScrollToLatest}
       />
     </View>
   );

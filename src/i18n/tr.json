@@ -125,7 +125,8 @@
     "typing": "Yazıyor...",
     "loadingMore": "Eski mesajlar yükleniyor...",
     "speak": "Sesli dinle",
-    "stopSpeaking": "Okumayı durdur"
+    "stopSpeaking": "Okumayı durdur",
+    "awaitingResponse": "Yanıt bekleniyor..."
   },
   "settings": {
     "title": "Ayarlar",

@@ -45,7 +45,7 @@ const AiTail = ({ color, borderColor }: { color: string; borderColor: string }) 
   </Svg>
 );
 
-export const MessageBubble: React.FC<Props> = ({
+export const MessageBubble: React.FC<Props> = React.memo(({
   message,
   onLike,
   onRegenerate,
@@ -90,9 +90,9 @@ export const MessageBubble: React.FC<Props> = ({
 
   return (
     <MotiView
-      from={{ opacity: 0, translateY: 8 }}
+      from={{ opacity: 0, translateY: 6 }}
       animate={{ opacity: 1, translateY: 0 }}
-      transition={{ type: 'timing', duration: 250, delay: Math.min(index * 30, 150) }}
+      transition={{ type: 'timing', duration: 200, delay: 0 }}
       style={[styles.row, isUser ? styles.rowRight : styles.rowLeft]}
     >
       {/* Bubble + tail wrapper — alignItems flex-end ile dibe hizalı */}
@@ -208,7 +208,7 @@ export const MessageBubble: React.FC<Props> = ({
       </View>
     </MotiView>
   );
-};
+});
 
 const styles = StyleSheet.create({
   row: {

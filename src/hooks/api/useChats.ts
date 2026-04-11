@@ -197,109 +197,47 @@ export const useSendMessageMutation = (chatId: string) =>
  * GET /api/chats/:chatId/messages?direction=older&cursor=X — Infinite scroll
  *
  * Akış:
- *  1. Mount'ta Realm cache'i `initialData` olarak anında render edilir.
- *  2. Realm'de veri varsa: en yeni mesajın createdAt'ini cursor olarak kullanıp
- *     `direction=newer` fetch yapılır (WhatsApp pattern) — aradaki yeni mesajlar merge edilir.
- *  3. Realm'de veri yoksa: normal `direction=older` fetch (ilk yükleme).
- *  4. Kullanıcı yukarı kaydırıp `onStartReached` tetiklerse `fetchNextPage` çağrılır
- *     → `direction=older&cursor=OLDEST_CURSOR` ile eski mesajlar remote'tan çekilir.
- *  5. API'den gelen mesajlar Realm'e upsert edilir (duplicate-safe).
+ *  1. Mount'ta Realm cache'i `initialData` olarak anında render edilir (instant gösterim).
+ *  2. staleTime (30s) dolunca API fetch tetiklenir — gerçek veri gelir, cache güncellenir.
+ *  3. Kullanıcı yukarı kaydırınca `fetchNextPage` → direction=older → eski mesajlar yüklenir.
+ *  4. API fetch tamamlanınca mesajlar Realm'e upsert edilir (duplicate-safe).
  */
 export const useInfiniteMessagesQuery = (sessionId: string, isAnonymous = false) => {
-  const queryClient = useQueryClient();
-
   // Realm'den senkron oku — mount anında initialData olarak ver
   const cached = useMemo(() => realmService.getMessages(sessionId), [sessionId]);
-
-  // Realm'deki en yeni mesajın createdAt'i — newer sync için cursor
-  // messages: newest→oldest sıralı, index 0 = en yeni
-  const newestCachedCreatedAt = cached.messages[0]?.createdAt ?? null;
 
   const query = useInfiniteQuery<PaginatedMessagesResponse, Error>({
     queryKey: CHAT_QUERY_KEYS.messages(sessionId),
     queryFn: ({ pageParam }) =>
       getChatMessages(sessionId, {
-        limit: 20,
+        limit: 40,
         cursor: pageParam as string | undefined,
         direction: 'older',
       }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-    // Realm'de veri varsa hemen göster — API fetch'i arka planda yap
     initialData: cached.messages.length > 0
       ? {
-          pages: [{ messages: cached.messages, nextCursor: null, hasMore: false }],
+          pages: [{
+            messages: cached.messages,
+            nextCursor: null,
+            hasMore: false,
+          }],
           pageParams: [undefined],
         }
       : undefined,
-    // Realm syncedAt — staleTime ile karşılaştırılır
-    // syncedAt + staleTime > now → fresh skip; < now → arka planda refetch
     initialDataUpdatedAt: cached.syncedAt,
-    staleTime: 30_000, // 30sn — sohbet sık değişir
+    staleTime: 30_000,
     gcTime: 5 * 60_000,
     enabled: !!sessionId && !isAnonymous,
   });
 
-  // WhatsApp pattern: Realm cache varsa en yeni mesajdan sonrasını çek
-  // Her session mount'unda bir kez çalışır; yeni mesajları cache'e merge eder
-  const newerSyncDoneRef = useRef<string | null>(null);
-  // setQueryData tarafından tetiklenen dataUpdatedAt değişimini yoksaymak için flag
-  const skipNextRealmWriteRef = useRef(false);
-
-  useEffect(() => {
-    if (!sessionId || isAnonymous || !newestCachedCreatedAt) return;
-    if (newerSyncDoneRef.current === sessionId) return;
-    newerSyncDoneRef.current = sessionId;
-
-    getChatMessages(sessionId, {
-      limit: 50,
-      cursor: newestCachedCreatedAt,
-      direction: 'newer',
-    }).then((result) => {
-      if (!result.messages || result.messages.length === 0) return;
-
-      // Realm'e yaz (setQueryData öncesi — döngüyü önle)
-      realmService.saveMessages(sessionId, result.messages);
-
-      // Cache'e merge et — duplicate önleme: id kontrolü
-      skipNextRealmWriteRef.current = true;
-      queryClient.setQueryData<InfiniteData<PaginatedMessagesResponse>>(
-        CHAT_QUERY_KEYS.messages(sessionId),
-        (old) => {
-          const base: InfiniteData<PaginatedMessagesResponse> = old ?? {
-            pages: [{ messages: [], nextCursor: null, hasMore: false }],
-            pageParams: [undefined],
-          };
-          const existingIds = new Set(
-            base.pages.flatMap((p) => p.messages.map((m) => m.id).filter(Boolean)),
-          );
-          const newMessages = result.messages.filter((m) => !m.id || !existingIds.has(m.id));
-          if (newMessages.length === 0) return base;
-
-          const newPages = [...base.pages];
-          newPages[0] = {
-            ...newPages[0],
-            messages: [...newMessages, ...newPages[0].messages],
-          };
-          return { ...base, pages: newPages };
-        },
-      );
-    }).catch(() => { /* sessizce geç */ });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, isAnonymous]);
-
-  // API fetch tamamlanınca Realm'e yaz — sadece gerçek API fetch'lerinde (setQueryData döngüsü değil)
+  // API fetch tamamlanınca Realm'e yaz
   const lastMsgSyncedAt = useRef(0);
   useEffect(() => {
     if (!sessionId || !query.data || !query.dataUpdatedAt) return;
     if (query.dataUpdatedAt <= lastMsgSyncedAt.current) return;
     lastMsgSyncedAt.current = query.dataUpdatedAt;
-
-    // WhatsApp newer sync'in setQueryData'sından tetiklendiyse yoksay
-    if (skipNextRealmWriteRef.current) {
-      skipNextRealmWriteRef.current = false;
-      return;
-    }
 
     const firstPage = query.data.pages[0]?.messages ?? [];
     if (firstPage.length > 0) {

@@ -125,7 +125,8 @@
     "typing": "Typing...",
     "loadingMore": "Loading older messages...",
     "speak": "Listen",
-    "stopSpeaking": "Stop reading"
+    "stopSpeaking": "Stop reading",
+    "awaitingResponse": "Waiting for response..."
   },
   "settings": {
     "title": "Settings",
