@@ -363,6 +363,7 @@ interface GrowingTextInputHandle {
   getText: () => string;
   clear: () => void;
   focus: () => void;
+  syncValue: (v: string) => void;
 }
 
 interface GrowingTextInputProps {
@@ -370,36 +371,40 @@ interface GrowingTextInputProps {
   placeholderTextColor: string;
   editable: boolean;
   color: string;
+  counterColor: string;
   onHasTextChange: (hasText: boolean) => void;
   onExpandVisibleChange: (visible: boolean) => void;
-  onCharCountChange: (count: number) => void;
   onFocus: () => void;
   onBlur: () => void;
 }
 
-const GrowingTextInput = React.forwardRef<GrowingTextInputHandle, GrowingTextInputProps>(
-  ({ placeholder, placeholderTextColor, editable, color, onHasTextChange, onExpandVisibleChange, onCharCountChange, onFocus, onBlur }, ref) => {
-    const [value, setValue] = useState('');
+const GrowingTextInput = React.memo(React.forwardRef<GrowingTextInputHandle, GrowingTextInputProps>(
+  ({ placeholder, placeholderTextColor, editable, color, counterColor, onHasTextChange, onExpandVisibleChange, onFocus, onBlur }, ref) => {
     const inputRef = useRef<TextInput>(null);
+    const valueRef = useRef('');
     const prevHasText = useRef(false);
     const prevExpandVisible = useRef(false);
+    const [charCount, setCharCount] = useState(0);
+    const [atMax, setAtMax] = useState(false);
+
+    // Callback prop'larını ref'te tut — her render'da yeni closure yaratılmasın
+    const onHasTextChangeRef = useRef(onHasTextChange);
+    useEffect(() => { onHasTextChangeRef.current = onHasTextChange; }, [onHasTextChange]);
 
     React.useImperativeHandle(ref, () => ({
-      getText: () => value,
+      getText: () => valueRef.current,
       clear: () => {
-        setValue('');
-        // Parent'taki hasText'i sıfırla — stale closure'dan kurtarmak için hemen çağır
+        valueRef.current = '';
+        inputRef.current?.clear();
+        setCharCount(0);
         if (prevHasText.current) {
           prevHasText.current = false;
-          onHasTextChange(false);
+          onHasTextChangeRef.current(false);
         }
-        onCharCountChange(0);
       },
       focus: () => inputRef.current?.focus(),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }), [value, onHasTextChange, onCharCountChange]);
-
-    const [atMax, setAtMax] = useState(false);
+      syncValue: (v: string) => { valueRef.current = v; },
+    }), []);
 
     const inputStyle = useMemo(() => ({
       color,
@@ -411,6 +416,34 @@ const GrowingTextInput = React.forwardRef<GrowingTextInputHandle, GrowingTextInp
       paddingBottom: spacing[2],
     }), [color]);
 
+    // Stable — dep yok, ref'ler güncel tutuluyor
+    const handleChangeText = useCallback((t: string) => {
+      valueRef.current = t;
+      setCharCount(t.length);
+      const nowHas = t.trim().length > 0;
+      if (nowHas !== prevHasText.current) {
+        prevHasText.current = nowHas;
+        onHasTextChangeRef.current(nowHas);
+      }
+    }, []);
+
+    const handleContentSizeChange = useCallback((e: import('react-native').NativeSyntheticEvent<import('react-native').TextInputContentSizeChangeEventData>) => {
+      const rawH = e.nativeEvent.contentSize.height;
+      const nowAtMax = rawH >= MAX_INPUT_HEIGHT;
+      if (nowAtMax !== prevExpandVisible.current) {
+        prevExpandVisible.current = nowAtMax;
+        setAtMax(nowAtMax);
+        onExpandVisibleChange(nowAtMax);
+      }
+    }, [onExpandVisibleChange]);
+
+    const showCounter = charCount >= MAX_CHARS - CHAR_WARN_THRESHOLD;
+    const counterTextColor = charCount >= MAX_CHARS - 50
+      ? '#e53e3e'
+      : charCount >= MAX_CHARS - 100
+      ? '#dd6b20'
+      : counterColor;
+
     return (
       <View>
         <View style={{ maxHeight: MAX_INPUT_HEIGHT }}>
@@ -420,38 +453,27 @@ const GrowingTextInput = React.forwardRef<GrowingTextInputHandle, GrowingTextInp
             placeholder={placeholder}
             placeholderTextColor={placeholderTextColor}
             multiline
-            value={value}
+            defaultValue=""
             maxLength={MAX_CHARS}
-            onChangeText={(t) => {
-              setValue(t);
-              onCharCountChange(t.length);
-              const nowHas = t.trim().length > 0;
-              if (nowHas !== prevHasText.current) {
-                prevHasText.current = nowHas;
-                onHasTextChange(nowHas);
-              }
-            }}
+            onChangeText={handleChangeText}
             onFocus={onFocus}
             onBlur={onBlur}
-            onContentSizeChange={(e) => {
-              const rawH = e.nativeEvent.contentSize.height;
-              const nowAtMax = rawH >= MAX_INPUT_HEIGHT;
-              if (nowAtMax !== prevExpandVisible.current) {
-                prevExpandVisible.current = nowAtMax;
-                setAtMax(nowAtMax);
-                onExpandVisibleChange(nowAtMax);
-              }
-            }}
+            onContentSizeChange={handleContentSizeChange}
             returnKeyType="default"
             editable={editable}
             textAlignVertical="top"
             scrollEnabled={atMax}
           />
         </View>
+        {showCounter && (
+          <Animated.Text style={[growingStyles.counter, { color: counterTextColor, alignSelf: 'flex-end' }]}>
+            {charCount}/{MAX_CHARS}
+          </Animated.Text>
+        )}
       </View>
     );
   },
-);
+));
 
 const growingStyles = StyleSheet.create({
   counter: {
@@ -492,7 +514,6 @@ const ChatInputInner: React.FC<Props> = ({
   const growingInputRef = useRef<GrowingTextInputHandle>(null);
   const [hasText, setHasText] = useState(false);
   const [expandVisible, setExpandVisible] = useState(false);
-  const [charCount, setCharCount] = useState(0);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [pickerVisible, setPickerVisible] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -622,7 +643,6 @@ const ChatInputInner: React.FC<Props> = ({
     if (attachments.some((a) => a.status === 'uploading')) return;
     haptics.medium();
     onSend(trimmed, attachments);
-    // clear() içinde onHasTextChange(false) ve onCharCountChange(0) çağrılır
     growingInputRef.current?.clear();
     setExpandVisible(false);
     setAttachments([]);
@@ -739,9 +759,9 @@ const ChatInputInner: React.FC<Props> = ({
               placeholderTextColor={colors.textSecondary}
               editable={!disabled && !isStreaming}
               color={colors.text}
+              counterColor={colors.textSecondary + '99'}
               onHasTextChange={setHasText}
               onExpandVisibleChange={setExpandVisible}
-              onCharCountChange={setCharCount}
               onFocus={handleFocus}
               onBlur={handleBlur}
             />
@@ -790,22 +810,6 @@ const ChatInputInner: React.FC<Props> = ({
           </View>
 
           <View style={styles.toolbarRight}>
-            {hasText && (
-              <Animated.Text style={[
-                growingStyles.counter,
-                {
-                  color: charCount >= MAX_CHARS - 50
-                    ? '#e53e3e'
-                    : charCount >= MAX_CHARS - 100
-                    ? '#dd6b20'
-                    : charCount >= MAX_CHARS - CHAR_WARN_THRESHOLD
-                    ? colors.textSecondary
-                    : colors.textSecondary + '66',
-                },
-              ]}>
-                {charCount}/{MAX_CHARS}
-              </Animated.Text>
-            )}
             <SendButton
               canSend={canSend}
               isStreaming={isStreaming}
@@ -828,6 +832,8 @@ const ChatInputInner: React.FC<Props> = ({
         visible={expanded}
         defaultValue={growingInputRef.current?.getText() ?? ''}
         onChangeText={(t) => {
+          // Modal'daki text değişince ref'i senkronize et
+          growingInputRef.current?.syncValue(t);
           const nowHas = t.trim().length > 0;
           setHasText((prev) => prev === nowHas ? prev : nowHas);
         }}
