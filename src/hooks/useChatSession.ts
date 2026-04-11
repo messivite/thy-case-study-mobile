@@ -4,6 +4,7 @@ import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { setSessionId, clearMessages } from '@/store/slices/chatSlice';
 import {
   useCreateChatMutation,
+  useInfiniteChatsQuery,
   useInfiniteMessagesQuery,
   useSendMessageMutation,
   CHAT_QUERY_KEYS,
@@ -19,13 +20,10 @@ import { toast } from '@/lib/toast';
 // Helpers
 // ---------------------------------------------------------------------------
 
-const toLocalMessage = (
-  msg: ChatMessage & { createdAt?: string; id?: string },
-  index: number,
-): Message => ({
-  id: msg.id ?? `msg_${index}_${msg.role}`,
-  role: msg.role as 'user' | 'assistant',
-  content: msg.content,
+const toLocalMessage = (msg: ChatMessage, index: number): Message => ({
+  id: msg.id ?? `msg_${msg.createdAt ?? index}_${msg.role}`,
+  role: (msg.role === 'user' || msg.role === 'assistant') ? msg.role : 'assistant',
+  content: msg.content ?? '',
   timestamp: msg.createdAt ? new Date(msg.createdAt).getTime() : Date.now() - index * 1000,
 });
 
@@ -40,6 +38,7 @@ export const useChatSession = () => {
   const selectedAIModel = useAppSelector((s) => s.chat.selectedAIModel);
   const sessionId = useAppSelector((s) => s.chat.sessionId);
   const streamingEnabled = useAppSelector((s) => s.settings.streamingEnabled);
+  const isGuest = useAppSelector((s) => s.auth.status === 'guest');
 
   // Okunabilirlik için alias — yazma hep dispatch(setSessionId(...)) ile
   const chatId = sessionId;
@@ -64,13 +63,12 @@ export const useChatSession = () => {
   // Messages query
   const messagesQuery = useInfiniteMessagesQuery(chatId ?? '');
 
-  // Session değişince eski session'ı temizle ve in-flight stream'i kes
+  // Session değişince in-flight stream'i kes (mesajları silme — diğer sessionlar korunsun)
   useEffect(() => {
     const prev = prevSessionIdRef.current;
-    if (prev && prev !== chatId) {
+    if (prev !== chatId) {
       abortCtrlRef.current?.abort();
       abortCtrlRef.current = null;
-      realmService.clearSessionMessages(prev);
     }
     prevSessionIdRef.current = chatId;
   }, [chatId]);
@@ -86,10 +84,12 @@ export const useChatSession = () => {
       );
 
       const optimisticMsg: ChatMessage = {
+        id: `optimistic_user_${Date.now()}`,
         role: 'user',
         content,
         provider: selectedAIModel.provider,
         model: selectedAIModel.model,
+        createdAt: new Date().toISOString(),
       };
 
       queryClient.setQueryData<InfiniteData<PaginatedMessagesResponse>>(
@@ -101,6 +101,7 @@ export const useChatSession = () => {
             pageParams: [undefined],
           };
           const newPages = [...base.pages];
+          // messages are newest→oldest (direction: 'older'), prepend = newest position
           newPages[0] = {
             ...newPages[0],
             messages: [optimisticMsg, ...newPages[0].messages],
@@ -134,12 +135,17 @@ export const useChatSession = () => {
   // ---------------------------------------------------------------------------
 
   const persistedMessages: Message[] = useMemo(() => {
+    console.log('[useChatSession] chatId:', chatId);
+    console.log('[useChatSession] messagesQuery.data:', JSON.stringify(messagesQuery.data?.pages?.map(p => p.messages?.length)));
+    console.log('[useChatSession] isLoading:', messagesQuery.isLoading, 'isFetching:', messagesQuery.isFetching);
     if (!messagesQuery.data) return [];
-    return messagesQuery.data.pages
-      .flatMap((page) => page.messages)
-      .map(toLocalMessage)
-      .reverse();
-  }, [messagesQuery.data]);
+    const flat = messagesQuery.data.pages
+      .flatMap((page) => page?.messages ?? [])
+      .filter((msg): msg is ChatMessage => !!msg && typeof msg.role === 'string')
+      .map(toLocalMessage);
+    console.log('[useChatSession] persistedMessages count:', flat.length);
+    return flat;
+  }, [messagesQuery.data, chatId]);
 
   // Stream mesajını geçici olarak listeye ekle
   const messages: Message[] = useMemo(() => {
@@ -151,7 +157,8 @@ export const useChatSession = () => {
       content: streamingContent,
       timestamp: Date.now(),
     };
-    return [...persistedMessages, streamMsg];
+    // messages are newest→oldest, stream msg is newest so prepend
+    return [streamMsg, ...persistedMessages];
   }, [persistedMessages, isStreamingActive, streamingContent, streamingMessageId]);
 
   // ---------------------------------------------------------------------------
@@ -215,16 +222,48 @@ export const useChatSession = () => {
                 setStreamingMessageId(null);
                 abortCtrlRef.current = null;
 
+                const now = Date.now();
                 const assistantMsg: ChatMessage = {
                   role: 'assistant',
                   content: assistantContent,
                   provider,
                   model,
                 };
-                realmService.saveMessages(activeChatId!, [userMsg, assistantMsg]);
-                queryClient.invalidateQueries({
-                  queryKey: CHAT_QUERY_KEYS.messages(activeChatId!),
-                });
+
+                const userMsgWithMeta: ChatMessage = {
+                  ...userMsg,
+                  id: `user_${now - 1}`,
+                  createdAt: new Date(now - 1).toISOString(),
+                };
+                const assistantMsgWithMeta: ChatMessage = {
+                  ...assistantMsg,
+                  id: `assistant_${now}`,
+                  createdAt: new Date(now).toISOString(),
+                };
+
+                // Cache'e direkt ekle — invalidateQueries yerine. Re-fetch duplicate'i önler.
+                // Optimistic user mesajı zaten cache[0] başında, assistant'ı da ekle.
+                queryClient.setQueryData<InfiniteData<PaginatedMessagesResponse>>(
+                  CHAT_QUERY_KEYS.messages(activeChatId!),
+                  (old) => {
+                    const base: InfiniteData<PaginatedMessagesResponse> = old ?? {
+                      pages: [{ messages: [], nextCursor: null, hasMore: false }],
+                      pageParams: [undefined],
+                    };
+                    const newPages = [...base.pages];
+                    // assistant mesajı en yeni → pages[0] başına ekle
+                    newPages[0] = {
+                      ...newPages[0],
+                      messages: [assistantMsgWithMeta, ...newPages[0].messages],
+                    };
+                    return { ...base, pages: newPages };
+                  },
+                );
+
+                // Realm'e kaydet
+                realmService.saveMessages(activeChatId!, [userMsgWithMeta, assistantMsgWithMeta]);
+
+                // Chat listesi güncelle (title refresh için)
                 queryClient.invalidateQueries({
                   queryKey: CHAT_QUERY_KEYS.chatsList,
                 });
@@ -324,9 +363,13 @@ export const useChatSession = () => {
       setIsStreamingActive(false);
       setStreamingContent('');
       streamingContentRef.current = '';
+      // Eski (önceki) session'ın stale cache'ini temizle, yeni session'ın cache'ine dokunma
+      if (sessionId) {
+        queryClient.removeQueries({ queryKey: CHAT_QUERY_KEYS.messages(sessionId) });
+      }
       dispatch(setSessionId(id));
     },
-    [sessionId, dispatch],
+    [sessionId, dispatch, queryClient],
   );
 
   const likeMessage = useCallback((_id: string, _liked: boolean | null) => {
@@ -335,11 +378,23 @@ export const useChatSession = () => {
 
   const isTyping = streamingEnabled ? isStreamingActive : sendMessageMutation.isPending;
 
+  // Seçili session'ın başlığı — chatsList query'sine subscribe eder, reaktif
+  const { data: chatsData } = useInfiniteChatsQuery(isGuest);
+  const sessionTitle = useMemo(() => {
+    if (!chatId || !chatsData) return null;
+    for (const page of chatsData.pages) {
+      const found = page.items?.find((s) => s.id === chatId);
+      if (found) return found.title;
+    }
+    return null;
+  }, [chatId, chatsData]);
+
   return {
     messages,
     selectedAIModel,
     isTyping,
     chatId,
+    sessionTitle,
     sendMessage,
     startNewChat,
     loadSession,
@@ -350,5 +405,6 @@ export const useChatSession = () => {
     hasNextPage: messagesQuery.hasNextPage ?? false,
     isFetchingNextPage: messagesQuery.isFetchingNextPage,
     isLoading: messagesQuery.isLoading,
+    isFetching: messagesQuery.isFetching,
   };
 };

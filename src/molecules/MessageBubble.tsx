@@ -5,6 +5,7 @@ import {
   TouchableOpacity,
   Image,
 } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 import * as Clipboard from 'expo-clipboard';
 import { MotiView } from '@/lib/motiView';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,10 +25,25 @@ type Props = {
   onLike?: (id: string, liked: boolean | null) => void;
   onRegenerate?: (id: string) => void;
   index: number;
-  /** Asistan balonu: sesli okuma */
   isSpeaking?: boolean;
   onSpeakToggle?: () => void;
 };
+
+// Kullanıcı tail — bubble'ın sağ alt köşesine tam oturur
+// Sol kenar düz (bubble'a yapışık), sağ alt sivri uç
+const UserTail = ({ color }: { color: string }) => (
+  <Svg width={10} height={20} style={{ marginLeft: -1 }}>
+    <Path d="M0 0 L0 20 L10 20 Q2 18 0 0 Z" fill={color} />
+  </Svg>
+);
+
+// AI tail — bubble'ın sol alt köşesine tam oturur (user'ın ayna görüntüsü)
+const AiTail = ({ color, borderColor }: { color: string; borderColor: string }) => (
+  <Svg width={10} height={20} style={{ marginRight: -1 }}>
+    <Path d="M10 0 L10 20 L0 20 Q8 18 10 0 Z" fill={borderColor} />
+    <Path d="M10 0 L10 20 L1 20 Q8 17 10 0 Z" fill={color} />
+  </Svg>
+);
 
 export const MessageBubble: React.FC<Props> = ({
   message,
@@ -79,113 +95,116 @@ export const MessageBubble: React.FC<Props> = ({
       transition={{ type: 'timing', duration: 250, delay: Math.min(index * 30, 150) }}
       style={[styles.row, isUser ? styles.rowRight : styles.rowLeft]}
     >
-      <View
-        style={[
-          styles.bubble,
-          isUser
-            ? [styles.userBubble, { backgroundColor: colors.primary }]
-            : [styles.aiBubble, { backgroundColor: colors.surface, borderColor: colors.border }],
-        ]}
-      >
-        {/* AI model badge */}
-        {!isUser && message.modelId && (
-          <ModelBadge modelId={message.modelId} compact style={styles.badge} />
-        )}
+      {/* Bubble + tail wrapper — alignItems flex-end ile dibe hizalı */}
+      <View style={[styles.bubbleRow, isUser ? styles.bubbleRowUser : styles.bubbleRowAi]}>
 
-        {/* Image attachments grid */}
-        {imageAttachments.length > 0 && (
-          <View style={styles.imageGrid}>
-            {imageAttachments.map((att) => (
-              <Image
-                key={att.id}
-                source={{ uri: att.remoteUrl ?? att.uri }}
-                style={[
-                  styles.imageThumb,
-                  imageAttachments.length === 1 && styles.imageThumbFull,
-                ]}
-                resizeMode="cover"
-              />
-            ))}
-          </View>
-        )}
 
-        {/* File attachments */}
-        {fileAttachments.length > 0 && (
-          <View style={styles.fileList}>
-            {fileAttachments.map((att) => (
-              <AttachmentPreview key={att.id} attachment={att} />
-            ))}
-          </View>
-        )}
+        <View
+          style={[
+            styles.bubble,
+            isUser
+              ? [styles.userBubble, { backgroundColor: colors.primary }]
+              : [styles.aiBubble, { backgroundColor: colors.surface, borderColor: colors.border }],
+          ]}
+        >
+          {/* AI model badge */}
+          {!isUser && message.modelId && (
+            <ModelBadge modelId={message.modelId} compact style={styles.badge} />
+          )}
 
-        {/* Text content */}
-        {message.content.length > 0 && (
-          <Text
-            variant="body"
-            color={isUser ? palette.white : colors.text}
-            style={[styles.content, hasAttachments && styles.contentWithAttach]}
-          >
-            {message.content}
-          </Text>
-        )}
-
-        {/* Footer: time + actions */}
-        <View style={styles.footer}>
-          <Text
-            variant="micro"
-            color={isUser ? 'rgba(255,255,255,0.65)' : colors.textSecondary}
-          >
-            {formattedTime}
-          </Text>
-
-          {!isUser && (
-            <View style={styles.actions}>
-              {onSpeakToggle && (
-                <TouchableOpacity
-                  onPress={handleSpeak}
-                  style={styles.actionBtn}
-                  accessibilityRole="button"
-                  accessibilityLabel={
-                    isSpeaking ? t('assistant.stopSpeaking') : t('assistant.speak')
-                  }
-                >
-                  <Ionicons
-                    name={isSpeaking ? 'stop-circle-outline' : 'volume-high-outline'}
-                    size={14}
-                    color={isSpeaking ? colors.primary : colors.textSecondary}
-                  />
-                </TouchableOpacity>
-              )}
-              {message.content.length > 0 && (
-                <TouchableOpacity onPress={handleCopy} style={styles.actionBtn}>
-                  <Ionicons name="copy-outline" size={14} color={colors.textSecondary} />
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity onPress={() => handleLike(true)} style={styles.actionBtn}>
-                <Ionicons
-                  name={message.liked === true ? 'thumbs-up' : 'thumbs-up-outline'}
-                  size={14}
-                  color={message.liked === true ? colors.primary : colors.textSecondary}
+          {/* Image attachments */}
+          {imageAttachments.length > 0 && (
+            <View style={styles.imageGrid}>
+              {imageAttachments.map((att) => (
+                <Image
+                  key={att.id}
+                  source={{ uri: att.remoteUrl ?? att.uri }}
+                  style={[
+                    styles.imageThumb,
+                    imageAttachments.length === 1 && styles.imageThumbFull,
+                  ]}
+                  resizeMode="cover"
                 />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => handleLike(false)} style={styles.actionBtn}>
-                <Ionicons
-                  name={message.liked === false ? 'thumbs-down' : 'thumbs-down-outline'}
-                  size={14}
-                  color={message.liked === false ? palette.error : colors.textSecondary}
-                />
-              </TouchableOpacity>
-              {onRegenerate && (
-                <TouchableOpacity
-                  onPress={() => onRegenerate(message.id)}
-                  style={styles.actionBtn}
-                >
-                  <Ionicons name="refresh-outline" size={14} color={colors.textSecondary} />
-                </TouchableOpacity>
-              )}
+              ))}
             </View>
           )}
+
+          {/* File attachments */}
+          {fileAttachments.length > 0 && (
+            <View style={styles.fileList}>
+              {fileAttachments.map((att) => (
+                <AttachmentPreview key={att.id} attachment={att} />
+              ))}
+            </View>
+          )}
+
+          {/* Text content */}
+          {message.content.length > 0 && (
+            <Text
+              variant="body"
+              color={isUser ? palette.white : colors.text}
+              style={[styles.content, hasAttachments && styles.contentWithAttach]}
+            >
+              {message.content}
+            </Text>
+          )}
+
+          {/* Footer: time + actions */}
+          <View style={styles.footer}>
+            <Text
+              variant="micro"
+              color={isUser ? 'rgba(255,255,255,0.65)' : colors.textSecondary}
+            >
+              {formattedTime}
+            </Text>
+
+            {!isUser && (
+              <View style={styles.actions}>
+                {onSpeakToggle && (
+                  <TouchableOpacity
+                    onPress={handleSpeak}
+                    style={styles.actionBtn}
+                    accessibilityRole="button"
+                    accessibilityLabel={isSpeaking ? t('assistant.stopSpeaking') : t('assistant.speak')}
+                  >
+                    <Ionicons
+                      name={isSpeaking ? 'stop-circle-outline' : 'volume-high-outline'}
+                      size={14}
+                      color={isSpeaking ? colors.primary : colors.textSecondary}
+                    />
+                  </TouchableOpacity>
+                )}
+                {message.content.length > 0 && (
+                  <TouchableOpacity onPress={handleCopy} style={styles.actionBtn}>
+                    <Ionicons name="copy-outline" size={14} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity onPress={() => handleLike(true)} style={styles.actionBtn}>
+                  <Ionicons
+                    name={message.liked === true ? 'thumbs-up' : 'thumbs-up-outline'}
+                    size={14}
+                    color={message.liked === true ? colors.primary : colors.textSecondary}
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => handleLike(false)} style={styles.actionBtn}>
+                  <Ionicons
+                    name={message.liked === false ? 'thumbs-down' : 'thumbs-down-outline'}
+                    size={14}
+                    color={message.liked === false ? palette.error : colors.textSecondary}
+                  />
+                </TouchableOpacity>
+                {onRegenerate && (
+                  <TouchableOpacity onPress={() => onRegenerate(message.id)} style={styles.actionBtn}>
+                    <Ionicons name="refresh-outline" size={14} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+          </View>
         </View>
+
+        {/* User tail — bubble sağında */}
+        {isUser && <UserTail color={colors.primary} />}
       </View>
     </MotiView>
   );
@@ -194,30 +213,43 @@ export const MessageBubble: React.FC<Props> = ({
 const styles = StyleSheet.create({
   row: {
     marginVertical: spacing[1],
-    marginHorizontal: spacing[4],
+    flexDirection: 'row',
   },
   rowLeft: {
-    alignItems: 'flex-start',
+    justifyContent: 'flex-start',
+    marginHorizontal: spacing[4],
   },
   rowRight: {
+    justifyContent: 'flex-end',
+    marginHorizontal: spacing[2],
+  },
+  // Bubble + tail yan yana, dibe hizalı
+  bubbleRow: {
+    flexDirection: 'row',
     alignItems: 'flex-end',
+    maxWidth: '85%',
+  },
+  bubbleRowUser: {
+    flexDirection: 'row',
+  },
+  bubbleRowAi: {
+    flexDirection: 'row',
   },
   bubble: {
-    maxWidth: '82%',
-    borderRadius: radius.lg,
     padding: spacing[3],
   },
   userBubble: {
-    borderBottomRightRadius: radius.sm,
+    borderRadius: radius.lg,
+    borderBottomRightRadius: 0,
   },
   aiBubble: {
     borderWidth: 1,
-    borderBottomLeftRadius: radius.sm,
+    borderRadius: radius.lg,
+    borderBottomLeftRadius: 4,
   },
   badge: {
     marginBottom: spacing[2],
   },
-  // Image grid
   imageGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',

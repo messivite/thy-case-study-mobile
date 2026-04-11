@@ -205,21 +205,28 @@ export const realmService = {
   getMessages(sessionId: string): { messages: ChatMessage[]; syncedAt: number } {
     try {
       const realm = getRealmSync();
-      if (!realm) return { messages: [], syncedAt: 0 };
+      if (!realm) {
+        console.log('[Realm] getMessages — realm not ready, sessionId:', sessionId);
+        return { messages: [], syncedAt: 0 };
+      }
 
+      // newest→oldest (descending createdAt) — inverted FlashList ile uyumlu
       const msgs = realm
         .objects<RealmMessage>('RealmMessage')
         .filtered('sessionId == $0', sessionId)
-        .sorted('createdAt', false);
+        .sorted('createdAt', true);
 
+      console.log('[Realm] getMessages sessionId:', sessionId, 'count:', msgs.length);
       if (msgs.length === 0) return { messages: [], syncedAt: 0 };
 
       const arr = Array.from(msgs);
       const messages: ChatMessage[] = arr.map((m) => ({
+        id: m._id,
         role: m.role as 'user' | 'assistant',
         content: m.content,
-        provider: '',
-        model: '',
+        provider: '' as string,
+        model: '' as string,
+        createdAt: m.createdAt,
       }));
 
       const syncedAt = Math.max(...arr.map((m) => m.syncedAt));
@@ -241,14 +248,17 @@ export const realmService = {
       realm.write(() => {
         for (let i = 0; i < messages.length; i++) {
           const msg = messages[i];
+          // Mesajın kendi id'si varsa kullan (API'den gelen), yoksa zaman+index bazlı üret
+          const msgId = msg.id ?? `${sessionId}_${now + i}_${msg.role}`;
+          const msgCreatedAt = msg.createdAt ?? new Date(now + i).toISOString();
           realm.create<RealmMessage>(
             'RealmMessage',
             {
-              _id: `${sessionId}_${i}_${msg.role}`,
+              _id: msgId,
               sessionId,
               role: msg.role,
               content: msg.content,
-              createdAt: new Date(now + i).toISOString(),
+              createdAt: msgCreatedAt,
               syncedAt: now,
             },
             Realm.UpdateMode.Modified,

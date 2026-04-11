@@ -57,7 +57,6 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { FlashList } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useQueryClient } from '@tanstack/react-query';
 
 import { Text } from '@/atoms/Text';
 import { Button } from '@/atoms/Button';
@@ -70,7 +69,7 @@ import { useHaptics } from '@/hooks/useHaptics';
 import { useI18n } from '@/hooks/useI18n';
 import { useAppDispatch } from '@/store/hooks';
 import { setSessionId } from '@/store/slices/chatSlice';
-import { CHAT_QUERY_KEYS, useDeleteChatMutation } from '@/hooks/api/useChats';
+import { useDeleteChatMutation } from '@/hooks/api/useChats';
 import { useChatHistory } from '@/hooks/useChatHistory';
 import { realmService } from '@/services/realm';
 import { ChatListItem, ChatSearchResultItem, PaginatedChatsResponse } from '@/types/chat.api.types';
@@ -79,7 +78,6 @@ import { palette } from '@/constants/colors';
 import { radius, shadow, spacing } from '@/constants/spacing';
 import { scale, verticalScale } from '@/lib/responsive';
 import { fontFamily } from '@/constants/typography';
-import type { InfiniteData } from '@tanstack/react-query';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -624,7 +622,6 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
   const { t } = useI18n();
   const haptics = useHaptics();
   const dispatch = useAppDispatch();
-  const queryClient = useQueryClient();
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
 

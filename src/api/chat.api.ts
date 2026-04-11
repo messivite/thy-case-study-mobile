@@ -237,9 +237,15 @@ export const getChatMessages = async (
   const qp: Record<string, string | number> = { limit, direction };
   if (cursor) qp.cursor = cursor;
 
-  const { data } = await privateApi.get<PaginatedMessagesResponse>(
+  const { data } = await privateApi.get<any>(
     `/api/chats/${chatId}/messages`,
     { params: qp },
   );
-  return data;
+  // Backend { items, hasNext, totalCount } → normalize to { messages, nextCursor, hasMore }
+  const normalized: PaginatedMessagesResponse = {
+    messages: data.messages ?? data.items ?? [],
+    nextCursor: data.nextCursor ?? data.cursor ?? null,
+    hasMore: data.hasMore ?? data.hasNext ?? false,
+  };
+  return normalized;
 };

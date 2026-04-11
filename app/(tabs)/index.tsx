@@ -26,6 +26,10 @@ export default function HomeScreen() {
     messages,
     selectedAIModel,
     isTyping,
+    isLoading,
+    isFetching,
+    chatId,
+    sessionTitle,
     sendMessage,
     onStop,
     likeMessage,
@@ -34,6 +38,10 @@ export default function HomeScreen() {
     hasNextPage,
     isFetchingNextPage,
   } = useChatSession();
+
+  // Session seçilmiş ama mesajlar henüz yüklenmemiş → spinner göster
+  const isSessionLoading = !!chatId && (isLoading || (isFetching && messages.length === 0));
+
 
   const [modelPickerVisible, setModelPickerVisible] = useState(false);
   const [drawerVisible, setDrawerVisible] = useState(false);
@@ -44,11 +52,12 @@ export default function HomeScreen() {
   const openDrawerGesture = useMemo(
     () =>
       Gesture.Pan()
-        .activeOffsetX([15, 999])
-        .failOffsetY([-12, 12])
+        .activeOffsetX([20, 999])
+        .failOffsetY([-8, 8])
+        .simultaneousWithExternalGesture()
         .onEnd((e) => {
           'worklet';
-          if (e.translationX > 40 && e.velocityX > 0) {
+          if (e.translationX > 50 && e.velocityX > 100) {
             runOnJS(openDrawer)();
           }
         }),
@@ -110,7 +119,7 @@ export default function HomeScreen() {
 
   const header = (
     <AppHeader
-      title={t('assistant.title')}
+      title={sessionTitle ?? t('assistant.title')}
       leftContent={
         <TouchableOpacity
           style={styles.menuBtn}
@@ -161,6 +170,7 @@ export default function HomeScreen() {
         <MessageList
           messages={messages}
           isTyping={isTyping}
+          isSessionLoading={!!chatId && isSessionLoading}
           onLike={likeMessage}
           onLoadMore={handleLoadMore}
           hasMore={hasNextPage}
@@ -168,7 +178,7 @@ export default function HomeScreen() {
           welcomeGreeting={t('assistant.welcomeGreeting', { name: displayName })}
           welcomeGreetingReady={!isGuest && profileReady}
           welcomeQuestion={t('assistant.welcomeQuestion')}
-          quickActions={quickActions}
+          quickActions={chatId ? [] : quickActions}
           onQuickActionPress={handleQuickActionPress}
         />
 

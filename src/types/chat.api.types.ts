@@ -53,7 +53,10 @@ export type PaginatedChatsResponse = {
 // ---------------------------------------------------------------------------
 
 /** Bir chat'e ait tek mesaj */
-export type ChatMessage = AIMessage & AIProviderInfo;
+export type ChatMessage = AIMessage & AIProviderInfo & {
+  id?: string;
+  createdAt?: string;
+};
 
 /** Chat detay response modeli */
 export type GetChatResponse = AIProviderInfo & {

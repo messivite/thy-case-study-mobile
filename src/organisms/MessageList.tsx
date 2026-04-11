@@ -1,7 +1,6 @@
 import React, { useRef, useCallback, useState, useEffect } from 'react';
-import { View, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, ActivityIndicator, FlatList } from 'react-native';
 import * as Speech from 'expo-speech';
-import { FlashList, FlashListRef } from '@shopify/flash-list';
 import { Message } from '@/types/chat.types';
 import { MessageBubble } from '@/molecules/MessageBubble';
 import { TypingIndicator } from '@/molecules/TypingIndicator';
@@ -16,6 +15,7 @@ import { toast } from '@/lib/toast';
 type Props = {
   messages: Message[];
   isTyping: boolean;
+  isSessionLoading?: boolean;
   onLike?: (id: string, liked: boolean | null) => void;
   onRegenerate?: (id: string) => void;
   onLoadMore?: () => void;
@@ -31,6 +31,7 @@ type Props = {
 export const MessageList: React.FC<Props> = ({
   messages,
   isTyping,
+  isSessionLoading = false,
   onLike,
   onRegenerate,
   onLoadMore,
@@ -44,13 +45,11 @@ export const MessageList: React.FC<Props> = ({
 }) => {
   const { colors } = useTheme();
   const { t, currentLanguage } = useI18n();
-  const listRef = useRef<FlashListRef<Message>>(null);
+  const listRef = useRef<FlatList<Message>>(null);
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
 
   useEffect(() => {
-    return () => {
-      void Speech.stop();
-    };
+    return () => { void Speech.stop(); };
   }, []);
 
   const handleSpeakToggle = useCallback(
@@ -63,18 +62,13 @@ export const MessageList: React.FC<Props> = ({
       void Speech.stop();
       const plain = stripTextForSpeech(text);
       if (!plain.trim()) return;
-
       const locale = speechLocaleForAppLang(currentLanguage);
       setSpeakingMessageId(messageId);
       Speech.speak(plain, {
         language: locale,
         rate: 0.96,
-        onDone: () => {
-          setSpeakingMessageId((cur) => (cur === messageId ? null : cur));
-        },
-        onStopped: () => {
-          setSpeakingMessageId((cur) => (cur === messageId ? null : cur));
-        },
+        onDone: () => setSpeakingMessageId((cur) => (cur === messageId ? null : cur)),
+        onStopped: () => setSpeakingMessageId((cur) => (cur === messageId ? null : cur)),
         onError: () => {
           setSpeakingMessageId((cur) => (cur === messageId ? null : cur));
           toast.error(t('toast.speechError'));
@@ -83,6 +77,12 @@ export const MessageList: React.FC<Props> = ({
     },
     [speakingMessageId, currentLanguage, t],
   );
+
+  console.log('[MessageList] messages.length:', messages.length, 'isSessionLoading:', isSessionLoading, 'isTyping:', isTyping);
+
+  // inverted FlashList renders item[0] at the visual bottom.
+  // messages is newest→oldest (direction: 'older'), so item[0]=newest = visual bottom. No reverse needed.
+  const invertedMessages = messages;
 
   const renderItem = useCallback(
     ({ item, index }: { item: Message; index: number }) => (
@@ -103,28 +103,19 @@ export const MessageList: React.FC<Props> = ({
   );
 
   const handleEndReached = useCallback(() => {
-    if (hasMore && !isLoadingMore && onLoadMore) {
-      onLoadMore();
-    }
+    if (hasMore && !isLoadingMore && onLoadMore) onLoadMore();
   }, [hasMore, isLoadingMore, onLoadMore]);
 
-  const renderFooter = useCallback(() => {
-    if (isLoadingMore) {
-      return (
-        <View style={styles.loadingMore}>
-          <ActivityIndicator size="small" color={colors.primary} />
-          <Text variant="caption" color={colors.textSecondary} style={styles.loadingText}>
-            {t('assistant.loadingMore')}
-          </Text>
-        </View>
-      );
-    }
-    return null;
-  }, [isLoadingMore, colors, t]);
+  if (isSessionLoading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color={colors.textSecondary} />
+      </View>
+    );
+  }
 
   if (messages.length === 0 && !isTyping) {
     if (quickActions.length > 0 && welcomeGreeting && welcomeQuestion && onQuickActionPress) {
-      // "Merhaba Mustafa" → prefix="Merhaba", name="Mustafa"
       const spaceIdx = welcomeGreeting.indexOf(' ');
       const greetingPrefix = spaceIdx !== -1 ? welcomeGreeting.slice(0, spaceIdx) : welcomeGreeting;
       const greetingName = spaceIdx !== -1 ? welcomeGreeting.slice(spaceIdx + 1) : '';
@@ -140,10 +131,8 @@ export const MessageList: React.FC<Props> = ({
       );
     }
     return (
-      <View style={styles.emptyState}>
-        <Text variant="h4" align="center" color={colors.text}>
-          {t('assistant.emptyTitle')}
-        </Text>
+      <View style={styles.center}>
+        <Text variant="h4" align="center" color={colors.text}>{t('assistant.emptyTitle')}</Text>
         <Text variant="body" align="center" color={colors.textSecondary} style={styles.emptySubtitle}>
           {t('assistant.emptySubtitle')}
         </Text>
@@ -152,49 +141,50 @@ export const MessageList: React.FC<Props> = ({
   }
 
   return (
-    <View style={styles.container}>
-      <FlashList
+    <View style={styles.fill}>
+      <FlatList
         ref={listRef}
-        data={messages}
+        data={invertedMessages}
         renderItem={renderItem}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={{ paddingVertical: spacing[4] }}
-        ListFooterComponent={isTyping ? <TypingIndicator /> : null}
-        ListHeaderComponent={renderFooter}
+        inverted
+        contentContainerStyle={styles.listContent}
+        ListHeaderComponent={isTyping ? <TypingIndicator /> : null}
+        ListFooterComponent={
+          isLoadingMore ? (
+            <View style={styles.loadingMore}>
+              <ActivityIndicator size="small" color={colors.primary} />
+            </View>
+          ) : null
+        }
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.3}
         showsVerticalScrollIndicator={false}
-        maintainVisibleContentPosition={{
-          autoscrollToBottomThreshold: 100,
-          startRenderingFromBottom: true,
-        }}
+        keyboardDismissMode="interactive"
+        keyboardShouldPersistTaps="handled"
       />
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  fill: {
     flex: 1,
+  },
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  listContent: {
+    paddingVertical: spacing[3],
   },
   loadingMore: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
     paddingVertical: spacing[4],
-    gap: spacing[2],
-  },
-  loadingText: {
-    marginLeft: spacing[2],
-  },
-  emptyState: {
-    flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: spacing[8],
-    gap: spacing[2],
   },
   emptySubtitle: {
     marginTop: spacing[1],
+    paddingHorizontal: spacing[8],
   },
 });
