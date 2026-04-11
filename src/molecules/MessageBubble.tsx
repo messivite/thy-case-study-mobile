@@ -159,7 +159,7 @@ const MessageBubbleInner: React.FC<Props> = ({
             styles.bubble,
             isUser
               ? [styles.userBubble, { backgroundColor: colors.primary }]
-              : [styles.aiBubble, { backgroundColor: colors.surface, borderColor: colors.border }],
+              : [styles.aiBubble, { backgroundColor: colors.surface, borderColor: colors.border }, styles.aiBubbleFull],
           ]}
         >
           {/* Image attachments */}
@@ -302,7 +302,7 @@ const styles = StyleSheet.create({
     maxWidth: '75%',
   },
   bubbleRowAi: {
-    maxWidth: '85%',
+    flex: 1,
   },
   modelLabel: {
     marginBottom: spacing[1],
@@ -319,6 +319,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: radius.lg,
     borderBottomLeftRadius: 4,
+  },
+  aiBubbleFull: {
+    flex: 1,
   },
   imageGrid: {
     flexDirection: 'row',

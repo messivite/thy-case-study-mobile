@@ -52,9 +52,10 @@ import { scale as scaleSize } from '@/lib/responsive';
 // ---------------------------------------------------------------------------
 
 const LINE_HEIGHT = 22;
-const MIN_INPUT_HEIGHT = 22; // single line
-const MAX_LINES = 3;
+const MAX_LINES = 4;
 const MAX_INPUT_HEIGHT = LINE_HEIGHT * MAX_LINES;
+const MAX_CHARS = 600;
+const CHAR_WARN_THRESHOLD = 100; // bu kadar kala counter görünür
 const SIZE = scaleSize(36);
 const ICON_SIZE = SIZE - scaleSize(10);
 
@@ -254,8 +255,8 @@ const cardShadow = {
 
 interface ExpandedInputModalProps {
   visible: boolean;
-  value: string;
-  onChange: (t: string) => void;
+  defaultValue: string;
+  onChangeText: (t: string) => void;
   onClose: () => void;
   onSend: () => void;
   canSend: boolean;
@@ -265,11 +266,12 @@ interface ExpandedInputModalProps {
 }
 
 const ExpandedInputModal = memo<ExpandedInputModalProps>(({
-  visible, value, onChange, onClose, onSend, canSend, isStreaming, onStop, placeholder,
+  visible, defaultValue, onChangeText, onClose, onSend, canSend, isStreaming, onStop, placeholder,
 }) => {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const inputRef = useRef<TextInput>(null);
+  const [charCount, setCharCount] = useState(defaultValue.length);
 
   const handleShow = useCallback(() => {
     setTimeout(() => inputRef.current?.focus(), 100);
@@ -283,62 +285,154 @@ const ExpandedInputModal = memo<ExpandedInputModalProps>(({
   const sheetStyle = useMemo(() => ([
     styles.expandedSheet,
     {
-      backgroundColor: colors.surface,
+      backgroundColor: colors.background,
+      paddingTop: insets.top + spacing[2],
       paddingBottom: insets.bottom + spacing[3],
-      borderTopColor: colors.border,
     },
-  ]), [colors.surface, colors.border, insets.bottom]);
+  ]), [colors.background, insets.top, insets.bottom]);
 
   const inputStyle = useMemo(() => ([
     styles.expandedInput,
     { color: colors.text, fontFamily: fontFamily.regular, fontSize: fontSize.base },
   ]), [colors.text]);
 
-  const grabBarStyle = useMemo(() => ([
-    styles.grabBar, { backgroundColor: colors.border },
-  ]), [colors.border]);
-
   return (
     <Modal
       visible={visible}
-      transparent
+      transparent={false}
       animationType="slide"
       onShow={handleShow}
       onRequestClose={onClose}
     >
       <KeyboardAvoidingView
-        style={styles.expandedBg}
+        style={sheetStyle}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onClose} />
-        <View style={sheetStyle}>
-          <View style={grabBarStyle} />
+        {/* Header */}
+        <View style={styles.expandedHeader}>
+          <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="chevron-down" size={24} color={colors.textSecondary} />
+          </TouchableOpacity>
+          <SendButton
+            canSend={canSend}
+            isStreaming={isStreaming}
+            onSend={handleSendAndClose}
+            onStop={onStop}
+          />
+        </View>
+
+        <TextInput
+          ref={inputRef}
+          style={inputStyle}
+          placeholder={placeholder}
+          placeholderTextColor={colors.textSecondary}
+          multiline
+          defaultValue={defaultValue}
+          onChangeText={onChangeText}
+          autoCorrect={false}
+          textAlignVertical="top"
+        />
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+});
+
+// ---------------------------------------------------------------------------
+// GrowingTextInput — kendi value/height state'ini yönetir, parent'ı re-render etmez
+// ---------------------------------------------------------------------------
+
+interface GrowingTextInputHandle {
+  getText: () => string;
+  clear: () => void;
+  focus: () => void;
+}
+
+interface GrowingTextInputProps {
+  placeholder: string;
+  placeholderTextColor: string;
+  editable: boolean;
+  color: string;
+  onHasTextChange: (hasText: boolean) => void;
+  onExpandVisibleChange: (visible: boolean) => void;
+  onCharCountChange: (count: number) => void;
+  onFocus: () => void;
+  onBlur: () => void;
+}
+
+const GrowingTextInput = React.forwardRef<GrowingTextInputHandle, GrowingTextInputProps>(
+  ({ placeholder, placeholderTextColor, editable, color, onHasTextChange, onExpandVisibleChange, onCharCountChange, onFocus, onBlur }, ref) => {
+    const [value, setValue] = useState('');
+    const inputRef = useRef<TextInput>(null);
+    const prevHasText = useRef(false);
+    const prevExpandVisible = useRef(false);
+
+    React.useImperativeHandle(ref, () => ({
+      getText: () => value,
+      clear: () => {
+        setValue('');
+      },
+      focus: () => inputRef.current?.focus(),
+    }));
+
+    const [atMax, setAtMax] = useState(false);
+
+    const inputStyle = useMemo(() => ({
+      color,
+      fontFamily: fontFamily.regular,
+      fontSize: fontSize.base,
+      lineHeight: LINE_HEIGHT,
+      includeFontPadding: false,
+      paddingTop: 0,
+      paddingBottom: spacing[2],
+    }), [color]);
+
+    return (
+      <View>
+        <View style={{ maxHeight: MAX_INPUT_HEIGHT }}>
           <TextInput
             ref={inputRef}
             style={inputStyle}
             placeholder={placeholder}
-            placeholderTextColor={colors.textSecondary}
+            placeholderTextColor={placeholderTextColor}
             multiline
             value={value}
-            onChangeText={onChange}
-            autoCorrect={false}
+            maxLength={MAX_CHARS}
+            onChangeText={(t) => {
+              setValue(t);
+              onCharCountChange(t.length);
+              const nowHas = t.trim().length > 0;
+              if (nowHas !== prevHasText.current) {
+                prevHasText.current = nowHas;
+                onHasTextChange(nowHas);
+              }
+            }}
+            onFocus={onFocus}
+            onBlur={onBlur}
+            onContentSizeChange={(e) => {
+              const rawH = e.nativeEvent.contentSize.height;
+              const nowAtMax = rawH >= MAX_INPUT_HEIGHT;
+              if (nowAtMax !== prevExpandVisible.current) {
+                prevExpandVisible.current = nowAtMax;
+                setAtMax(nowAtMax);
+                onExpandVisibleChange(nowAtMax);
+              }
+            }}
+            returnKeyType="default"
+            editable={editable}
             textAlignVertical="top"
+            scrollEnabled={atMax}
           />
-          <View style={styles.expandedRow}>
-            <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
-            <SendButton
-              canSend={canSend}
-              isStreaming={isStreaming}
-              onSend={handleSendAndClose}
-              onStop={onStop}
-            />
-          </View>
         </View>
-      </KeyboardAvoidingView>
-    </Modal>
-  );
+      </View>
+    );
+  },
+);
+
+const growingStyles = StyleSheet.create({
+  counter: {
+    fontSize: 11,
+    fontFamily: fontFamily.regular,
+  },
 });
 
 // ---------------------------------------------------------------------------
@@ -370,15 +464,16 @@ const ChatInputInner: React.FC<Props> = ({
   const haptics = useHaptics();
   const insets = useSafeAreaInsets();
 
-  const [text, setText] = useState('');
-  const [lineCount, setLineCount] = useState(1);
+  const growingInputRef = useRef<GrowingTextInputHandle>(null);
+  const [hasText, setHasText] = useState(false);
+  const [expandVisible, setExpandVisible] = useState(false);
+  const [charCount, setCharCount] = useState(0);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [pickerVisible, setPickerVisible] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
   const focusProgress = useSharedValue(0);
   const expandOpacity = useSharedValue(0);
-  const expandVisible = lineCount > 2;
 
   useEffect(() => {
     expandOpacity.value = withTiming(expandVisible ? 1 : 0, { duration: 180 });
@@ -497,15 +592,17 @@ const ChatInputInner: React.FC<Props> = ({
   // --- Send / Stop ---
 
   const handleSend = useCallback(() => {
-    const trimmed = text.trim();
+    const trimmed = (growingInputRef.current?.getText() ?? '').trim();
     if ((!trimmed && attachments.length === 0) || disabled) return;
     if (attachments.some((a) => a.status === 'uploading')) return;
     haptics.medium();
     onSend(trimmed, attachments);
-    setText('');
+    growingInputRef.current?.clear();
+    setHasText(false);
+    setExpandVisible(false);
+    setCharCount(0);
     setAttachments([]);
-    setLineCount(1);
-  }, [text, attachments, disabled, onSend, haptics]);
+  }, [attachments, disabled, onSend, haptics]);
 
   const handleStop = useCallback(() => {
     haptics.medium();
@@ -516,9 +613,9 @@ const ChatInputInner: React.FC<Props> = ({
 
   const canSend = useMemo(() =>
     !disabled &&
-    (text.trim().length > 0 || attachments.length > 0) &&
+    (hasText || attachments.length > 0) &&
     !attachments.some((a) => a.status === 'uploading'),
-  [disabled, text, attachments]);
+  [disabled, hasText, attachments]);
 
   const model = useMemo(() =>
     AI_MODELS.find((m) => m.id === selectedModel),
@@ -538,16 +635,10 @@ const ChatInputInner: React.FC<Props> = ({
 
   const handleFocus = useCallback(() => {
     focusProgress.value = withTiming(1, { duration: 200 });
-  }, [focusProgress]);
+  }, []);
 
   const handleBlur = useCallback(() => {
     focusProgress.value = withTiming(0, { duration: 200 });
-  }, [focusProgress]);
-
-  const handleContentSizeChange = useCallback((e: any) => {
-    const lines = Math.max(1, Math.round(e.nativeEvent.contentSize.height / LINE_HEIGHT));
-    // Sadece gerçekten değişince setState — her keystroke'ta re-render olmasın
-    setLineCount((prev) => prev === lines ? prev : lines);
   }, []);
 
   const handleExpandPress = useCallback(() => {
@@ -575,11 +666,6 @@ const ChatInputInner: React.FC<Props> = ({
     { backgroundColor: colors.inputBg, paddingBottom: insets.bottom },
     cardShadow,
   ]), [colors.inputBg, insets.bottom]);
-
-  const inputStyle = useMemo(() => ([
-    styles.input,
-    { color: colors.text, fontFamily: fontFamily.regular, fontSize: fontSize.base },
-  ]), [colors.text]);
 
   return (
     <View style={wrapperStyle}>
@@ -620,32 +706,33 @@ const ChatInputInner: React.FC<Props> = ({
 
       {/* Main input card */}
       <Animated.View style={[cardStyle, containerBorderStyle]}>
-        {/* Expand — top right, animates in after 2 lines */}
-        <Animated.View style={[styles.expandBtn, expandAnimStyle]} pointerEvents={expandVisible ? 'auto' : 'none'}>
-          <TouchableOpacity
-            onPress={handleExpandPress}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Ionicons name="expand-outline" size={scaleSize(16)} color={colors.textSecondary} />
-          </TouchableOpacity>
-        </Animated.View>
+        {/* Input row: text büyür, expand ikonu sağda sabit */}
+        <View style={styles.inputRow}>
+          <View style={styles.inputWrap}>
+            <GrowingTextInput
+              ref={growingInputRef}
+              placeholder={placeholder}
+              placeholderTextColor={colors.textSecondary}
+              editable={!disabled && !isStreaming}
+              color={colors.text}
+              onHasTextChange={setHasText}
+              onExpandVisibleChange={setExpandVisible}
+              onCharCountChange={setCharCount}
+              onFocus={handleFocus}
+              onBlur={handleBlur}
+            />
+          </View>
 
-        {/* Text input */}
-        <TextInput
-          style={inputStyle}
-          placeholder={placeholder}
-          placeholderTextColor={colors.textSecondary}
-          multiline
-          value={text}
-          onChangeText={setText}
-          onFocus={handleFocus}
-          onBlur={handleBlur}
-          onContentSizeChange={handleContentSizeChange}
-          returnKeyType="default"
-          editable={!disabled && !isStreaming}
-          textAlignVertical="top"
-          scrollEnabled
-        />
+          {/* Expand — max satıra ulaşınca sağda görünür */}
+          <Animated.View style={[styles.expandSide, expandAnimStyle]} pointerEvents={expandVisible ? 'auto' : 'none'}>
+            <TouchableOpacity
+              onPress={handleExpandPress}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons name="expand-outline" size={scaleSize(18)} color={colors.textSecondary} />
+            </TouchableOpacity>
+          </Animated.View>
+        </View>
 
         {/* Bottom toolbar */}
         <View style={styles.toolbar}>
@@ -678,12 +765,30 @@ const ChatInputInner: React.FC<Props> = ({
             />
           </View>
 
-          <SendButton
-            canSend={canSend}
-            isStreaming={isStreaming}
-            onSend={handleSend}
-            onStop={handleStop}
-          />
+          <View style={styles.toolbarRight}>
+            {hasText && (
+              <Animated.Text style={[
+                growingStyles.counter,
+                {
+                  color: charCount >= MAX_CHARS - 50
+                    ? '#e53e3e'
+                    : charCount >= MAX_CHARS - 100
+                    ? '#dd6b20'
+                    : charCount >= MAX_CHARS - CHAR_WARN_THRESHOLD
+                    ? colors.textSecondary
+                    : colors.textSecondary + '66',
+                },
+              ]}>
+                {charCount}/{MAX_CHARS}
+              </Animated.Text>
+            )}
+            <SendButton
+              canSend={canSend}
+              isStreaming={isStreaming}
+              onSend={handleSend}
+              onStop={handleStop}
+            />
+          </View>
         </View>
       </Animated.View>
 
@@ -697,8 +802,11 @@ const ChatInputInner: React.FC<Props> = ({
 
       <ExpandedInputModal
         visible={expanded}
-        value={text}
-        onChange={setText}
+        defaultValue={growingInputRef.current?.getText() ?? ''}
+        onChangeText={(t) => {
+          const nowHas = t.trim().length > 0;
+          setHasText((prev) => prev === nowHas ? prev : nowHas);
+        }}
         onClose={handleExpandClose}
         onSend={handleSend}
         canSend={canSend}
@@ -742,15 +850,12 @@ const styles = StyleSheet.create({
   expandBtn: {
     position: 'absolute',
     top: spacing[3],
-    right: spacing[3],
+    right: spacing[5],
     zIndex: 1,
   },
   input: {
-    minHeight: MIN_INPUT_HEIGHT,
-    maxHeight: MAX_INPUT_HEIGHT,
     paddingTop: 0,
     paddingBottom: spacing[2],
-    paddingRight: spacing[3] + scaleSize(16) + spacing[2],
     lineHeight: LINE_HEIGHT,
     includeFontPadding: false,
   },
@@ -764,6 +869,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[2],
+  },
+  toolbarRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+  },
+  inputWrap: {
+    flex: 1,
+    marginRight: spacing[2],
+  },
+  expandSide: {
+    paddingBottom: spacing[2],
   },
   iconBtn: {
     width: scaleSize(34),
@@ -788,38 +909,20 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.bold,
   },
   // Expanded modal
-  expandedBg: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.4)',
-  },
   expandedSheet: {
-    borderTopLeftRadius: radius['2xl'],
-    borderTopRightRadius: radius['2xl'],
-    borderTopWidth: 1,
-    paddingHorizontal: spacing[4],
-    paddingTop: spacing[3],
-    minHeight: 260,
-    maxHeight: '75%',
-  },
-  grabBar: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginBottom: spacing[3],
-  },
-  expandedInput: {
     flex: 1,
-    minHeight: 160,
-    lineHeight: LINE_HEIGHT,
-    includeFontPadding: false,
-    textAlignVertical: 'top',
+    paddingHorizontal: spacing[4],
   },
-  expandedRow: {
+  expandedHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: spacing[2],
+    paddingBottom: spacing[3],
+  },
+  expandedInput: {
+    flex: 1,
+    lineHeight: LINE_HEIGHT,
+    includeFontPadding: false,
+    textAlignVertical: 'top',
   },
 });

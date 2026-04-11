@@ -74,6 +74,11 @@ export default function HomeScreen() {
 
   // Sol kenardan sağa swipe → drawer aç
   const openDrawer = useCallback(() => setDrawerVisible(true), []);
+  const closeDrawer = useCallback(() => setDrawerVisible(false), []);
+  const handleSelectChat = useCallback((chat: import('@/types/chat.api.types').ChatListItem) => {
+    loadSession(chat.id);
+    setDrawerVisible(false);
+  }, [loadSession]);
 
   const handleSend = useCallback(
     (text: string, attachments: import('@/types/chat.types').Attachment[]) => {
@@ -220,9 +225,9 @@ input={
 
       <ChatHistoryDrawer
         visible={drawerVisible}
-        onClose={() => setDrawerVisible(false)}
+        onClose={closeDrawer}
         onNewChat={startNewChat}
-        onSelectChat={(chat) => { loadSession(chat.id); setDrawerVisible(false); }}
+        onSelectChat={handleSelectChat}
       />
     </View>
   );

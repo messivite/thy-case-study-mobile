@@ -32,6 +32,7 @@ import React, {
 } from 'react';
 import {
   Alert,
+  InteractionManager,
   LayoutChangeEvent,
   Modal,
   Platform,
@@ -716,13 +717,14 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
     if (visible) {
       translateX.value = -DRAWER_WIDTH;
       overlayOpacity.value = 0;
-      requestAnimationFrame(() => {
+      const task = InteractionManager.runAfterInteractions(() => {
         setModalVisible(true);
         requestAnimationFrame(() => {
           translateX.value = withSpring(0, SPRING_CONFIG);
           overlayOpacity.value = withTiming(0.55, { duration: 260 });
         });
       });
+      return () => task.cancel();
     } else {
       overlayOpacity.value = withTiming(0, { duration: 200 });
       translateX.value = withTiming(-DRAWER_WIDTH, { duration: 220 }, (done) => {

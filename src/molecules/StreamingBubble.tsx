@@ -129,9 +129,10 @@ const styles = StyleSheet.create({
   bubbleRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    maxWidth: '85%',
+    flex: 1,
   },
   bubble: {
+    flex: 1,
     padding: spacing[3],
     borderWidth: 1,
     borderRadius: radius.lg,
