@@ -1,0 +1,13 @@
+diff --git a/node_modules/moti/build/components/safe-area-view.js b/node_modules/moti/build/components/safe-area-view.js
+index ed2108d..7691090 100644
+--- a/node_modules/moti/build/components/safe-area-view.js
++++ b/node_modules/moti/build/components/safe-area-view.js
+@@ -1,4 +1,3 @@
+-import { SafeAreaView as RSafeAreaView } from 'react-native';
+-import { motify } from '../core';
+-export const SafeAreaView = motify(RSafeAreaView)();
+-//# sourceMappingURL=safe-area-view.js.map
+\ No newline at end of file
++// Patched: react-native SafeAreaView deprecated warning suppressed.
++// Use react-native-safe-area-context instead of MotiSafeAreaView.
++export const SafeAreaView = null;

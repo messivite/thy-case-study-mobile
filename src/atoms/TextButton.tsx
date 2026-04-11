@@ -5,7 +5,7 @@ import Animated, {
   useAnimatedStyle,
   withTiming,
 } from 'react-native-reanimated';
-import { Text } from './Text';
+import { Text } from '@/atoms/Text';
 import { useHaptics } from '@/hooks/useHaptics';
 
 type TextVariant = 'body' | 'bodyMedium' | 'label' | 'caption' | 'h4';

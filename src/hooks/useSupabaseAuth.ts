@@ -43,12 +43,14 @@ import {
 } from '@/services/authService';
 import { establishAnonymousSession } from '@/store/thunks/authThunks';
 import { supabase } from '@/services/supabase';
-import { clearSession } from '@/services/authService';
+import { clearSession, persistSession } from '@/services/authService';
 import { mmkvStorage, STORAGE_KEYS } from '@/lib/mmkv';
 import { authEventEmitter, AUTH_EVENTS } from '@/services/api';
 import { authMutex } from '@/lib/authMutex';
 import { setErrorReportingUser } from '@/services/errorReporting';
-import { toast } from 'sonner-native';
+import { toast } from '@/lib/toast';
+import { getMe } from '@/api/user.api';
+import { setProfile, setProfileError } from '@/store/slices/profileSlice';
 import type { AuthStatus } from '@/types/auth.types';
 import type { AuthResult } from '@/services/authService';
 
@@ -67,7 +69,7 @@ type SupabaseAuthApi = {
   register: (
     email: string,
     password: string,
-    fullName: string,
+    fullName?: string,
   ) => Promise<AuthResult<AppSession | null>>;
   loginWithGoogle: () => Promise<AuthResult<AppSession>>;
   logout: () => void;
@@ -104,10 +106,16 @@ function useSupabaseAuthState(): SupabaseAuthApi {
   const { accessToken, refreshToken, expiresAt, status } = useAppSelector((s) => s.auth);
   const refreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isRefreshingRef = useRef(false);
+  /** Logout akisi bir kez baslatildiktan sonra tekrar tetiklenmesin (SIGNED_OUT + SESSION_EXPIRED yarisi) */
+  const isLoggingOutRef = useRef(false);
   /** SIGNED_OUT anında güncel auth.status (idle iken gelen gürültüyü yok saymak için) */
   const authStatusRef = useRef(status);
   useEffect(() => {
     authStatusRef.current = status;
+    // Yeni oturum acilinca logout flag'i sifirla
+    if (status === 'authenticated' || status === 'guest') {
+      isLoggingOutRef.current = false;
+    }
   }, [status]);
 
   // -------------------------------------------------------------------------
@@ -132,6 +140,13 @@ function useSupabaseAuthState(): SupabaseAuthApi {
     },
     [dispatch],
   );
+
+  // /api/me → profileSlice — session kurulduktan hemen sonra arka planda çağrılır
+  const fetchAndSetProfile = useCallback(() => {
+    getMe()
+      .then((data) => dispatch(setProfile(data)))
+      .catch(() => dispatch(setProfileError()));
+  }, [dispatch]);
 
   const dispatchRefreshedTokens = useCallback(
     (session: AppSession) => {
@@ -158,6 +173,24 @@ function useSupabaseAuthState(): SupabaseAuthApi {
   }, []);
 
   // -------------------------------------------------------------------------
+  // Merkezi logout — tüm path'ler buradan geçer, tekrar tetiklenmeyi önler
+  // -------------------------------------------------------------------------
+
+  const doLogout = useCallback((showExpiredToast = false) => {
+    if (isLoggingOutRef.current) return;
+    isLoggingOutRef.current = true;
+    stopRefreshInterval();
+    authMutex.reset();
+    void clearSession();
+    setErrorReportingUser(null);
+    if (showExpiredToast) {
+      toast.error('Oturumunuzun süresi doldu, tekrar giriş yapın.');
+    }
+    router.replace('/(auth)/welcome');
+    dispatch(resetAfterLogout());
+  }, [dispatch, stopRefreshInterval]);
+
+  // -------------------------------------------------------------------------
   // Proactive token refresh
   // -------------------------------------------------------------------------
 
@@ -171,18 +204,12 @@ function useSupabaseAuthState(): SupabaseAuthApi {
       if (result.ok) {
         dispatchRefreshedTokens(result.data);
       } else if (result.code === 'REFRESH_FAILED') {
-        stopRefreshInterval();
-        authMutex.reset();
-        void clearSession();
-        dispatch(resetAfterLogout());
-        setErrorReportingUser(null);
-        toast.error('Oturumunuzun süresi doldu, tekrar giriş yapın.');
-        router.replace('/(auth)/welcome');
+        doLogout(true);
       }
     } finally {
       isRefreshingRef.current = false;
     }
-  }, [expiresAt, dispatch, dispatchRefreshedTokens, stopRefreshInterval]);
+  }, [expiresAt, dispatchRefreshedTokens, doLogout]);
 
   // Stable ref — AppState listener'ın her token refresh'te yeniden kayıt olmasını önler
   const tryRefreshTokenRef = useRef(tryRefreshToken);
@@ -202,18 +229,10 @@ function useSupabaseAuthState(): SupabaseAuthApi {
 
   useEffect(() => {
     const unsub = authEventEmitter.on(AUTH_EVENTS.SESSION_EXPIRED, () => {
-      stopRefreshInterval();
-      authMutex.reset();
-      void clearSession();
-      dispatch(resetAfterLogout());
-      setErrorReportingUser(null);
-      toast.error('Oturumunuzun süresi doldu, tekrar giriş yapın.');
-      router.replace('/(auth)/welcome');
+      doLogout(true);
     });
-    return () => {
-      unsub();
-    };
-  }, []);
+    return () => unsub();
+  }, [doLogout]);
 
   // -------------------------------------------------------------------------
   // App state change → refresh when coming to foreground
@@ -239,31 +258,32 @@ function useSupabaseAuthState(): SupabaseAuthApi {
           switch (event) {
             case 'SIGNED_IN':
               if (session) {
-                dispatchSession(mapSupabaseSession(session));
+                const appSession = mapSupabaseSession(session);
+                dispatchSession(appSession);
+                void persistSession(appSession);
                 startRefreshInterval();
+                fetchAndSetProfile();
               }
               break;
 
             case 'TOKEN_REFRESHED':
             case 'USER_UPDATED':
               if (session) {
-                dispatchSession(mapSupabaseSession(session));
-                // startRefreshInterval burada çağrılmaz — SIGNED_IN'de bir kez başlatıldı
+                const appSession = mapSupabaseSession(session);
+                dispatchSession(appSession);
+                void persistSession(appSession);
+                fetchAndSetProfile();
               }
               break;
 
             case 'SIGNED_OUT': {
-              stopRefreshInterval();
+              // doLogout zaten isLoggingOutRef ile koruyor — harici SIGNED_OUT'ta da tetiklenebilir
               const hadUserSession =
                 authStatusRef.current === 'authenticated' ||
                 authStatusRef.current === 'guest';
-              if (!hadUserSession) {
-                break;
+              if (hadUserSession) {
+                doLogout(false);
               }
-              await clearSession();
-              dispatch(resetAfterLogout());
-              setErrorReportingUser(null);
-              router.replace('/(auth)/welcome');
               break;
             }
 
@@ -283,7 +303,7 @@ function useSupabaseAuthState(): SupabaseAuthApi {
     );
 
     return () => subscription.unsubscribe();
-  }, [dispatch, dispatchSession, startRefreshInterval, stopRefreshInterval]);
+  }, [dispatch, dispatchSession, startRefreshInterval, doLogout, fetchAndSetProfile]);
 
   // -------------------------------------------------------------------------
   // App init — mevcut session'ı restore et
@@ -299,6 +319,7 @@ function useSupabaseAuthState(): SupabaseAuthApi {
         if (result.ok && result.data) {
           dispatchSession(result.data);
           startRefreshInterval();
+          fetchAndSetProfile();
         } else {
           dispatch(setUnauthenticated());
         }
@@ -327,7 +348,7 @@ function useSupabaseAuthState(): SupabaseAuthApi {
   );
 
   const register = useCallback(
-    async (email: string, password: string, fullName: string) => {
+    async (email: string, password: string, fullName?: string) => {
       dispatch(setLoading(true));
       const result = await signUpWithEmail(email, password, fullName);
       if (result.ok) {
@@ -356,12 +377,9 @@ function useSupabaseAuthState(): SupabaseAuthApi {
   }, [dispatch]);
 
   const logout = useCallback(() => {
-    stopRefreshInterval();
-    dispatch(resetAfterLogout());
-    setErrorReportingUser(null);
-    router.replace('/(auth)/welcome');
+    doLogout(false);
     void signOut();
-  }, [dispatch, stopRefreshInterval]);
+  }, [doLogout]);
 
   const forgotPassword = useCallback(async (email: string) => {
     return resetPassword(email);

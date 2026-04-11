@@ -13,7 +13,7 @@ import { spacing } from '@/constants/spacing';
 import { palette } from '@/constants/colors';
 import { fontFamily, fontSize } from '@/constants/typography';
 import { useHaptics } from '@/hooks/useHaptics';
-import { toast } from 'sonner-native';
+import { toast } from '@/lib/toast';
 
 type Preview = typeof devConfig.networkSheetPreview;
 

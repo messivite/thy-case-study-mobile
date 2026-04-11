@@ -1,6 +1,24 @@
-import { useMutation, useQuery, useInfiniteQuery, useQueryClient, InfiniteData, UseQueryOptions } from '@tanstack/react-query';
-import { useMemo } from 'react';
-import { getChats, getChat, createChat, sendMessage, streamChat, syncChat, getChatMessages, getPaginatedChats, searchChats } from '@/api/chat.api';
+import {
+  useMutation,
+  useQuery,
+  useInfiniteQuery,
+  useQueryClient,
+  InfiniteData,
+  UseQueryOptions,
+} from '@tanstack/react-query';
+import { useMemo, useEffect, useRef } from 'react';
+import {
+  getChats,
+  getChat,
+  createChat,
+  deleteChat,
+  sendMessage,
+  streamChat,
+  syncChat,
+  getChatMessages,
+  getPaginatedChats,
+  searchChats,
+} from '@/api/chat.api';
 import {
   ChatSearchResponse,
   CreateChatRequest,
@@ -15,7 +33,6 @@ import {
   StreamChatRequest,
   SyncChatRequest,
   SyncChatResponse,
-  ChatMessage,
 } from '@/types/chat.api.types';
 import { realmService } from '@/services/realm';
 
@@ -28,16 +45,9 @@ export const CHAT_QUERY_KEYS = {
 };
 
 /**
- * GET /api/chats
- * Kullanıcıya ait tüm chat listesini çeker.
- *
- * Kullanım:
- *   const { data, isLoading } = useGetChatsQuery();
- *   data?.map(chat => chat.title)
+ * GET /api/chats — tüm chatleri döner (non-paginated)
  */
-export const useGetChatsQuery = (
-  options?: Partial<UseQueryOptions<GetChatsResponse, Error>>,
-) =>
+export const useGetChatsQuery = (options?: Partial<UseQueryOptions<GetChatsResponse, Error>>) =>
   useQuery<GetChatsResponse, Error>({
     queryKey: CHAT_QUERY_KEYS.chats,
     queryFn: () => getChats(),
@@ -45,53 +55,7 @@ export const useGetChatsQuery = (
   });
 
 /**
- * GET /api/chats?limit=20&cursor=X — Infinite scroll (cursor tabanlı)
- * initialData: Realm cache'inden beslenir, anlık görünüm sağlar.
- * staleTime: 2dk — dolunca arka planda API refresh atar.
- *
- * Kullanım:
- *   const { data, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteChatsQuery();
- *   const allChats = data?.pages.flatMap(p => p.items) ?? [];
- */
-export const useInfiniteChatsQuery = () => {
-  // Realm'i render sırasında değil, useMemo ile lazy oku
-  const cached = useMemo(() => realmService.getSessions(), []);
-
-  return useInfiniteQuery<PaginatedChatsResponse, Error>({
-    queryKey: CHAT_QUERY_KEYS.chatsList,
-    queryFn: ({ pageParam }) => getPaginatedChats(20, pageParam as string | undefined),
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-    initialData: cached.items.length > 0 ? {
-      pages: [{ totalCount: cached.items.length, hasNext: false, nextCursor: null, items: cached.items }],
-      pageParams: [undefined],
-    } : undefined,
-    initialDataUpdatedAt: cached.syncedAt,
-    staleTime: 2 * 60_000,
-    gcTime: 10 * 60_000,
-  });
-};
-
-/**
- * POST /api/chats
- * Yeni bir chat oluşturur.
- *
- * Kullanım:
- *   const { mutate, isPending } = useCreateChatMutation();
- *   mutate({ title: 'Yeni sohbet', provider: 'gemini', model: 'gemini-2.5-flash' });
- */
-export const useCreateChatMutation = () =>
-  useMutation<CreateChatResponse, Error, CreateChatRequest>({
-    mutationFn: (payload) => createChat(payload),
-  });
-
-/**
  * GET /api/chats/:chatId
- * Chat detayını ve tüm mesajlarını çeker.
- *
- * Kullanım:
- *   const { data, isLoading } = useGetChatQuery(chatId);
- *   data.messages, data.title, data.provider
  */
 export const useGetChatQuery = (chatId: string) =>
   useQuery<GetChatResponse, Error>({
@@ -101,20 +65,7 @@ export const useGetChatQuery = (chatId: string) =>
   });
 
 /**
- * POST /api/chats/:chatId/stream
- * Token'ları callback'lerle akıtır. mutationFn'e { payload, callbacks } geçilir.
- *
- * Kullanım:
- *   const { mutate, isPending } = useStreamChatMutation(chatId);
- *   mutate({
- *     payload: { provider: 'openai', model: 'gpt-4.1-mini', messages: [...] },
- *     callbacks: {
- *       onMeta: (meta) => setMessageId(meta.assistantMessageId),
- *       onDelta: (delta) => setContent(prev => prev + delta),
- *       onDone: () => setIsStreaming(false),
- *       onError: (err) => console.error(err),
- *     },
- *   });
+ * POST /api/chats/:chatId/stream — streaming chat
  */
 export const useStreamChatMutation = (chatId: string) =>
   useMutation<void, Error, { payload: StreamChatRequest; callbacks: StreamChatCallbacks }>({
@@ -122,102 +73,7 @@ export const useStreamChatMutation = (chatId: string) =>
   });
 
 /**
- * POST /api/chats/:chatId/messages
- * Mesaj gönderir, assistant'ın tam cevabını tek seferde döner (non-stream).
- * Optimistic UI: kullanıcı mesajı anında cache'e eklenir.
- */
-export const useSendMessageMutation = (chatId: string) => {
-  const queryClient = useQueryClient();
-
-  return useMutation<
-    NonStreamChatResponse,
-    Error,
-    NonStreamChatRequest,
-    { previous: InfiniteData<PaginatedMessagesResponse> | undefined }
-  >({
-    mutationFn: (payload) => sendMessage(chatId, payload),
-    onMutate: async (payload) => {
-      // Cancel ongoing fetches
-      await queryClient.cancelQueries({ queryKey: CHAT_QUERY_KEYS.messages(chatId) });
-
-      // Snapshot previous data
-      const previous = queryClient.getQueryData<InfiniteData<PaginatedMessagesResponse>>(
-        CHAT_QUERY_KEYS.messages(chatId),
-      );
-
-      // Optimistic user message
-      const userMessage = payload.messages[payload.messages.length - 1];
-      const optimisticMsg: ChatMessage = {
-        role: userMessage.role,
-        content: userMessage.content,
-        provider: payload.provider,
-        model: payload.model,
-      };
-
-      queryClient.setQueryData<InfiniteData<PaginatedMessagesResponse>>(
-        CHAT_QUERY_KEYS.messages(chatId),
-        (old) => {
-          if (!old) return old;
-          const newPages = [...old.pages];
-          // First page = newest messages (inverted list)
-          if (newPages.length > 0) {
-            newPages[0] = {
-              ...newPages[0],
-              messages: [optimisticMsg, ...newPages[0].messages],
-            };
-          }
-          return { ...old, pages: newPages };
-        },
-      );
-
-      return { previous };
-    },
-    onError: (_err, _payload, context) => {
-      // Rollback
-      if (context?.previous) {
-        queryClient.setQueryData(
-          CHAT_QUERY_KEYS.messages(chatId),
-          context.previous,
-        );
-      }
-    },
-    onSuccess: (data) => {
-      // Add assistant message to cache
-      const assistantMsg: ChatMessage = {
-        role: data.assistantMessage.role,
-        content: data.assistantMessage.content,
-        provider: data.assistantMessage.provider,
-        model: data.assistantMessage.model,
-      };
-
-      queryClient.setQueryData<InfiniteData<PaginatedMessagesResponse>>(
-        CHAT_QUERY_KEYS.messages(chatId),
-        (old) => {
-          if (!old) return old;
-          const newPages = [...old.pages];
-          if (newPages.length > 0) {
-            newPages[0] = {
-              ...newPages[0],
-              messages: [assistantMsg, ...newPages[0].messages],
-            };
-          }
-          return { ...old, pages: newPages };
-        },
-      );
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.messages(chatId) });
-    },
-  });
-};
-
-/**
  * POST /api/chats/:chatId/sync
- * Offline mesajları sync eder ve assistant yanıtını döner.
- *
- * Kullanım:
- *   const { mutate, isPending, data } = useSyncChatMutation(chatId);
- *   mutate({ provider: 'openai', model: 'gpt-4o', messages: [...] });
  */
 export const useSyncChatMutation = (chatId: string) =>
   useMutation<SyncChatResponse, Error, SyncChatRequest>({
@@ -225,48 +81,190 @@ export const useSyncChatMutation = (chatId: string) =>
   });
 
 /**
- * GET /api/chats/:chatId/messages?direction=older&cursor=X — Infinite scroll
- * initialData: Realm cache'inden beslenir.
- * staleTime: 30sn — aktif chat daha sık değişir.
+ * GET /api/chats?limit=20&cursor=X — Infinite scroll (cursor tabanli)
  *
- * Kullanım:
- *   const { data, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteMessagesQuery(chatId);
- *   const allMessages = data?.pages.flatMap(p => p.messages) ?? [];
+ * initialData         : Realm cache — mount'ta aninda render (roket acilis)
+ * initialDataUpdatedAt: Realm syncedAt — staleTime ile karsilastirilir
+ * staleTime           : 2dk — dolunca arka planda refetch
+ *
+ * Realm sync : API'den dönen tum sessionlar bu hook'un useEffect'iyle Realm'e yazilir.
+ * Guest guard: isAnonymous = true ise API cagrisi yapilmaz.
  */
-export const useInfiniteMessagesQuery = (sessionId: string) => {
-  // Realm'i render sırasında değil, useMemo ile lazy oku
-  const cached = useMemo(() => realmService.getMessages(sessionId), [sessionId]);
+export const useInfiniteChatsQuery = (isAnonymous = false) => {
+  const cached = useMemo(() => realmService.getSessions(), []);
 
-  return useInfiniteQuery<PaginatedMessagesResponse, Error>({
-    queryKey: CHAT_QUERY_KEYS.messages(sessionId),
+  const query = useInfiniteQuery<PaginatedChatsResponse, Error>({
+    queryKey: CHAT_QUERY_KEYS.chatsList,
     queryFn: ({ pageParam }) =>
-      getChatMessages(sessionId, { limit: 20, cursor: pageParam as string | undefined, direction: 'older' }),
+      getPaginatedChats(20, pageParam as string | undefined),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-    initialData: cached.messages.length > 0 ? {
-      pages: [{ messages: cached.messages, nextCursor: null, hasMore: false }],
-      pageParams: [undefined],
-    } : undefined,
+    initialData:
+      cached.items.length > 0
+        ? {
+            pages: [
+              {
+                totalCount: cached.items.length,
+                hasNext: false,
+                nextCursor: null,
+                items: cached.items,
+              },
+            ],
+            pageParams: [undefined],
+          }
+        : undefined,
     initialDataUpdatedAt: cached.syncedAt,
-    staleTime: 30_000,
-    gcTime: 5 * 60_000,
-    enabled: !!sessionId,
+    staleTime: 2 * 60_000,
+    gcTime: 10 * 60_000,
+    enabled: !isAnonymous,
+  });
+
+  // API'den gelen sessionlari Realm'e yaz — sadece yeni fetch oldugunda (dataUpdatedAt degisince)
+  const lastSyncedAt = useRef(0);
+  useEffect(() => {
+    if (!query.data || !query.dataUpdatedAt) return;
+    if (query.dataUpdatedAt <= lastSyncedAt.current) return; // ayni veri, yazma
+    lastSyncedAt.current = query.dataUpdatedAt;
+    const allItems = query.data.pages.flatMap((p) => p.items);
+    if (allItems.length > 0) {
+      realmService.saveSessions(allItems);
+    }
+  }, [query.dataUpdatedAt]); // query.data degil, timestamp'e bagla
+
+  return query;
+};
+
+/**
+ * DELETE /api/chats/:chatId — optimistic remove + rollback
+ *
+ * onMutate  : chatsList cache'inden optimistik olarak çıkar
+ * onError   : rollback
+ * onSuccess : Realm'den de sil
+ */
+export const useDeleteChatMutation = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<void, Error, string, { previous: InfiniteData<PaginatedChatsResponse> | undefined }>({
+    mutationFn: (chatId) => deleteChat(chatId),
+    onMutate: async (chatId) => {
+      await queryClient.cancelQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
+      const previous = queryClient.getQueryData<InfiniteData<PaginatedChatsResponse>>(
+        CHAT_QUERY_KEYS.chatsList,
+      );
+      queryClient.setQueryData<InfiniteData<PaginatedChatsResponse>>(
+        CHAT_QUERY_KEYS.chatsList,
+        (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            pages: old.pages.map((page) => ({
+              ...page,
+              items: page.items.filter((c) => c.id !== chatId),
+            })),
+          };
+        },
+      );
+      return { previous };
+    },
+    onError: (_err, _chatId, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(CHAT_QUERY_KEYS.chatsList, context.previous);
+      }
+    },
+    onSuccess: (_data, chatId) => {
+      void realmService.deleteSession(chatId);
+    },
   });
 };
 
 /**
- * GET /api/chats/search?q=xxx&limit=20&cursor=xxx
- * Sohbet başlıkları ve mesaj içerikleri üzerinde full-text arama.
- * Infinite scroll destekli. En az 2 karakter girilmeden tetiklenmez.
- *
- * staleTime: 60s — aynı sorgu kısa sürede tekrar gelirse cache kullan
- * gcTime: 5dk — kullanıcı farklı sorgu girip geri gelirse sonuçlar bellekte kalsın
- *
- * Kullanım:
- *   const { data, fetchNextPage, hasNextPage, isFetchingNextPage } = useSearchChatsQuery('thy');
- *   const results = data?.pages.flatMap(p => p.items) ?? [];
+ * POST /api/chats
  */
-export const useSearchChatsQuery = (q: string, limit: number = 20) =>
+export const useCreateChatMutation = () =>
+  useMutation<CreateChatResponse, Error, CreateChatRequest>({
+    mutationFn: (payload) => createChat(payload),
+  });
+
+/**
+ * POST /api/chats/:chatId/messages — non-stream, optimistic UI
+ */
+export const useSendMessageMutation = (chatId: string) =>
+  useMutation<NonStreamChatResponse, Error, NonStreamChatRequest>({
+    mutationFn: (payload) => sendMessage(chatId, payload),
+  });
+
+/**
+ * GET /api/chats/:chatId/messages?direction=older&cursor=X — Infinite scroll
+ *
+ * Akış:
+ *  1. Mount'ta Realm cache'i `initialData` olarak anında render edilir (instant gösterim).
+ *  2. staleTime (30s) dolunca API fetch tetiklenir — gerçek veri gelir, cache güncellenir.
+ *  3. Kullanıcı yukarı kaydırınca `fetchNextPage` → direction=older → eski mesajlar yüklenir.
+ *  4. API fetch tamamlanınca mesajlar Realm'e upsert edilir (duplicate-safe).
+ */
+export const useInfiniteMessagesQuery = (sessionId: string, isAnonymous = false) => {
+  // Realm'den senkron oku — mount anında initialData olarak ver
+  const cached = useMemo(() => realmService.getMessages(sessionId), [sessionId]);
+
+  const query = useInfiniteQuery<PaginatedMessagesResponse, Error>({
+    queryKey: CHAT_QUERY_KEYS.messages(sessionId),
+    queryFn: ({ pageParam }) =>
+      getChatMessages(sessionId, {
+        limit: 40,
+        cursor: pageParam as string | undefined,
+        direction: 'older',
+      }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    initialData: cached.messages.length > 0
+      ? {
+          pages: [{
+            messages: cached.messages,
+            nextCursor: null,
+            hasMore: false,
+          }],
+          pageParams: [undefined],
+        }
+      : undefined,
+    initialDataUpdatedAt: cached.syncedAt,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    enabled: !!sessionId && !isAnonymous,
+  });
+
+  // API fetch tamamlanınca Realm'e yaz
+  // lastMsgSyncedAt sessionId'ye bağlı — session değişince sıfırla
+  const lastMsgSyncedAt = useRef(0);
+  const lastSyncedSessionId = useRef('');
+  useEffect(() => {
+    if (!sessionId || !query.data || !query.dataUpdatedAt) return;
+    // Session değişince ref'i sıfırla — yeni session'da ilk fetch her zaman yazılsın
+    if (lastSyncedSessionId.current !== sessionId) {
+      lastSyncedSessionId.current = sessionId;
+      lastMsgSyncedAt.current = 0;
+    }
+    if (query.dataUpdatedAt <= lastMsgSyncedAt.current) return;
+    lastMsgSyncedAt.current = query.dataUpdatedAt;
+
+    // pages[0] = en yeni mesajlar (ilk fetch, direction=older, cursor=undefined)
+    // fetchNextPage ile gelen eski sayfaları Realm'e yazmıyoruz — sadece son 40 cache'lenir
+    const latestPage = query.data.pages[0]?.messages ?? [];
+    if (latestPage.length > 0) {
+      realmService.saveMessages(sessionId, latestPage);
+    }
+  }, [sessionId, query.dataUpdatedAt]);
+
+  return query;
+};
+
+/**
+ * GET /api/chats/search?q=xxx&limit=20&cursor=xxx — full-text arama
+ *
+ * initialData: Realm'den son sessionlar (focus aninda anlik gosterim)
+ * enabled    : q.trim().length >= 2
+ * staleTime  : 60s
+ */
+export const useSearchChatsQuery = (q: string, limit = 20) =>
   useInfiniteQuery<ChatSearchResponse, Error>({
     queryKey: CHAT_QUERY_KEYS.search(q),
     queryFn: ({ pageParam }) =>
@@ -274,6 +272,6 @@ export const useSearchChatsQuery = (q: string, limit: number = 20) =>
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     enabled: q.trim().length >= 2,
-    staleTime: 60_000,       // 60 sn — aynı sorgu cache'den gelir
-    gcTime: 5 * 60_000,      // 5 dk — farklı sorguya geçince bellekte kalır
+    staleTime: 60_000,
+    gcTime: 5 * 60_000,
   });

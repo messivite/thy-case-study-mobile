@@ -6,7 +6,7 @@
  * RTK dispatch'i useSupabaseAuth hook'u üstlenir.
  */
 
-import { supabase } from './supabase';
+import { supabase } from '@/services/supabase';
 import { secureStorage, SECURE_KEYS } from '@/lib/secureStore';
 import type { Session, User as SupabaseUser, AuthError } from '@supabase/supabase-js';
 
@@ -16,7 +16,7 @@ import type { Session, User as SupabaseUser, AuthError } from '@supabase/supabas
 
 export type AuthResult<T = void> =
   | { ok: true; data: T }
-  | { ok: false; error: string; code?: string };
+  | { ok: false; error: string; code?: string; errorCode?: AuthErrorCode };
 
 // ---------------------------------------------------------------------------
 // Mapper: Supabase User → uygulama User
@@ -101,7 +101,8 @@ export async function signInWithEmail(
 ): Promise<AuthResult<AppSession>> {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error || !data.session) {
-    return { ok: false, error: mapAuthError(error), code: error?.status?.toString() };
+    const mapped = mapAuthError(error);
+    return { ok: false, error: mapped.message, errorCode: mapped.code, code: error?.status?.toString() };
   }
   const session = mapSession(data.session);
   await persistSession(session);
@@ -111,15 +112,17 @@ export async function signInWithEmail(
 export async function signUpWithEmail(
   email: string,
   password: string,
-  fullName: string,
+  fullName?: string,
 ): Promise<AuthResult<AppSession | null>> {
+  const trimmed = fullName?.trim();
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { data: { full_name: fullName } },
+    ...(trimmed ? { options: { data: { full_name: trimmed } } } : {}),
   });
   if (error) {
-    return { ok: false, error: mapAuthError(error), code: error?.status?.toString() };
+    const mapped = mapAuthError(error);
+    return { ok: false, error: mapped.message, errorCode: mapped.code, code: error?.status?.toString() };
   }
   // E-posta doğrulama aktifse session gelmeyebilir
   if (data.session) {
@@ -135,13 +138,13 @@ export async function resetPassword(email: string): Promise<AuthResult> {
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: 'thyassistant://reset-password',
   });
-  if (error) return { ok: false, error: mapAuthError(error) };
+  if (error) return { ok: false, error: mapAuthError(error).message };
   return { ok: true, data: undefined };
 }
 
 export async function updatePassword(newPassword: string): Promise<AuthResult> {
   const { error } = await supabase.auth.updateUser({ password: newPassword });
-  if (error) return { ok: false, error: mapAuthError(error) };
+  if (error) return { ok: false, error: mapAuthError(error).message };
   return { ok: true, data: undefined };
 }
 
@@ -157,7 +160,7 @@ export async function signInWithGoogle(): Promise<AuthResult<AppSession>> {
       queryParams: { access_type: 'offline', prompt: 'consent' },
     },
   });
-  if (error) return { ok: false, error: mapAuthError(error) };
+  if (error) return { ok: false, error: mapAuthError(error).message };
   // OAuth flow browser'da devam eder, session onAuthStateChange ile gelir
   return { ok: true, data: null as any };
 }
@@ -170,13 +173,14 @@ export async function signInAnonymously(): Promise<AuthResult<AppSession>> {
   try {
     const { data, error } = await supabase.auth.signInAnonymously();
     if (error || !data.session) {
-      return { ok: false, error: mapAuthError(error), code: error?.status?.toString() };
+      const mapped = mapAuthError(error);
+      return { ok: false, error: mapped.message, errorCode: mapped.code, code: error?.status?.toString() };
     }
     const session = mapSession(data.session);
     await persistSession(session);
     return { ok: true, data: session };
   } catch {
-    return { ok: false, error: 'Giriş yapılamadı', code: 'UNKNOWN' };
+    return { ok: false, error: 'UNKNOWN', errorCode: 'UNKNOWN', code: 'UNKNOWN' };
   }
 }
 
@@ -187,7 +191,7 @@ export async function signInAnonymously(): Promise<AuthResult<AppSession>> {
 export async function signOut(): Promise<AuthResult> {
   const { error } = await supabase.auth.signOut();
   await clearSession();
-  if (error) return { ok: false, error: mapAuthError(error) };
+  if (error) return { ok: false, error: mapAuthError(error).message };
   return { ok: true, data: undefined };
 }
 
@@ -242,20 +246,28 @@ export function isTokenExpired(expiresAt: number, bufferSeconds = 60): boolean {
 // Error mapper
 // ---------------------------------------------------------------------------
 
-function mapAuthError(error: AuthError | null | undefined): string {
-  if (!error) return 'Bilinmeyen bir hata oluştu';
+export type AuthErrorCode =
+  | 'INVALID_CREDENTIALS'
+  | 'EMAIL_NOT_CONFIRMED'
+  | 'USER_ALREADY_REGISTERED'
+  | 'PASSWORD_TOO_SHORT'
+  | 'RATE_LIMITED'
+  | 'UNKNOWN';
+
+function mapAuthError(error: AuthError | null | undefined): { message: string; code: AuthErrorCode } {
+  if (!error) return { message: 'UNKNOWN', code: 'UNKNOWN' };
   switch (error.message) {
     case 'Invalid login credentials':
-      return 'E-posta veya şifre hatalı';
+      return { message: error.message, code: 'INVALID_CREDENTIALS' };
     case 'Email not confirmed':
-      return 'E-posta adresinizi doğrulayın';
+      return { message: error.message, code: 'EMAIL_NOT_CONFIRMED' };
     case 'User already registered':
-      return 'Bu e-posta adresi zaten kayıtlı';
+      return { message: error.message, code: 'USER_ALREADY_REGISTERED' };
     case 'Password should be at least 6 characters':
-      return 'Şifre en az 6 karakter olmalıdır';
+      return { message: error.message, code: 'PASSWORD_TOO_SHORT' };
     case 'For security purposes, you can only request this after 60 seconds':
-      return 'Lütfen 60 saniye bekleyin';
+      return { message: error.message, code: 'RATE_LIMITED' };
     default:
-      return error.message ?? 'Bir hata oluştu';
+      return { message: error.message ?? 'UNKNOWN', code: 'UNKNOWN' };
   }
 }

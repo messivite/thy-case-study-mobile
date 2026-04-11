@@ -1,5 +1,5 @@
-import type { THYIconName, THYIconGlyph } from './types';
-import { ThyLoadingSvg } from './icons/ThyLoadingSvg';
+import type { THYIconName, THYIconGlyph } from '@/atoms/thy-icon/types';
+import { ThyLoadingSvg } from '@/atoms/thy-icon/icons/ThyLoadingSvg';
 
 /**
  * İsim → SVG bileşeni. Yeni ikon: `THY_ICON_NAMES` + bu map + `icons/` altında glyph.

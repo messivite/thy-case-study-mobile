@@ -1,4 +1,4 @@
-import { AIMessage, AIProviderInfo, AIUsage } from './api.types';
+import { AIMessage, AIProviderInfo, AIUsage } from '@/types/api.types';
 
 // ---------------------------------------------------------------------------
 // POST /api/chats — Yeni chat oluşturma
@@ -53,7 +53,10 @@ export type PaginatedChatsResponse = {
 // ---------------------------------------------------------------------------
 
 /** Bir chat'e ait tek mesaj */
-export type ChatMessage = AIMessage & AIProviderInfo;
+export type ChatMessage = AIMessage & AIProviderInfo & {
+  id?: string;
+  createdAt?: string;
+};
 
 /** Chat detay response modeli */
 export type GetChatResponse = AIProviderInfo & {
@@ -99,6 +102,7 @@ export type StreamMetaEvent = {
   type: 'meta';
   meta: AIProviderInfo & {
     assistantMessageId: string;
+    userMessageId?: string;
   };
 };
 
@@ -157,7 +161,10 @@ export type SyncChatRequest = AIProviderInfo & {
 export type SyncedMessage = AIMessage & AIProviderInfo;
 
 /** Assistant'ın döndürdüğü yanıt mesajı */
-export type AssistantMessage = AIMessage & AIProviderInfo;
+export type AssistantMessage = AIMessage & AIProviderInfo & {
+  id?: string;
+  createdAt?: string;
+};
 
 /** Sync endpoint'inin tam response modeli */
 export type SyncChatResponse = {

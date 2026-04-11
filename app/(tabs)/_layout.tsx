@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Tabs } from 'expo-router';
 import { View, StyleSheet, Platform } from 'react-native';
 import { BlurView } from 'expo-blur';
@@ -8,10 +8,30 @@ import { TabBarItem } from '@/molecules/TabBarItem';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
+import { useAppDispatch } from '@/store/hooks';
+import { useAuth } from '@/hooks/useAuth';
+import { setProfile, setProfileError } from '@/store/slices/profileSlice';
+import { getMe } from '@/api/user.api';
+
+function MeBootstrap() {
+  const dispatch = useAppDispatch();
+  const { status } = useAuth();
+
+  useEffect(() => {
+    if (status !== 'authenticated') return;
+
+    getMe()
+      .then((data) => dispatch(setProfile(data)))
+      .catch(() => dispatch(setProfileError()));
+  }, [status, dispatch]);
+
+  return null;
+}
 
 export default function TabLayout() {
   return (
     <PostNavigationEnterFade>
+      <MeBootstrap />
       {/* En basit yol: web'de push tarafını tamamen devre dışı bırak. */}
       {Platform.OS !== 'web' ? <NativePushNotificationsBootstrap /> : null}
       <Tabs

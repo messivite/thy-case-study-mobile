@@ -1,6 +1,6 @@
 import React from 'react';
 import Svg, { G, Path } from 'react-native-svg';
-import type { THYIconGlyphProps } from '../types';
+import type { THYIconGlyphProps } from '@/atoms/thy-icon/types';
 
 const VB = 128.90668;
 const PATH_TRANSFORM = 'matrix(0.13333333,0,0,-0.13333333,0,128.90667)';

@@ -3,8 +3,8 @@ import { initReactI18next } from 'react-i18next';
 import * as Localization from 'expo-localization';
 import 'intl-pluralrules';
 
-import tr from './tr.json';
-import en from './en.json';
+import tr from '@/i18n/tr.json';
+import en from '@/i18n/en.json';
 
 // MMKV init sırasında erişilemeyebilir — güvenli okuma
 let savedLanguage: string | undefined;

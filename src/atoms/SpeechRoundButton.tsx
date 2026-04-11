@@ -17,7 +17,7 @@ import { palette } from '@/constants/colors';
 import { useHaptics } from '@/hooks/useHaptics';
 import { useI18n } from '@/hooks/useI18n';
 import { stripTextForSpeech, speechLocaleForAppLang } from '@/lib/chatSpeech';
-import { toast } from 'sonner-native';
+import { toast } from '@/lib/toast';
 
 const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
 

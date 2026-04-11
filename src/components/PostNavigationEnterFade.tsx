@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { InteractionManager, Platform } from 'react-native';
+import { Platform } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -10,22 +10,20 @@ import Animated, {
 type Props = { children: React.ReactNode };
 
 /**
- * Splash / deferred replace sonrası ilk mount’ta layout bazen bir frame kayıyor.
- * runAfterInteractions + rAF sonrası kısa opacity girişi ile yumuşatır (onboarding, tabs vb.).
+ * Mount sonrasi tek rAF bekleyip kisa opacity girisi — layout flash'ini gizler.
+ * InteractionManager beklenmez: (tabs) navigate'de ekstra gecikme yaratiyordu.
  */
 export function PostNavigationEnterFade({ children }: Props) {
   const opacity = useSharedValue(0);
 
   useEffect(() => {
-    const task = InteractionManager.runAfterInteractions(() => {
-      requestAnimationFrame(() => {
-        opacity.value = withTiming(1, {
-          duration: 180,
-          easing: Easing.out(Easing.cubic),
-        });
+    const id = requestAnimationFrame(() => {
+      opacity.value = withTiming(1, {
+        duration: 150,
+        easing: Easing.out(Easing.cubic),
       });
     });
-    return () => task.cancel();
+    return () => cancelAnimationFrame(id);
   }, [opacity]);
 
   const fadeStyle = useAnimatedStyle(() => ({
@@ -37,7 +35,6 @@ export function PostNavigationEnterFade({ children }: Props) {
     <Animated.View
       style={[
         fadeStyle,
-        // Web flex: iç içe flex + ScrollView yüksekliği için (min-height:auto)
         Platform.OS === 'web' && { minHeight: 0 },
       ]}
     >

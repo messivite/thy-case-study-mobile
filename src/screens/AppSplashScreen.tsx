@@ -4,7 +4,6 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
-  withRepeat,
   withSequence,
   cancelAnimation,
   Easing,
@@ -22,24 +21,14 @@ export function AppSplashScreen({
   fontsLoaded,
   onSplashFinished,
 }: AppSplashScreenProps) {
-  const logoOpacity = useSharedValue(0);
-  const logoScale = useSharedValue(0.88);
+  const logoOpacity = useSharedValue(1); // native splash ile hizalı — fade-in yok
   const pulseScale = useSharedValue(1);
 
   const startExitAnimation = () => {
     cancelAnimation(pulseScale);
-    pulseScale.value = 1;
-
-    logoScale.value = withTiming(8.5, {
-      duration: 480,
-      easing: Easing.in(Easing.cubic),
-    });
-    // Opacity bitince hemen yönlendir — setTimeout ile beyaz boş ekran kalmasın
-    logoOpacity.value = withTiming(0, { duration: 320 }, (finished) => {
+    logoOpacity.value = withTiming(0, { duration: 160, easing: Easing.in(Easing.ease) }, (finished) => {
       'worklet';
-      if (finished) {
-        runOnJS(onSplashFinished)();
-      }
+      if (finished) runOnJS(onSplashFinished)();
     });
   };
 
@@ -47,39 +36,23 @@ export function AppSplashScreen({
     if (!fontsLoaded) return;
     SplashScreen.hideAsync();
 
-    logoOpacity.value = withTiming(1, {
-      duration: 280,
-      easing: Easing.out(Easing.cubic),
-    });
-    logoScale.value = withTiming(1, {
-      duration: 320,
-      easing: Easing.out(Easing.cubic),
-    });
+    // Tek pulse turu — sonra exit
+    pulseScale.value = withSequence(
+      withTiming(1.05, { duration: 400, easing: Easing.inOut(Easing.ease) }),
+      withTiming(1, { duration: 300, easing: Easing.inOut(Easing.ease) }),
+    );
 
-    // Pulse starts after the entrance animation settles
-    const pulseTimer = setTimeout(() => {
-      pulseScale.value = withRepeat(
-        withSequence(
-          withTiming(1.06, { duration: 700, easing: Easing.inOut(Easing.ease) }),
-          withTiming(1, { duration: 700, easing: Easing.inOut(Easing.ease) }),
-        ),
-        -1,
-      );
-    }, 350);
-
-    const exitTimer = setTimeout(startExitAnimation, 1500);
+    const exitTimer = setTimeout(startExitAnimation, 600);
     return () => {
-      clearTimeout(pulseTimer);
       clearTimeout(exitTimer);
       cancelAnimation(pulseScale);
       cancelAnimation(logoOpacity);
-      cancelAnimation(logoScale);
     };
   }, [fontsLoaded]);
 
   const logoStyle = useAnimatedStyle(() => ({
     opacity: logoOpacity.value,
-    transform: [{ scale: logoScale.value * pulseScale.value }],
+    transform: [{ scale: pulseScale.value }],
   }));
 
   return (

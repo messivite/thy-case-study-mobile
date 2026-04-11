@@ -1,7 +1,20 @@
-import { Stack } from 'expo-router';
+import { Redirect, Stack, useSegments } from 'expo-router';
 import { Platform, StyleSheet } from 'react-native';
+import { useAuth } from '@/hooks/useAuth';
+
+const AUTH_LANDING_SEGMENTS = new Set(['welcome', 'login', 'register', 'forgotpassword']);
 
 export default function AuthLayout() {
+  const { status } = useAuth();
+  const segments = useSegments();
+
+  const onAuthLanding = segments.some((s) => AUTH_LANDING_SEGMENTS.has(String(s)));
+  const sessionActive = status === 'authenticated' || status === 'guest';
+
+  if (sessionActive && onAuthLanding) {
+    return <Redirect href="/(tabs)" />;
+  }
+
   return (
     <Stack
       screenOptions={{

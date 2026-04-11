@@ -21,6 +21,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { GlassView } from '@/atoms/GlassView';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
+import { useHaptics } from '@/hooks/useHaptics';
 import { radius, spacing } from '@/constants/spacing';
 
 export type LiquidBottomSheetVariant = 'glass' | 'solid';
@@ -54,6 +55,7 @@ export const LiquidBottomSheet: React.FC<Props> = ({
 }) => {
   const { colors, isDark } = useTheme();
   const { t } = useI18n();
+  const haptics = useHaptics();
   const insets = useSafeAreaInsets();
   const { height: winH } = useWindowDimensions();
   const offscreen = winH * 0.55;
@@ -88,7 +90,7 @@ export const LiquidBottomSheet: React.FC<Props> = ({
   }));
 
   const handleBackdrop = () => {
-    if (closeOnBackdropPress) onClose();
+    if (closeOnBackdropPress) { haptics.light(); onClose(); }
   };
 
   const sheetBody =
@@ -145,7 +147,7 @@ export const LiquidBottomSheet: React.FC<Props> = ({
               )}
               {showCloseButton && (
                 <Pressable
-                  onPress={onClose}
+                  onPress={() => { haptics.light(); onClose(); }}
                   style={styles.closeBtn}
                   hitSlop={12}
                   accessibilityRole="button"

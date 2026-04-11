@@ -2,11 +2,11 @@ import Realm from 'realm';
 import { ChatListItem, ChatMessage } from '@/types/chat.api.types';
 
 // ---------------------------------------------------------------------------
-// Şema
+// Sema
 // ---------------------------------------------------------------------------
 
 const MAX_SESSIONS = 20;
-const MAX_MESSAGES_PER_SESSION = 20;
+const MAX_MESSAGES_PER_SESSION = 40;
 
 export class RealmSession extends Realm.Object<RealmSession> {
   _id!: string;
@@ -14,6 +14,7 @@ export class RealmSession extends Realm.Object<RealmSession> {
   provider!: string;
   model!: string;
   lastMessageAt!: string;
+  lastMessagePreview!: string;
   syncedAt!: number;
 
   static schema: Realm.ObjectSchema = {
@@ -25,6 +26,7 @@ export class RealmSession extends Realm.Object<RealmSession> {
       provider: 'string',
       model: 'string',
       lastMessageAt: 'string',
+      lastMessagePreview: { type: 'string', default: '' },
       syncedAt: 'int',
     },
   };
@@ -53,19 +55,61 @@ export class RealmMessage extends Realm.Object<RealmMessage> {
 }
 
 // ---------------------------------------------------------------------------
-// Realm instance (singleton, açık tutulur)
+// Realm instance — async open, modul seviyesinde baslatilir
+//
+// new Realm() JS thread'ini blokluyor (sync I/O + schema parse).
+// Realm.open() async — splash / app init sirasinda paralel baslatilir,
+// ilk getSessions() cagrisi geldiginde hazir olur, bekleme yok.
 // ---------------------------------------------------------------------------
 
+let _realmPromise: Promise<Realm> | null = null;
 let _realm: Realm | null = null;
 
-export const getRealmInstance = (): Realm => {
-  if (!_realm || _realm.isClosed) {
-    _realm = new Realm({
-      schema: [RealmSession, RealmMessage],
-      schemaVersion: 1,
-    });
-  }
-  return _realm;
+/**
+ * Realm'i async olarak acar. Modul import edilince otomatik tetiklenir.
+ * Birden fazla cagrida ayni promise doner (singleton).
+ */
+export const openRealm = (): Promise<Realm> => {
+  if (_realm && !_realm.isClosed) return Promise.resolve(_realm);
+  if (_realmPromise) return _realmPromise;
+
+  _realmPromise = Realm.open({
+    schema: [RealmSession, RealmMessage],
+    schemaVersion: 6,
+    onMigration: (_oldRealm: Realm, newRealm: Realm) => {
+      // v1 → v2: lastMessagePreview alani eklendi, mevcutlara bos string ver
+      const sessions = newRealm.objects('RealmSession');
+      for (const s of sessions) {
+        if ((s as unknown as RealmSession).lastMessagePreview === undefined) {
+          (s as unknown as RealmSession).lastMessagePreview = '';
+        }
+      }
+      // v2 → v3: kirlenmiş optimistic/timestamp ID'li mesajları temizle
+      // v3 → v4: limit 20→100 oldu, eski cache'i temizle
+      // v4 → v5: API artık id+createdAt dönüyor, eski composite-key kayıtları temizle
+      // v5 → v6: Realm sıralama newest→oldest'ten oldest→newest'e değişti
+      const messages = newRealm.objects('RealmMessage');
+      newRealm.delete(messages);
+    },
+  }).then((realm) => {
+    _realm = realm;
+    _realmPromise = null;
+    return realm;
+  }).catch((err) => {
+    _realmPromise = null;
+    throw err;
+  });
+
+  return _realmPromise;
+};
+
+/**
+ * Hazir instance'i senkron doner. Yoksa null — caller try/catch ile korumali.
+ * Yalnizca realm kesinlikle hazir olduktan sonra cagrilan yerlerde kullanilir.
+ */
+const getRealmSync = (): Realm | null => {
+  if (_realm && !_realm.isClosed) return _realm;
+  return null;
 };
 
 export const closeRealm = (): void => {
@@ -73,36 +117,49 @@ export const closeRealm = (): void => {
     _realm.close();
     _realm = null;
   }
+  _realmPromise = null;
 };
 
 // ---------------------------------------------------------------------------
-// Session servisi
+// realmService
 // ---------------------------------------------------------------------------
 
 export const realmService = {
   /**
-   * Realm'deki sessionları ChatListItem[] olarak döner.
-   * syncedAt: en son yazılan kaydın zamanı (initialDataUpdatedAt için).
+   * Realm'i arka planda acar — app init sirasinda (splash / _layout mount)
+   * cagirilmali. Boylece ilk getSessions() geldiginde instance hazir olur.
+   */
+  prefetch(): void {
+    void openRealm();
+  },
+
+  /**
+   * Realm'deki sessionlari ChatListItem[] olarak doner.
+   * Instance hazir degilse bos doner (React Query staleTime ile tekrar dener).
    */
   getSessions(): { items: ChatListItem[]; syncedAt: number } {
     try {
-      const realm = getRealmInstance();
-      const sessions = realm.objects<RealmSession>('RealmSession')
-        .sorted('lastMessageAt', true); // en yeni önce
+      const realm = getRealmSync();
+      if (!realm) return { items: [], syncedAt: 0 };
+
+      const sessions = realm
+        .objects<RealmSession>('RealmSession')
+        .sorted('lastMessageAt', true);
 
       if (sessions.length === 0) return { items: [], syncedAt: 0 };
 
-      const items: ChatListItem[] = Array.from(sessions).map((s) => ({
+      const arr = Array.from(sessions);
+      const items: ChatListItem[] = arr.map((s) => ({
         id: s._id,
         title: s.title,
         provider: s.provider,
         model: s.model,
         createdAt: s.lastMessageAt,
         updatedAt: s.lastMessageAt,
-        lastMessagePreview: '',
+        lastMessagePreview: s.lastMessagePreview ?? '',
       }));
 
-      const syncedAt = Math.max(...Array.from(sessions).map((s) => s.syncedAt));
+      const syncedAt = Math.max(...arr.map((s) => s.syncedAt));
       return { items, syncedAt };
     } catch {
       return { items: [], syncedAt: 0 };
@@ -110,12 +167,12 @@ export const realmService = {
   },
 
   /**
-   * Sessionları Realm'e kaydeder.
-   * Upsert yapar, max 20 kuralını uygular (en eski silinir).
+   * Sessionlari Realm'e kaydeder (upsert + max 20 kurali).
+   * Async — JS thread'ini bloklamaz.
    */
-  saveSessions(items: ChatListItem[]): void {
+  async saveSessions(items: ChatListItem[]): Promise<void> {
     try {
-      const realm = getRealmInstance();
+      const realm = await openRealm();
       const now = Date.now();
 
       realm.write(() => {
@@ -128,14 +185,15 @@ export const realmService = {
               provider: item.provider,
               model: item.model,
               lastMessageAt: item.updatedAt,
+              lastMessagePreview: item.lastMessagePreview ?? '',
               syncedAt: now,
             },
             Realm.UpdateMode.Modified,
           );
         }
 
-        // max 20 kural — en eskiyi sil
-        const all = realm.objects<RealmSession>('RealmSession')
+        const all = realm
+          .objects<RealmSession>('RealmSession')
           .sorted('lastMessageAt', true);
         if (all.length > MAX_SESSIONS) {
           const toDelete = Array.from(all).slice(MAX_SESSIONS);
@@ -143,34 +201,37 @@ export const realmService = {
         }
       });
     } catch {
-      // Realm yazma hatası — sessizce geç
+      // Realm yazma hatasi — sessizce gec
     }
   },
 
-  // ---------------------------------------------------------------------------
-  // Message servisi
-  // ---------------------------------------------------------------------------
-
   /**
-   * Verilen sessionId'ye ait mesajları döner.
+   * Mesajlari doner. Instance hazir degilse bos doner.
    */
   getMessages(sessionId: string): { messages: ChatMessage[]; syncedAt: number } {
     try {
-      const realm = getRealmInstance();
-      const msgs = realm.objects<RealmMessage>('RealmMessage')
+      const realm = getRealmSync();
+      if (!realm) return { messages: [], syncedAt: 0 };
+
+      // oldest→newest (ascending createdAt) — API ile aynı sıra
+      const msgs = realm
+        .objects<RealmMessage>('RealmMessage')
         .filtered('sessionId == $0', sessionId)
-        .sorted('createdAt', false); // en eski önce
+        .sorted('createdAt', false);
 
       if (msgs.length === 0) return { messages: [], syncedAt: 0 };
 
-      const messages: ChatMessage[] = Array.from(msgs).map((m) => ({
+      const arr = Array.from(msgs);
+      const messages: ChatMessage[] = arr.map((m) => ({
+        id: m._id,
         role: m.role as 'user' | 'assistant',
         content: m.content,
-        provider: '',
-        model: '',
+        provider: '' as string,
+        model: '' as string,
+        createdAt: m.createdAt,
       }));
 
-      const syncedAt = Math.max(...Array.from(msgs).map((m) => m.syncedAt));
+      const syncedAt = Math.max(...arr.map((m) => m.syncedAt));
       return { messages, syncedAt };
     } catch {
       return { messages: [], syncedAt: 0 };
@@ -178,59 +239,83 @@ export const realmService = {
   },
 
   /**
-   * Mesajları Realm'e kaydeder.
-   * Upsert yapar, session başına max 20 kural uygular.
+   * Mesajlari Realm'e kaydeder (upsert + max 20 kurali).
+   * Async — JS thread'ini bloklamaz.
    */
-  saveMessages(sessionId: string, messages: ChatMessage[]): void {
+  async saveMessages(sessionId: string, messages: ChatMessage[]): Promise<void> {
     try {
-      const realm = getRealmInstance();
+      const realm = await openRealm();
       const now = Date.now();
 
       realm.write(() => {
         for (let i = 0; i < messages.length; i++) {
           const msg = messages[i];
+          const msgCreatedAt = msg.createdAt ?? new Date(now + i).toISOString();
+          // _id: API id varsa kullan (upsert güvenli), yoksa sessionId+createdAt bazlı sabit key
+          // createdAt sabit olduğu sürece aynı mesaj her zaman aynı _id üretir → duplicate yok
+          const msgId = msg.id ?? `${sessionId}__${msgCreatedAt}__${msg.role}`;
           realm.create<RealmMessage>(
             'RealmMessage',
             {
-              _id: `${sessionId}_${i}_${msg.role}`,
+              _id: msgId,
               sessionId,
               role: msg.role,
               content: msg.content,
-              createdAt: new Date(now + i).toISOString(),
+              createdAt: msgCreatedAt,
               syncedAt: now,
             },
-            Realm.UpdateMode.Modified,
+            Realm.UpdateMode.Modified, // aynı _id varsa güncelle, yoksa ekle
           );
         }
 
-        // max 20 kural — en eskiyi sil
-        const all = realm.objects<RealmMessage>('RealmMessage')
+        // Max 20 kural — en eski mesajları sil
+        const all = realm
+          .objects<RealmMessage>('RealmMessage')
           .filtered('sessionId == $0', sessionId)
-          .sorted('createdAt', true);
+          .sorted('createdAt', true); // newest first
         if (all.length > MAX_MESSAGES_PER_SESSION) {
           const toDelete = Array.from(all).slice(MAX_MESSAGES_PER_SESSION);
           for (const m of toDelete) realm.delete(m);
         }
       });
     } catch {
-      // sessizce geç
+      // sessizce gec
     }
   },
 
   /**
-   * Belirli bir session'ın mesajlarını Realm'den siler.
-   * Session değişince çağrılır.
+   * Session'i ve tum mesajlarini Realm'den siler. Async.
    */
-  clearSessionMessages(sessionId: string): void {
+  async deleteSession(sessionId: string): Promise<void> {
     try {
-      const realm = getRealmInstance();
+      const realm = await openRealm();
       realm.write(() => {
-        const msgs = realm.objects<RealmMessage>('RealmMessage')
+        const session = realm.objectForPrimaryKey<RealmSession>('RealmSession', sessionId);
+        if (session) realm.delete(session);
+        const msgs = realm
+          .objects<RealmMessage>('RealmMessage')
           .filtered('sessionId == $0', sessionId);
         realm.delete(msgs);
       });
     } catch {
-      // sessizce geç
+      // sessizce gec
+    }
+  },
+
+  /**
+   * Session mesajlarini siler. Async.
+   */
+  async clearSessionMessages(sessionId: string): Promise<void> {
+    try {
+      const realm = await openRealm();
+      realm.write(() => {
+        const msgs = realm
+          .objects<RealmMessage>('RealmMessage')
+          .filtered('sessionId == $0', sessionId);
+        realm.delete(msgs);
+      });
+    } catch {
+      // sessizce gec
     }
   },
 };

@@ -31,6 +31,7 @@ import React, {
   useState,
 } from 'react';
 import {
+  Alert,
   LayoutChangeEvent,
   Modal,
   Platform,
@@ -45,6 +46,7 @@ import { BlurView } from 'expo-blur';
 import Animated, {
   FadeIn,
   FadeOut,
+  interpolate,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
@@ -55,7 +57,6 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { FlashList } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useQueryClient } from '@tanstack/react-query';
 
 import { Text } from '@/atoms/Text';
 import { Button } from '@/atoms/Button';
@@ -66,14 +67,17 @@ import { AppHeader } from '@/organisms/AppHeader';
 import { useTheme } from '@/hooks/useTheme';
 import { useHaptics } from '@/hooks/useHaptics';
 import { useI18n } from '@/hooks/useI18n';
-import { useInfiniteChatsQuery, useSearchChatsQuery, CHAT_QUERY_KEYS } from '@/hooks/api/useChats';
-import { ChatListItem, ChatSearchResultItem, PaginatedChatsResponse } from '@/types/chat.api.types';
+import { useAppDispatch } from '@/store/hooks';
+import { setSessionId } from '@/store/slices/chatSlice';
+import { useDeleteChatMutation } from '@/hooks/api/useChats';
+import { useChatHistory } from '@/hooks/useChatHistory';
 import { realmService } from '@/services/realm';
+import { ChatListItem, ChatSearchResultItem, PaginatedChatsResponse } from '@/types/chat.api.types';
+import { toast } from '@/lib/toast';
 import { palette } from '@/constants/colors';
 import { radius, shadow, spacing } from '@/constants/spacing';
 import { scale, verticalScale } from '@/lib/responsive';
 import { fontFamily } from '@/constants/typography';
-import type { InfiniteData } from '@tanstack/react-query';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -90,27 +94,21 @@ type ContextMenuState = {
   chat: ChatListItem;
   pageY: number;
   pageH: number;
+  pageX: number;
+  pageW: number;
 } | null;
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-const ITEM_HEIGHT = 108;
 const SPRING_CONFIG = { damping: 28, stiffness: 300, mass: 0.8 } as const;
 const CLOSE_THRESHOLD = 80;
 const SWIPE_VELOCITY_THRESHOLD = 600;
 const CONTEXT_MENU_WIDTH = 200;
 const CONTEXT_MENU_HEIGHT = 108;
-const MAX_RECENT_SEARCHES = 10;
-
-const MOCK_RECENT_SEARCHES: string[] = [
-  'İstanbul uçuş saatleri',
-  'Bagaj kuralları',
-  'Miles&Smiles puan',
-  'Vize gereksinimleri',
-  'Online check-in',
-];
+const SWIPE_ACTION_WIDTH = 130; // Sil + Arşivle butonları toplam genişlik
+const SWIPE_OPEN_THRESHOLD = 60; // Bu kadar sürüklendikten sonra snap-open
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -174,7 +172,11 @@ const ModelChip = React.memo(({ model, color, isDark }: { model: string; color: 
 interface ChatHistoryItemProps {
   item: ChatListItem;
   onPress: () => void;
-  onLongPress: (pageY: number, pageH: number) => void;
+  onLongPress: (pageY: number, pageH: number, pageX: number, pageW: number) => void;
+  onDelete: () => void;
+  onArchive: () => void;
+  isHighlighted: boolean;
+  isDeleting: boolean;
   textColor: string;
   textSecondary: string;
   borderColor: string;
@@ -182,48 +184,137 @@ interface ChatHistoryItemProps {
 }
 
 const ChatHistoryItem = React.memo<ChatHistoryItemProps>(
-  ({ item, onPress, onLongPress, textColor, textSecondary, borderColor, isDark }) => {
+  ({ item, onPress, onLongPress, onDelete, onArchive, isHighlighted, isDeleting, textColor, textSecondary, borderColor, isDark }) => {
     const itemRef = useRef<View>(null);
+    const swipeX = useSharedValue(0);
+    const isSwipeOpen = useSharedValue(false);
+    const deleteProgress = useSharedValue(1); // 1=görünür, 0=silinmiş
+
+    // Silme animasyonu — opacity + height collapse
+    useEffect(() => {
+      if (isDeleting) {
+        deleteProgress.value = withTiming(0, { duration: 220 });
+      }
+    }, [isDeleting, deleteProgress]);
+
+    const deleteAnimStyle = useAnimatedStyle(() => ({
+      opacity: deleteProgress.value,
+      maxHeight: interpolate(deleteProgress.value, [0, 1], [0, 200]),
+      overflow: 'hidden',
+    }));
 
     const handleLongPress = useCallback(() => {
-      itemRef.current?.measureInWindow((_x, y, _w, h) => {
-        onLongPress(y, h);
+      itemRef.current?.measureInWindow((x, y, w, h) => {
+        onLongPress(y, h, x, w);
       });
     }, [onLongPress]);
+
+    const closeSwipe = useCallback(() => {
+      swipeX.value = withSpring(0, { damping: 20, stiffness: 200 });
+      isSwipeOpen.value = false;
+    }, [swipeX, isSwipeOpen]);
+
+    const handleDelete = useCallback(() => {
+      closeSwipe();
+      onDelete();
+    }, [closeSwipe, onDelete]);
+
+    const handleArchive = useCallback(() => {
+      closeSwipe();
+      onArchive();
+    }, [closeSwipe, onArchive]);
+
+    const swipeGesture = useMemo(() =>
+      Gesture.Pan()
+        .activeOffsetX([-8, 8])
+        .failOffsetY([-10, 10])
+        .onUpdate((e) => {
+          'worklet';
+          const base = isSwipeOpen.value ? -SWIPE_ACTION_WIDTH : 0;
+          const next = Math.min(0, Math.max(-SWIPE_ACTION_WIDTH, base + e.translationX));
+          swipeX.value = next;
+        })
+        .onEnd((e) => {
+          'worklet';
+          const isOpenEnough = swipeX.value < -SWIPE_OPEN_THRESHOLD;
+          const isFastSwipe = e.velocityX < -400;
+          if (isOpenEnough || isFastSwipe) {
+            swipeX.value = withSpring(-SWIPE_ACTION_WIDTH, { damping: 20, stiffness: 200 });
+            isSwipeOpen.value = true;
+          } else {
+            swipeX.value = withSpring(0, { damping: 20, stiffness: 200 });
+            isSwipeOpen.value = false;
+          }
+        }),
+    [swipeX, isSwipeOpen]);
+
+    const rowAnimatedStyle = useAnimatedStyle(() => ({
+      transform: [{ translateX: swipeX.value }],
+    }));
+
+    const actionsOpacity = useAnimatedStyle(() => ({
+      opacity: interpolate(swipeX.value, [-SWIPE_ACTION_WIDTH, 0], [1, 0]),
+    }));
 
     const providerColor = getProviderColor(item.provider);
     const providerIcon = getProviderIcon(item.provider);
 
     return (
-      <View ref={itemRef}>
-        <TouchableOpacity
-          style={[styles.item, { borderBottomColor: borderColor + 'AA' }]}
-          onPress={onPress}
-          onLongPress={handleLongPress}
-          delayLongPress={350}
-          activeOpacity={0.7}
-        >
-          <View style={[styles.providerAvatar, { backgroundColor: providerColor + '1A' }]}>
-            <Ionicons name={providerIcon} size={scale(16)} color={providerColor} />
-          </View>
-          <View style={styles.itemContent}>
-            <View style={styles.itemTitleRow}>
-              <Text style={[styles.itemTitle, { color: textColor }]} numberOfLines={1}>
-                {item.title}
-              </Text>
-              <Text style={[styles.itemTime, { color: textSecondary }]}>
-                {getRelativeTime(item.updatedAt)}
-              </Text>
-            </View>
-            <Text style={[styles.itemPreview, { color: textSecondary }]} numberOfLines={2}>
-              {item.lastMessagePreview}
-            </Text>
-            <View style={styles.chipRow}>
-              <ModelChip model={item.model} color={providerColor} isDark={isDark} />
-            </View>
-          </View>
-        </TouchableOpacity>
+      <Animated.View style={deleteAnimStyle}>
+      <View ref={itemRef} style={styles.swipeContainer}>
+        {/* Arka plan: Arşivle + Sil butonları */}
+        <Animated.View style={[styles.swipeActions, actionsOpacity]}>
+          <TouchableOpacity style={styles.swipeArchive} onPress={handleArchive} activeOpacity={0.8}>
+            <Ionicons name="archive-outline" size={scale(18)} color="#fff" />
+            <Text style={styles.swipeActionLabel}>Arşivle</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.swipeDelete} onPress={handleDelete} activeOpacity={0.8}>
+            <Ionicons name="trash-outline" size={scale(18)} color="#fff" />
+            <Text style={styles.swipeActionLabel}>Sil</Text>
+          </TouchableOpacity>
+        </Animated.View>
+
+        {/* Row içeriği */}
+        <GestureDetector gesture={swipeGesture}>
+          <Animated.View style={rowAnimatedStyle}>
+            <TouchableOpacity
+              style={[
+                styles.item,
+                { borderBottomColor: borderColor + 'AA' },
+                isHighlighted && styles.itemHighlighted,
+              ]}
+              onPress={() => {
+                if (isSwipeOpen.value) { closeSwipe(); return; }
+                onPress();
+              }}
+              onLongPress={handleLongPress}
+              delayLongPress={350}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.providerAvatar, { backgroundColor: providerColor + '1A' }]}>
+                <Ionicons name={providerIcon} size={scale(16)} color={providerColor} />
+              </View>
+              <View style={styles.itemContent}>
+                <View style={styles.itemTitleRow}>
+                  <Text style={[styles.itemTitle, { color: textColor }]} numberOfLines={1}>
+                    {item.title}
+                  </Text>
+                  <Text style={[styles.itemTime, { color: textSecondary }]}>
+                    {getRelativeTime(item.updatedAt)}
+                  </Text>
+                </View>
+                <Text style={[styles.itemPreview, { color: textSecondary }]} numberOfLines={2}>
+                  {item.lastMessagePreview}
+                </Text>
+                <View style={styles.chipRow}>
+                  <ModelChip model={item.model} color={providerColor} isDark={isDark} />
+                </View>
+              </View>
+            </TouchableOpacity>
+          </Animated.View>
+        </GestureDetector>
       </View>
+      </Animated.View>
     );
   },
 );
@@ -270,32 +361,54 @@ const ContextMenuOverlay = React.memo(({
   t: (k: string) => string;
 }) => {
   const { height: screenHeight } = useWindowDimensions();
-  const menuTop = contextMenu.pageY + contextMenu.pageH + 6;
-  const clampedTop = menuTop + CONTEXT_MENU_HEIGHT > screenHeight
-    ? contextMenu.pageY - CONTEXT_MENU_HEIGHT - 6
-    : menuTop;
-  const menuLeft = (panelWidth - CONTEXT_MENU_WIDTH) / 2;
+
+  // Menüyü row'un hemen üstüne koy; sığmazsa altına al
+  // Row ortasına hizala, biraz yukarı çek — responsive (pageH bazlı)
+  const menuAbove = contextMenu.pageY + contextMenu.pageH / 2 - CONTEXT_MENU_HEIGHT / 2 - contextMenu.pageH * -0.2;
+  const menuBelow = contextMenu.pageY + contextMenu.pageH + 4;
+  const clampedTop = menuAbove >= 0 ? menuAbove : menuBelow;
+
+  // Menüyü row'un ortasına hizala, panel sınırına taşmasın
+  const menuLeft = Math.min(
+    Math.max(8, contextMenu.pageX + (contextMenu.pageW - CONTEXT_MENU_WIDTH) / 2),
+    panelWidth - CONTEXT_MENU_WIDTH - 8,
+  );
 
   return (
     <Animated.View
-      style={StyleSheet.absoluteFill}
-      entering={FadeIn.duration(160)}
-      exiting={FadeOut.duration(140)}
+      style={[styles.contextOverlayWrapper, { width: panelWidth }]}
+      entering={FadeIn.duration(140)}
+      exiting={FadeOut.duration(120)}
     >
-      <Pressable style={StyleSheet.absoluteFill} onPress={onDismiss}>
+      {/* Dismiss alanı — transparan, blur yok */}
+      <Pressable style={StyleSheet.absoluteFill} onPress={onDismiss} />
+
+      {/* Sadece row blur — pageY/pageH koordinatlarına göre konumlu */}
+      <View
+        pointerEvents="none"
+        style={{
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          top: contextMenu.pageY,
+          height: contextMenu.pageH,
+          overflow: 'hidden',
+        }}
+      >
         {Platform.OS === 'ios' ? (
           <BlurView
-            intensity={isDark ? 40 : 30}
+            intensity={isDark ? 10 : 6}
             tint={isDark ? 'dark' : 'light'}
             style={StyleSheet.absoluteFill}
           />
         ) : (
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.45)' }]} />
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(128,128,128,0.10)' }]} />
         )}
-      </Pressable>
+      </View>
 
+      {/* Floating menü */}
       <Animated.View
-        entering={FadeIn.springify().damping(22).stiffness(280)}
+        entering={FadeIn.springify().damping(20).stiffness(300)}
         style={[styles.contextMenu, { top: clampedTop, left: menuLeft, backgroundColor: surfaceColor, borderColor }]}
       >
         <TouchableOpacity style={styles.contextItem} onPress={onArchive} activeOpacity={0.75}>
@@ -316,46 +429,116 @@ const ContextMenuOverlay = React.memo(({
 // SearchOverlay — focus olunca tüm listeyi kaplar
 // ---------------------------------------------------------------------------
 
+type QueryState = 'empty' | 'typing' | 'ready';
+
 interface SearchOverlayProps {
-  query: string;
-  recentSearches: string[];
+  queryState: QueryState;
+  queryText: string; // sadece empty state gösterimi için
   isSearching: boolean;
   isFetchingNext: boolean;
   hasNext: boolean;
   searchResults: ChatSearchResultItem[];
+  focusInitialSessions: ChatListItem[];
   topOffset: number;
   onLoadMore: () => void;
-  onSelectRecent: (term: string) => void;
-  onClearRecent: (term: string) => void;
   onSelectResult: (item: ChatSearchResultItem) => void;
+  onSelectSession: (item: ChatListItem) => void;
   textColor: string;
   textSecondary: string;
   borderColor: string;
   backgroundColor: string;
-  isDark: boolean;
   t: (k: string, opts?: Record<string, string>) => string;
 }
 
 const SearchOverlay = React.memo(({
-  query,
-  recentSearches,
+  queryState,
+  queryText,
   isSearching,
   isFetchingNext,
   hasNext,
   searchResults,
+  focusInitialSessions,
   topOffset,
   onLoadMore,
-  onSelectRecent,
-  onClearRecent,
   onSelectResult,
+  onSelectSession,
   textColor,
   textSecondary,
   borderColor,
   backgroundColor,
-  isDark,
   t,
 }: SearchOverlayProps) => {
-  const hasQuery = query.trim().length > 0;
+
+  const renderSearchResult = useCallback(({ item }: { item: ChatSearchResultItem }) => (
+    <TouchableOpacity
+      style={[styles.item, { borderBottomColor: borderColor + 'AA' }]}
+      onPress={() => onSelectResult(item)}
+      activeOpacity={0.7}
+    >
+      <View style={[styles.providerAvatar, { backgroundColor: palette.primary + '1A' }]}>
+        <Ionicons name="search" size={scale(14)} color={palette.primary} />
+      </View>
+      <View style={styles.itemContent}>
+        <View style={styles.itemTitleRow}>
+          <Text style={[styles.itemTitle, { color: textColor }]} numberOfLines={1}>
+            {item.title}
+          </Text>
+          <Text style={[styles.itemTime, { color: textSecondary }]}>
+            {getRelativeTime(item.lastMessageAt)}
+          </Text>
+        </View>
+        {item.matchedContent ? (
+          <Text style={[styles.itemPreview, { color: textSecondary }]} numberOfLines={2}>
+            {item.matchedContent}
+          </Text>
+        ) : null}
+      </View>
+    </TouchableOpacity>
+  ), [borderColor, textColor, textSecondary, onSelectResult]);
+
+  const renderRecentSession = useCallback(({ item }: { item: ChatListItem }) => {
+    const providerColor = getProviderColor(item.provider);
+    return (
+      <TouchableOpacity
+        style={[styles.item, { borderBottomColor: borderColor + 'AA' }]}
+        onPress={() => onSelectSession(item)}
+        activeOpacity={0.7}
+      >
+        <View style={[styles.providerAvatar, { backgroundColor: providerColor + '1A' }]}>
+          <Ionicons name={getProviderIcon(item.provider)} size={scale(16)} color={providerColor} />
+        </View>
+        <View style={styles.itemContent}>
+          <View style={styles.itemTitleRow}>
+            <Text style={[styles.itemTitle, { color: textColor }]} numberOfLines={1}>
+              {item.title}
+            </Text>
+            <Text style={[styles.itemTime, { color: textSecondary }]}>
+              {getRelativeTime(item.updatedAt)}
+            </Text>
+          </View>
+          <Text style={[styles.itemPreview, { color: textSecondary }]} numberOfLines={1}>
+            {item.lastMessagePreview || item.model}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    );
+  }, [borderColor, textColor, textSecondary, onSelectSession]);
+
+  const searchFooter = useMemo(() => {
+    if (isFetchingNext) return <View style={styles.footerLoader}><Spinner size="small" color={palette.primary} /></View>;
+    if (!hasNext && searchResults.length > 0) return (
+      <View style={styles.footerLoader}>
+        <Text style={[styles.searchHint, { color: textSecondary }]}>Tüm sonuçlar gösterildi</Text>
+      </View>
+    );
+    return null;
+  }, [isFetchingNext, hasNext, searchResults.length, textSecondary]);
+
+  const recentHeader = useMemo(() => (
+    <Text style={[styles.sectionTitle, { color: textSecondary }]}>
+      {t('chatHistory.recentSection')}
+    </Text>
+  ), [textSecondary, t]);
 
   return (
     <Animated.View
@@ -363,8 +546,8 @@ const SearchOverlay = React.memo(({
       entering={FadeIn.duration(180)}
       exiting={FadeOut.duration(140)}
     >
-      {hasQuery ? (
-        // --- Arama sonuçları ---
+      {queryState === 'ready' ? (
+        // --- API arama sonuçları (>= 2 karakter) ---
         isSearching ? (
           <View style={styles.searchLoading}>
             <ActivityThyLoading mode="float" size={48} />
@@ -376,89 +559,50 @@ const SearchOverlay = React.memo(({
               Sonuç bulunamadı
             </Text>
             <Text style={[styles.searchHint, { color: textSecondary }]}>
-              "{query}" için eşleşme yok
+              "{queryText}" için eşleşme yok
             </Text>
           </View>
         ) : (
-          <FlashList
-            data={searchResults}
-            keyExtractor={(item) => item.sessionId}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.listContent}
-            onEndReachedThreshold={0.2}
-            onEndReached={() => { if (hasNext && !isFetchingNext) onLoadMore(); }}
-            ListFooterComponent={
-              isFetchingNext ? (
-                <View style={styles.footerLoader}>
-                  <Spinner size="small" color={palette.primary} />
-                </View>
-              ) : null
-            }
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={[styles.item, { borderBottomColor: borderColor + 'AA' }]}
-                onPress={() => onSelectResult(item)}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.providerAvatar, { backgroundColor: palette.primary + '1A' }]}>
-                  <Ionicons name="search" size={scale(14)} color={palette.primary} />
-                </View>
-                <View style={styles.itemContent}>
-                  <View style={styles.itemTitleRow}>
-                    <Text style={[styles.itemTitle, { color: textColor }]} numberOfLines={1}>
-                      {item.title}
-                    </Text>
-                    <Text style={[styles.itemTime, { color: textSecondary }]}>
-                      {getRelativeTime(item.lastMessageAt)}
-                    </Text>
-                  </View>
-                  {item.matchedContent && (
-                    <Text style={[styles.itemPreview, { color: textSecondary }]} numberOfLines={2}>
-                      {item.matchedContent}
-                    </Text>
-                  )}
-                </View>
-              </TouchableOpacity>
-            )}
-          />
+          <View style={styles.overlayList}>
+            <FlashList
+              data={searchResults}
+              keyExtractor={(item) => item.sessionId}
+              renderItem={renderSearchResult}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.listContent}
+              onEndReachedThreshold={0.3}
+              onEndReached={() => { if (hasNext && !isFetchingNext) onLoadMore(); }}
+              ListFooterComponent={searchFooter}
+            />
+          </View>
         )
+      ) : queryState === 'typing' ? (
+        // --- 1 karakter: bekle ---
+        <View style={styles.searchLoading}>
+          <Text style={[styles.searchHint, { color: textSecondary }]}>
+            Aramak için en az 2 karakter girin
+          </Text>
+        </View>
+      ) : focusInitialSessions.length === 0 ? (
+        // --- Boş query + Realm boş ---
+        <View style={styles.searchLoading}>
+          <Ionicons name="chatbubbles-outline" size={40} color={palette.gray300} />
+          <Text style={[styles.searchHint, { color: textSecondary, marginTop: spacing[3] }]}>
+            Henüz sohbet bulunmuyor
+          </Text>
+        </View>
       ) : (
-        // --- Son aramalar ---
-        recentSearches.length === 0 ? (
-          <View style={styles.searchLoading}>
-            <Text style={[styles.searchHint, { color: textSecondary }]}>
-              {t('chatHistory.noRecentSearches')}
-            </Text>
-          </View>
-        ) : (
+        // --- Boş query: Realm'den son 20 session ---
+        <View style={styles.overlayList}>
           <FlashList
-            data={recentSearches}
-            keyExtractor={(item) => item}
+            data={focusInitialSessions}
+            keyExtractor={(item) => item.id}
+            renderItem={renderRecentSession}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.listContent}
-            ListHeaderComponent={
-              <Text style={[styles.sectionTitle, { color: textSecondary }]}>{t('chatHistory.recentSection')}</Text>
-            }
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={[styles.recentItem, { borderBottomColor: borderColor + '55' }]}
-                onPress={() => onSelectRecent(item)}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="time-outline" size={scale(15)} color={textSecondary} style={styles.recentIcon} />
-                <Text style={[styles.recentText, { color: textColor }]} numberOfLines={1}>
-                  {item}
-                </Text>
-                <TouchableOpacity
-                  onPress={() => onClearRecent(item)}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Ionicons name="close" size={scale(14)} color={textSecondary} />
-                </TouchableOpacity>
-              </TouchableOpacity>
-            )}
+            ListHeaderComponent={recentHeader}
           />
-        )
+        </View>
       )}
     </Animated.View>
   );
@@ -477,9 +621,9 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
   const { colors, isDark } = useTheme();
   const { t } = useI18n();
   const haptics = useHaptics();
-  const queryClient = useQueryClient();
+  const dispatch = useAppDispatch();
   const insets = useSafeAreaInsets();
-  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const { width: windowWidth } = useWindowDimensions();
 
   const DRAWER_WIDTH = windowWidth * 0.85;
 
@@ -500,6 +644,9 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
   const [modalVisible, setModalVisible] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
   const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const { mutate: deleteChatMutate } = useDeleteChatMutation();
 
   // Fixed area height (header + toolbar) — SearchOverlay top offset
   const [fixedAreaHeight, setFixedAreaHeight] = useState(0);
@@ -509,52 +656,57 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
   const [searchFocused, setSearchFocused] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
-  const [recentSearches, setRecentSearches] = useState<string[]>(MOCK_RECENT_SEARCHES);
   const searchInputRef = useRef<SearchInputRef>(null);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Search API — 2+ karakter, debounce 400ms
-  const {
-    data: searchData,
-    isLoading: isSearching,
-    isFetchingNextPage: isSearchFetchingNext,
-    hasNextPage: searchHasNext,
-    fetchNextPage: searchFetchNext,
-  } = useSearchChatsQuery(debouncedQuery);
-
-  const searchResults = useMemo(
-    () => searchData?.pages.flatMap((p) => p.items) ?? [],
-    [searchData],
-  );
 
   // Toolbar animation — newChat slides out on focus
   const newChatOpacity = useSharedValue(1);
   const newChatMaxHeight = useSharedValue(48);
 
-  // React Query
+  // Data — useChatHistory tum Realm/API/sync logic'ini yonetir
   const {
-    data,
+    sessions,
     isLoading,
     isRefetching,
     isFetchingNextPage,
     hasNextPage,
     fetchNextPage,
     refetch,
-  } = useInfiniteChatsQuery();
+    searchResults,
+    isSearching,
+    isSearchFetchingNextPage: isSearchFetchingNext,
+    searchFetchNextPage: searchFetchNext,
+    searchHasNextPage: searchHasNext,
+  } = useChatHistory(debouncedQuery);
+
+  // Search focus'a gelince Realm'den canlı oku — drawer zaten açık, Realm hazır olur
+  const [focusInitialSessions, setFocusInitialSessions] = useState<ChatListItem[]>([]);
+  useEffect(() => {
+    if (searchFocused) {
+      setFocusInitialSessions(realmService.getSessions().items);
+    }
+  }, [searchFocused]);
+
+  // QueryState: debouncedQuery'e göre hesapla — kullanıcı yazarken overlay re-render olmaz,
+  // sadece debounce bitince (400ms) 'ready' geçişi olur ve API sorgusu tetiklenir.
+  // searchQuery.length > 0 iken 'typing' göster ki kullanıcı feedback alsın.
+  const queryState = useMemo((): QueryState => {
+    const rawLen = searchQuery.trim().length;
+    const debouncedLen = debouncedQuery.trim().length;
+    if (rawLen === 0) return 'empty';
+    if (debouncedLen < 2) return 'typing';
+    return 'ready';
+  }, [searchQuery, debouncedQuery]);
 
   const chats = useMemo(
-    () => (data?.pages.flatMap((p) => p.items ?? []) ?? []).filter((c) => c?.id && !deletedIds.has(c.id)),
-    [data, deletedIds],
+    () => sessions.filter((c) => c?.id && !deletedIds.has(c.id)),
+    [sessions, deletedIds],
   );
 
-  // Session listesi API'den gelince Realm'e kaydet
-  useEffect(() => {
-    if (!data) return;
-    const allItems = data.pages.flatMap((p) => p.items ?? []).filter((c) => c?.id);
-    if (allItems.length > 0) realmService.saveSessions(allItems);
-  }, [data]);
-
-  const extraData = useMemo(() => ({ deletedIds, colors }), [deletedIds, colors]);
+  const extraData = useMemo(
+    () => ({ deletedIds, colors, highlightedId: contextMenu?.chat.id, deletingId }),
+    [deletedIds, colors, contextMenu, deletingId],
+  );
 
   // ---------------------------------------------------------------------------
   // Open / Close animations
@@ -590,7 +742,7 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
   const panGesture = useMemo(
     () =>
       Gesture.Pan()
-        .activeOffsetX([-8, 8])
+        .activeOffsetX([-12, 999])
         .failOffsetY([-15, 15])
         .onUpdate((e) => {
           'worklet';
@@ -657,39 +809,18 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
     }, 400);
   }, []);
 
-  const handleSelectRecent = useCallback((term: string) => {
-    setSearchQuery(term);
-    handleSearchChange(term);
-  }, [handleSearchChange]);
-
-  const handleClearRecent = useCallback((term: string) => {
-    setRecentSearches((prev) => prev.filter((t) => t !== term));
-  }, []);
-
   const handleSelectSearchResult = useCallback((item: ChatSearchResultItem) => {
-    // Arama geçmişine ekle
-    if (searchQuery.trim()) {
-      setRecentSearches((prev) => {
-        const filtered = prev.filter((t) => t !== searchQuery.trim());
-        return [searchQuery.trim(), ...filtered].slice(0, MAX_RECENT_SEARCHES);
-      });
-    }
     searchInputRef.current?.blur();
     setSearchFocused(false);
     setSearchQuery('');
     setDebouncedQuery('');
-    // ChatListItem shape'ine map et — sessionId → id
-    onSelectChat?.({
-      id: item.sessionId,
-      title: item.title,
-      provider: '',
-      model: '',
-      createdAt: item.sessionCreatedAt,
-      updatedAt: item.sessionUpdatedAt,
-      lastMessagePreview: item.matchedContent ?? '',
-    });
-    onClose();
-  }, [searchQuery, onSelectChat, onClose]);
+    if (onSelectChat) {
+      onSelectChat({ id: item.sessionId } as ChatListItem);
+    } else {
+      dispatch(setSessionId(item.sessionId));
+      onClose();
+    }
+  }, [dispatch, onSelectChat, onClose]);
 
   // ---------------------------------------------------------------------------
   // Chat handlers
@@ -697,86 +828,112 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
 
   const handleSelectChat = useCallback(
     (chat: ChatListItem) => {
-      onSelectChat?.(chat);
-      onClose();
+      if (onSelectChat) {
+        // Caller (index.tsx) loadSession ile yönetiyor — kendi dispatch'imizi çağırma
+        onSelectChat(chat);
+      } else {
+        dispatch(setSessionId(chat.id));
+        onClose();
+      }
     },
-    [onSelectChat, onClose],
+    [dispatch, onSelectChat, onClose],
   );
 
   const handleLongPress = useCallback(
-    (chat: ChatListItem, pageY: number, pageH: number) => {
+    (chat: ChatListItem, pageY: number, pageH: number, pageX: number, pageW: number) => {
       haptics.medium();
-      setContextMenu({ chat, pageY, pageH });
+      setContextMenu({ chat, pageY, pageH, pageX, pageW });
     },
     [haptics],
   );
 
-  const optimisticRemove = useCallback(
-    (chatId: string) => {
-      type IC = InfiniteData<PaginatedChatsResponse>;
-      const previous = queryClient.getQueryData<IC>(CHAT_QUERY_KEYS.chatsList);
-
-      setDeletedIds((prev) => new Set([...prev, chatId]));
-
-      queryClient.setQueryData<IC>(CHAT_QUERY_KEYS.chatsList, (old) => {
-        if (!old) return old;
-        return {
-          ...old,
-          pages: old.pages.map((page) => ({
-            ...page,
-            items: (page.items ?? []).filter((c) => c.id !== chatId),
-          })),
-        };
-      });
-
-      return () => {
-        if (previous) queryClient.setQueryData(CHAT_QUERY_KEYS.chatsList, previous);
-        setDeletedIds((prev) => {
-          const next = new Set(prev);
-          next.delete(chatId);
-          return next;
-        });
-      };
+  // Silme onayı + animasyon + mutation — hem context menu hem swipe için ortak
+  const confirmDelete = useCallback(
+    (item: ChatListItem) => {
+      Alert.alert(
+        t('chatHistory.deleteAlertTitle'),
+        t('chatHistory.deleteAlertMessage', { title: item.title }),
+        [
+          { text: t('chatHistory.deleteAlertCancel'), style: 'cancel' },
+          {
+            text: t('chatHistory.deleteAlertConfirm'),
+            style: 'destructive',
+            onPress: () => {
+              // 1. Animate out başlat
+              setDeletingId(item.id);
+              // 2. Animasyon bitmeden mutation başlat (220ms sonra cache'den kaldır)
+              setTimeout(() => {
+                setDeletedIds((prev) => new Set([...prev, item.id]));
+                setDeletingId(null);
+              }, 220);
+              // 3. Remote sil
+              deleteChatMutate(item.id, {
+                onSuccess: () => {
+                  toast.success(t('chatHistory.deleteSuccess'));
+                },
+                onError: () => {
+                  // Rollback: cache useDeleteChatMutation onError'da zaten restore ediyor
+                  setDeletedIds((prev) => {
+                    const next = new Set(prev);
+                    next.delete(item.id);
+                    return next;
+                  });
+                  toast.error(t('chatHistory.deleteError'));
+                },
+              });
+            },
+          },
+        ],
+      );
     },
-    [queryClient],
+    [t, deleteChatMutate],
   );
 
   const handleDelete = useCallback(() => {
     if (!contextMenu) return;
-    const { id } = contextMenu.chat;
+    const item = contextMenu.chat;
     setContextMenu(null);
-    const rollback = optimisticRemove(id);
-    realmService.clearSessionMessages(id);
-    // TODO: deleteChat(id).catch(() => rollback());
-    void rollback;
-  }, [contextMenu, optimisticRemove]);
+    confirmDelete(item);
+  }, [contextMenu, confirmDelete]);
 
   const handleArchive = useCallback(() => {
     if (!contextMenu) return;
     const { id } = contextMenu.chat;
     setContextMenu(null);
-    const rollback = optimisticRemove(id);
-    // TODO: archiveChat(id).catch(() => rollback());
-    void rollback;
-  }, [contextMenu, optimisticRemove]);
+    // TODO: archiveChat mutation eklenince buraya gelecek
+    setDeletedIds((prev) => new Set([...prev, id]));
+  }, [contextMenu]);
 
   // ---------------------------------------------------------------------------
   // Render item
   // ---------------------------------------------------------------------------
+
+  const handleSwipeDelete = useCallback((item: ChatListItem) => {
+    confirmDelete(item);
+  }, [confirmDelete]);
+
+  const handleSwipeArchive = useCallback((item: ChatListItem) => {
+    // TODO: archiveChat mutation eklenince
+    setDeletedIds((prev) => new Set([...prev, item.id]));
+  }, []);
 
   const renderItem = useCallback(
     ({ item }: { item: ChatListItem }) => (
       <ChatHistoryItem
         item={item}
         onPress={() => handleSelectChat(item)}
-        onLongPress={(pageY, pageH) => handleLongPress(item, pageY, pageH)}
+        onLongPress={(pageY, pageH, pageX, pageW) => handleLongPress(item, pageY, pageH, pageX, pageW)}
+        onDelete={() => handleSwipeDelete(item)}
+        onArchive={() => handleSwipeArchive(item)}
+        isHighlighted={contextMenu?.chat.id === item.id}
+        isDeleting={deletingId === item.id}
         textColor={colors.text}
         textSecondary={colors.textSecondary}
         borderColor={colors.border}
         isDark={isDark}
       />
     ),
-    [handleSelectChat, handleLongPress, colors, isDark],
+    [handleSelectChat, handleLongPress, handleSwipeDelete, handleSwipeArchive, contextMenu, deletingId, colors, isDark],
   );
 
   // ---------------------------------------------------------------------------
@@ -830,6 +987,7 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
                 showCancelOnFocus
                 cancelLabel={t('chatHistory.cancel')}
                 containerStyle={styles.searchInputContainer}
+                themeColors={colors}
               />
               <Animated.View style={[styles.newChatWrap, newChatAnimatedStyle]}>
                 <Button
@@ -887,43 +1045,42 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
           {/* Search overlay — focus olunca liste üstünü kaplar, fixed area altından başlar */}
           {searchFocused && (
             <SearchOverlay
-              query={searchQuery}
-              recentSearches={recentSearches}
+              queryState={queryState}
+              queryText={debouncedQuery}
               isSearching={isSearching}
               isFetchingNext={isSearchFetchingNext}
               hasNext={searchHasNext ?? false}
               searchResults={searchResults}
+              focusInitialSessions={focusInitialSessions}
               topOffset={fixedAreaHeight}
               onLoadMore={searchFetchNext}
-              onSelectRecent={handleSelectRecent}
-              onClearRecent={handleClearRecent}
               onSelectResult={handleSelectSearchResult}
+              onSelectSession={handleSelectChat}
               textColor={colors.text}
               textSecondary={colors.textSecondary}
               borderColor={colors.border}
               backgroundColor={colors.background}
-              isDark={isDark}
-              t={t}
-            />
-          )}
-
-          {/* Context menu overlay */}
-          {contextMenu && (
-            <ContextMenuOverlay
-              contextMenu={contextMenu}
-              onDelete={handleDelete}
-              onArchive={handleArchive}
-              onDismiss={() => setContextMenu(null)}
-              isDark={isDark}
-              surfaceColor={colors.surface}
-              borderColor={colors.border}
-              textColor={colors.text}
-              panelWidth={DRAWER_WIDTH}
               t={t}
             />
           )}
         </Animated.View>
       </GestureDetector>
+
+      {/* Context menu — panel dışında render: overflow:hidden'dan etkilenmiyor, BlurView çalışır */}
+      {contextMenu && (
+        <ContextMenuOverlay
+          contextMenu={contextMenu}
+          onDelete={handleDelete}
+          onArchive={handleArchive}
+          onDismiss={() => setContextMenu(null)}
+          isDark={isDark}
+          surfaceColor={colors.surface}
+          borderColor={colors.border}
+          textColor={colors.text}
+          panelWidth={DRAWER_WIDTH}
+          t={t}
+        />
+      )}
     </Modal>
   );
 };
@@ -1069,6 +1226,49 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: scale(20),
   },
+  // Context overlay — sadece drawer alanı, sağa taşmaz
+  contextOverlayWrapper: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    bottom: 0,
+    // width prop'tan gelir
+  },
+  // Swipe actions
+  swipeContainer: {
+    overflow: 'hidden',
+  },
+  swipeActions: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: SWIPE_ACTION_WIDTH,
+    flexDirection: 'row',
+  },
+  swipeArchive: {
+    flex: 1,
+    backgroundColor: palette.geminiBlue,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  swipeDelete: {
+    flex: 1,
+    backgroundColor: palette.error,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  swipeActionLabel: {
+    color: '#fff',
+    fontSize: scale(10),
+    fontFamily: fontFamily.medium,
+  },
+  // Item highlight — long press yapılan row
+  itemHighlighted: {
+    backgroundColor: 'rgba(128,128,128,0.12)',
+  },
   // Context menu
   contextMenu: {
     position: 'absolute',
@@ -1108,21 +1308,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[3],
   },
-  recentItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing[4],
-    paddingVertical: spacing[3],
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  recentIcon: {
-    marginRight: spacing[3],
-  },
-  recentText: {
-    flex: 1,
-    fontFamily: fontFamily.regular,
-    fontSize: scale(13),
-  },
   searchLoading: {
     flex: 1,
     alignItems: 'center',
@@ -1133,5 +1318,8 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.regular,
     fontSize: scale(13),
     textAlign: 'center',
+  },
+  overlayList: {
+    flex: 1,
   },
 });

@@ -1,71 +1,73 @@
-import React, { useState, useRef } from 'react';
+import { useState, useCallback, type FC, type ReactNode } from 'react';
 import {
   TextInput,
   View,
   StyleSheet,
+  Text as RNText,
   TextInputProps,
   TouchableOpacity,
   Platform,
 } from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  interpolateColor,
-} from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '@/hooks/useTheme';
+import { lightColors, type ThemeColors } from '@/constants/colors';
+import { useHaptics } from '@/hooks/useHaptics';
 import { radius, spacing } from '@/constants/spacing';
 import { fontFamily, fontSize } from '@/constants/typography';
 
 type Props = TextInputProps & {
-  leftIcon?: React.ReactNode;
-  rightIcon?: React.ReactNode;
+  leftIcon?: ReactNode;
+  rightIcon?: ReactNode;
   error?: string;
   secure?: boolean;
+  /** Renk tokenlari — verilmezse lightColors kullanilir (store subscription olmadan) */
+  themeColors?: ThemeColors;
 };
 
-export const Input: React.FC<Props> = ({
+export const Input: FC<Props> = ({
   leftIcon,
   rightIcon,
   error,
   secure,
   style,
+  themeColors,
+  onFocus: onFocusProp,
+  onBlur: onBlurProp,
   ...props
 }) => {
-  const { colors, isDark } = useTheme();
+  const colors = themeColors ?? lightColors;
+  const haptics = useHaptics();
   const [focused, setFocused] = useState(false);
   const [secureVisible, setSecureVisible] = useState(false);
-  const progress = useSharedValue(0);
 
-  const handleFocus = () => {
+  const handleSecureToggle = useCallback(() => {
+    haptics.light();
+    setSecureVisible((v) => !v);
+  }, [haptics]);
+
+  const hasError = typeof error === 'string' && error.length > 0;
+
+  const borderColor = hasError
+    ? colors.error
+    : focused
+      ? colors.primary
+      : colors.border;
+
+  const handleFocus = (e: Parameters<NonNullable<Props['onFocus']>>[0]) => {
     setFocused(true);
-    progress.value = withTiming(1, { duration: 200 });
-    props.onFocus?.(null as any);
+    onFocusProp?.(e);
   };
 
-  const handleBlur = () => {
+  const handleBlur = (e: Parameters<NonNullable<Props['onBlur']>>[0]) => {
     setFocused(false);
-    progress.value = withTiming(0, { duration: 200 });
-    props.onBlur?.(null as any);
+    onBlurProp?.(e);
   };
-
-  const animatedBorder = useAnimatedStyle(() => ({
-    borderColor: interpolateColor(
-      progress.value,
-      [0, 1],
-      [error ? '#EF4444' : colors.border, error ? '#EF4444' : colors.primary],
-    ),
-  }));
 
   return (
     <View>
-      <Animated.View
+      <View
         style={[
           styles.container,
-          { backgroundColor: colors.inputBg },
-          animatedBorder,
-          error ? styles.errorBorder : undefined,
+          { backgroundColor: colors.inputBg, borderColor },
         ]}
       >
         {leftIcon && <View style={styles.iconLeft}>{leftIcon}</View>}
@@ -81,15 +83,15 @@ export const Input: React.FC<Props> = ({
             style,
           ]}
           placeholderTextColor={colors.textSecondary}
-          onFocus={handleFocus}
-          onBlur={handleBlur}
           secureTextEntry={secure && !secureVisible}
           {...props}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
         />
         {secure && (
           <TouchableOpacity
             style={styles.iconRight}
-            onPress={() => setSecureVisible((v) => !v)}
+            onPress={handleSecureToggle}
           >
             <Ionicons
               name={secureVisible ? 'eye-outline' : 'eye-off-outline'}
@@ -99,13 +101,13 @@ export const Input: React.FC<Props> = ({
           </TouchableOpacity>
         )}
         {rightIcon && !secure && <View style={styles.iconRight}>{rightIcon}</View>}
-      </Animated.View>
-      {error ? (
-        <Animated.Text
-          style={[styles.errorText, { color: '#EF4444', fontFamily: fontFamily.regular, fontSize: fontSize.xs }]}
+      </View>
+      {hasError ? (
+        <RNText
+          style={[styles.errorText, { color: colors.error, fontFamily: fontFamily.regular, fontSize: fontSize.xs }]}
         >
           {error}
-        </Animated.Text>
+        </RNText>
       ) : null}
     </View>
   );
@@ -129,9 +131,6 @@ const styles = StyleSheet.create({
   },
   iconRight: {
     marginLeft: spacing[2],
-  },
-  errorBorder: {
-    borderColor: '#EF4444',
   },
   errorText: {
     marginTop: spacing[1],

@@ -45,7 +45,6 @@ import { palette } from '@/constants/colors';
 import { spacing } from '@/constants/spacing';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
-import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { scale, verticalScale, DESIGN_BASE_WIDTH } from '@/lib/responsive';
 import { fontSize, fontFamily } from '@/constants/typography';
 
@@ -121,7 +120,6 @@ export default function OnboardingScreen() {
 
   const { colors } = useTheme();
   const { t } = useI18n();
-  const { skipWithAnonymousLogin } = useSupabaseAuth();
   const [activeIndex, setActiveIndex] = useState(0);
   const [v2ActiveIndex, setV2ActiveIndex] = useState(0);
   const listRef = useRef<FlatList>(null);
@@ -186,17 +184,10 @@ export default function OnboardingScreen() {
     }
   }, [activeIndex, isLast, handleComplete]);
 
-  const isNavigatingRef = useRef(false);
   const handleSkip = useCallback(async () => {
-    if (isNavigatingRef.current) return;
-    isNavigatingRef.current = true;
-    try {
-      await skipWithAnonymousLogin();
-      router.push('/(tabs)');
-    } catch {
-      isNavigatingRef.current = false;
-    }
-  }, [skipWithAnonymousLogin]);
+    mmkvStorage.setBoolean(STORAGE_KEYS.ONBOARDING_DONE, true);
+    router.replace('/(auth)/welcome');
+  }, []);
 
   if (devConfig.onboardingV2Enabled) {
     return (

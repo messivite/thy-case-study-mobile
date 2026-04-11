@@ -34,7 +34,7 @@ import { scale } from '@/lib/responsive';
 import { fontFamily } from '@/constants/typography';
 
 /** Safe area altındaki bar — tüm ekranlarda aynı yükseklik (tab geçişinde zıplama olmasın). */
-const HEADER_ROW_HEIGHT = scale(48);
+const HEADER_ROW_HEIGHT = scale(50);
 
 // ---------------------------------------------------------------------------
 // Types
@@ -83,7 +83,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
     ? Math.min(windowWidth > 0 ? windowWidth : 390, 390) / 390
     : 1;
   const s = (n: number) => Math.round(n * webScale);
-  const rowHeight = Platform.OS === 'web' ? s(48) : HEADER_ROW_HEIGHT;
+  const rowHeight = Platform.OS === 'web' ? s(50) : HEADER_ROW_HEIGHT;
 
   const handleBack = () => {
     haptics.light();

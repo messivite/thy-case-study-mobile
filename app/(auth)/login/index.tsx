@@ -1,9 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import { MotiView } from '@/lib/motiView';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthLayout } from '@/templates/AuthLayout';
@@ -16,43 +15,27 @@ import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { spacing } from '@/constants/spacing';
-import { toast } from 'sonner-native';
+import { AUTH_NO_CREDENTIAL_SAVE_PROPS } from '@/constants/authCredentialAutofill';
+import { toast } from '@/lib/toast';
+import { loginSchema, type LoginFormValues } from '@/forms/auth/login/schema';
 
-const registerSchema = z
-  .object({
-    name: z.string().min(2, 'Ad soyad zorunludur'),
-    email: z.string().min(1, 'E-posta zorunludur').email('Geçerli bir e-posta girin'),
-    password: z.string().min(6, 'Şifre en az 6 karakter olmalıdır'),
-    confirmPassword: z.string(),
-  })
-  .refine((d) => d.password === d.confirmPassword, {
-    message: 'Şifreler eşleşmiyor',
-    path: ['confirmPassword'],
-  });
-
-type RegisterForm = z.infer<typeof registerSchema>;
-
-export default function RegisterScreen() {
+export default function LoginScreen() {
   const { colors } = useTheme();
-  const { t } = useI18n();
-  const { register } = useSupabaseAuth();
+  const { t, currentLanguage } = useI18n();
+  const { login } = useSupabaseAuth();
 
-  const { control, handleSubmit, formState: { isSubmitting } } = useForm<RegisterForm>({
-    resolver: zodResolver(registerSchema),
-    defaultValues: { name: '', email: '', password: '', confirmPassword: '' },
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- t referansı stabil değil; dil değişince yeterli
+  const schema = useMemo(() => loginSchema(t), [currentLanguage]);
+
+  const { control, handleSubmit, formState: { isSubmitting } } = useForm<LoginFormValues>({
+    resolver: zodResolver(schema),
+    defaultValues: { email: '', password: '' },
   });
 
-  const onSubmit = async (data: RegisterForm) => {
-    const result = await register(data.email, data.password, data.name);
+  const onSubmit = async (data: LoginFormValues) => {
+    const result = await login(data.email, data.password);
     if (result.ok) {
-      if (result.data) {
-        toast.success(t('toast.registerSuccess'));
-        router.push('/(tabs)');
-      } else {
-        // E-posta doğrulama gönderildi
-        toast.info('Lütfen e-posta kutunuzu kontrol edin ve hesabınızı doğrulayın.');
-        router.replace('/(auth)/login');
-      }
+      router.push('/(tabs)');
     } else {
       toast.error(result.error);
     }
@@ -70,21 +53,13 @@ export default function RegisterScreen() {
         </IconButton>
 
         <Text variant="h2" style={styles.title}>
-          {t('auth.createAccount')}
+          {t('auth.login')}
         </Text>
         <Text variant="body" color={colors.textSecondary} style={styles.subtitle}>
-          {t('auth.noAccount')}
+          {t('auth.welcomeSubtitle')}
         </Text>
 
         <View style={styles.form}>
-          <FormField
-            control={control}
-            name="name"
-            label={t('auth.name')}
-            placeholder={t('auth.namePlaceholder')}
-            autoCapitalize="words"
-            leftIcon={<Ionicons name="person-outline" size={18} color={colors.textSecondary} />}
-          />
           <FormField
             control={control}
             name="email"
@@ -93,6 +68,7 @@ export default function RegisterScreen() {
             keyboardType="email-address"
             autoCapitalize="none"
             leftIcon={<Ionicons name="mail-outline" size={18} color={colors.textSecondary} />}
+            {...AUTH_NO_CREDENTIAL_SAVE_PROPS}
           />
           <FormField
             control={control}
@@ -101,18 +77,20 @@ export default function RegisterScreen() {
             placeholder={t('auth.passwordPlaceholder')}
             secure
             leftIcon={<Ionicons name="lock-closed-outline" size={18} color={colors.textSecondary} />}
+            {...AUTH_NO_CREDENTIAL_SAVE_PROPS}
           />
-          <FormField
-            control={control}
-            name="confirmPassword"
-            label={t('auth.confirmPassword')}
-            placeholder={t('auth.confirmPasswordPlaceholder')}
-            secure
-            leftIcon={<Ionicons name="lock-closed-outline" size={18} color={colors.textSecondary} />}
+
+          <TextButton
+            title={t('auth.forgotPassword')}
+            color={colors.primary}
+            variant="label"
+            style={styles.forgotBtn}
+            onPress={() => router.push('/(auth)/forgotpassword')}
+            hapticType="light"
           />
 
           <Button
-            title={t('auth.createAccount')}
+            title={t('auth.login')}
             onPress={handleSubmit(onSubmit)}
             loading={isSubmitting}
             style={styles.submitBtn}
@@ -121,12 +99,12 @@ export default function RegisterScreen() {
 
         <View style={styles.footer}>
           <Text variant="body" color={colors.textSecondary}>
-            {t('auth.haveAccount')}{' '}
+            {t('auth.noAccount')}{' '}
           </Text>
           <TextButton
-            title={t('auth.login')}
+            title={t('auth.register')}
             color={colors.primary}
-            onPress={() => router.back()}
+            onPress={() => router.push('/(auth)/register')}
             hapticType="light"
           />
         </View>
@@ -150,8 +128,14 @@ const styles = StyleSheet.create({
   form: {
     gap: spacing[1],
   },
+  forgotBtn: {
+    alignSelf: 'flex-end',
+    marginBottom: spacing[2],
+    marginTop: -spacing[2],
+    paddingVertical: spacing[1],
+  },
   submitBtn: {
-    marginTop: spacing[3],
+    marginTop: spacing[2],
   },
   footer: {
     flexDirection: 'row',

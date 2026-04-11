@@ -66,7 +66,11 @@ const authSlice = createSlice({
     /** Yükleniyor durumu */
     setLoading(state, action: PayloadAction<boolean>) {
       state.isLoading = action.payload;
-      state.status = action.payload ? 'loading' : state.status;
+      if (action.payload) {
+        state.status = 'loading';
+      } else if (state.status === 'loading') {
+        state.status = 'unauthenticated';
+      }
     },
 
     /** Session kontrol edildi, kimse yok */

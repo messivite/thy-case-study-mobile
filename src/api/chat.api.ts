@@ -1,3 +1,4 @@
+import axios from 'axios';
 import { privateApi } from '@/services/api';
 import { supabase } from '@/services/supabase';
 import {
@@ -19,7 +20,6 @@ import {
   SyncChatResponse,
 } from '@/types/chat.api.types';
 
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'https://api.example.com';
 
 /**
  * POST /api/chats/:chatId/stream
@@ -34,85 +34,134 @@ const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'https://api.example.com';
  *     onError: (err) => ...,
  *   });
  */
+/**
+ * Newline-delimited JSON satırını parse edip callback'leri tetikler.
+ */
+function processLine(line: string, callbacks: StreamChatCallbacks): void {
+  let trimmed = line.trim();
+  if (!trimmed) return;
+  // SSE format: lines start with "data: "
+  if (trimmed.startsWith('data: ')) trimmed = trimmed.slice(6);
+  if (!trimmed) return;
+  try {
+    const event = JSON.parse(trimmed) as StreamEvent;
+    switch (event.type) {
+      case 'meta':  callbacks.onMeta?.(event.meta);   break;
+      case 'delta': callbacks.onDelta?.(event.delta); break;
+      case 'done':  callbacks.onDone?.();             break;
+      case 'error': callbacks.onError?.(event.error); break;
+    }
+  } catch {
+    // Parse edilemeyen satır — yoksay
+  }
+}
+
 export const streamChat = async (
   chatId: string,
   payload: StreamChatRequest,
   callbacks: StreamChatCallbacks,
+  signal?: AbortSignal,
 ): Promise<void> => {
   const { data: { session } } = await supabase.auth.getSession();
   const token = session?.access_token;
 
-  const response = await fetch(`${BASE_URL}/api/chats/${chatId}/stream`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify(payload),
-  });
+  return new Promise<void>((resolve) => {
+    let buffer = '';
+    let processedLength = 0;
+    let settled = false;
+    let totalDelay = 0; // typewriter animation toplam gecikme
 
-  if (!response.ok) {
-    callbacks.onError?.(`HTTP ${response.status}: ${response.statusText}`);
-    return;
-  }
+    const settle = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
 
-  const reader = response.body?.getReader();
-  if (!reader) {
-    callbacks.onError?.('ReadableStream desteklenmiyor.');
-    return;
-  }
-
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    buffer += decoder.decode(value, { stream: true });
-
-    // Newline-delimited JSON: her satır ayrı bir event
-    const lines = buffer.split('\n');
-    buffer = lines.pop() ?? ''; // son yarım satırı sakla
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-
-      try {
-        const event = JSON.parse(trimmed) as StreamEvent;
-
-        switch (event.type) {
-          case 'meta':
-            callbacks.onMeta?.(event.meta);
-            break;
-          case 'delta':
-            callbacks.onDelta?.(event.delta);
-            break;
-          case 'done':
-            callbacks.onDone?.();
-            break;
-          case 'error':
-            callbacks.onError?.(event.error);
-            break;
-        }
-      } catch {
-        // Parse edilemeyen satır — yoksay
+    // AbortSignal → axios CancelToken'a bağla
+    const controller = new AbortController();
+    if (signal) {
+      if (signal.aborted) {
+        callbacks.onError?.('aborted');
+        resolve();
+        return;
       }
+      signal.addEventListener('abort', () => controller.abort());
     }
-  }
 
-  // Buffer'da kalan veri varsa işle
-  const remaining = buffer.trim();
-  if (remaining) {
-    try {
-      const event = JSON.parse(remaining) as StreamEvent;
-      if (event.type === 'done') callbacks.onDone?.();
-      else if (event.type === 'error') callbacks.onError?.(event.error);
-    } catch {
-      // yoksay
-    }
-  }
+    privateApi.post(
+      `/api/chats/${chatId}/stream`,
+      payload,
+      {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        responseType: 'text',
+        transformResponse: [(data) => data],
+        // onDownloadProgress: RN'de XHR onprogress — her chunk'ta çağrılır
+        // event.target.responseText birikimli tüm text'i içerir
+        onDownloadProgress: (progressEvent) => {
+          const xhr = progressEvent.event?.target as XMLHttpRequest | undefined;
+          const xhrAlt = progressEvent.event?.currentTarget as XMLHttpRequest | undefined;
+          const fullText: string = xhr?.responseText ?? xhrAlt?.responseText ?? (progressEvent as any).responseText ?? '';
+          if (!fullText || fullText.length <= processedLength) return;
+
+          const newChunk = fullText.slice(processedLength);
+          processedLength = fullText.length;
+
+          buffer += newChunk;
+          const lines = buffer.split('\n');
+          buffer = lines.pop() ?? '';
+
+          const isDelta = (l: string) => {
+            const t = l.trim();
+            const json = t.startsWith('data: ') ? t.slice(6) : t;
+            return json.includes('"delta"') && json.includes('"type"');
+          };
+
+          const isMeta = (l: string) => {
+            const t = l.trim();
+            const json = t.startsWith('data: ') ? t.slice(6) : t;
+            return json.includes('"meta"') && json.includes('"type"');
+          };
+
+          for (const line of lines) {
+            const captured = line;
+            if (isMeta(line)) {
+              // meta → anında işle, ID'ler FlatList key'i için hemen lazım
+              processLine(captured, callbacks);
+            } else if (isDelta(line)) {
+              // Tüm delta'ları anında gönder — karakter yayma onDelta'da yapılır
+              processLine(captured, callbacks);
+            } else {
+              // done/error — son delta'dan sonra
+              const schedAt = totalDelay + 1;
+              setTimeout(() => processLine(captured, callbacks), schedAt);
+            }
+          }
+        },
+        signal: controller.signal,
+      },
+    ).then((response) => {
+      // Response tamamlandı — onDownloadProgress hiç tetiklenmediyse
+      // (bazı RN ortamlarında) tüm text burada gelir
+      if (processedLength === 0 && response.data) {
+        const allText: string = typeof response.data === 'string' ? response.data : '';
+        const lines = allText.split('\n');
+        for (const line of lines) processLine(line, callbacks);
+      } else if (buffer.trim()) {
+        processLine(buffer, callbacks);
+      }
+      // Typewriter animation bitene kadar bekle
+      setTimeout(settle, totalDelay + 50);
+    }).catch((err) => {
+      if (axios.isCancel(err) || (err as Error)?.name === 'CanceledError' || (err as Error)?.name === 'AbortError') {
+        callbacks.onError?.('aborted');
+      } else {
+        const status = (err as { response?: { status: number } })?.response?.status;
+        console.error('[streamChat] error:', status, err);
+        callbacks.onError?.(`HTTP ${status ?? 'network'}`);
+      }
+      settle();
+    });
+  });
 };
 
 /**
@@ -205,6 +254,14 @@ export const searchChats = async (params: ChatSearchParams): Promise<ChatSearchR
 };
 
 /**
+ * DELETE /api/chats/:chatId
+ * Sohbeti kalıcı olarak siler.
+ */
+export const deleteChat = async (chatId: string): Promise<void> => {
+  await privateApi.delete(`/api/chats/${chatId}`);
+};
+
+/**
  * GET /api/chats/:chatId/messages?limit=20&direction=older&cursor=xxx
  * Chat mesajlarını paginated olarak döner. direction: 'older' | 'newer'
  * İlk yükleme: direction=older (son mesajlara doğru)
@@ -219,9 +276,15 @@ export const getChatMessages = async (
   const qp: Record<string, string | number> = { limit, direction };
   if (cursor) qp.cursor = cursor;
 
-  const { data } = await privateApi.get<PaginatedMessagesResponse>(
+  const { data } = await privateApi.get<any>(
     `/api/chats/${chatId}/messages`,
     { params: qp },
   );
-  return data;
+  // Backend { items, hasNext, totalCount } → normalize to { messages, nextCursor, hasMore }
+  const normalized: PaginatedMessagesResponse = {
+    messages: data.messages ?? data.items ?? [],
+    nextCursor: data.nextCursor ?? data.cursor ?? null,
+    hasMore: data.hasMore ?? data.hasNext ?? false,
+  };
+  return normalized;
 };

@@ -1,6 +1,6 @@
 import React from 'react';
-import type { THYIconGlyphProps, THYIconName } from './types';
-import { THY_ICON_MAP } from './thyIconMap';
+import type { THYIconGlyphProps, THYIconName } from '@/atoms/thy-icon/types';
+import { THY_ICON_MAP } from '@/atoms/thy-icon/thyIconMap';
 
 export type THYIconProps = {
   name: THYIconName;

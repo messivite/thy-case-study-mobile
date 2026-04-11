@@ -5,8 +5,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { MotiView } from '@/lib/motiView';
+import { Skeleton } from 'moti/skeleton';
 import { Ionicons } from '@expo/vector-icons';
-import { toast } from 'sonner-native';
+import { toast } from '@/lib/toast';
 import Constants from 'expo-constants';
 import { Avatar } from '@/atoms/Avatar';
 import { Text } from '@/atoms/Text';
@@ -15,11 +16,13 @@ import { SettingsSection } from '@/organisms/SettingsSection';
 import { UsageStatsCard } from '@/molecules/UsageStatsCard';
 import { useTheme } from '@/hooks/useTheme';
 import { useAuth } from '@/hooks/useAuth';
+import { useWhoIAm } from '@/hooks/useWhoIAm';
 import { useI18n } from '@/hooks/useI18n';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { useNotificationPermission } from '@/hooks/useNotificationPermission';
 import { canDeliverPushNotifications } from '@/lib/notificationPermission';
 import { setTheme, setStreaming } from '@/store/slices/settingsSlice';
+import { ModelPickerSheet } from '@/organisms/ModelPickerSheet';
 import { spacing, radius } from '@/constants/spacing';
 import { palette } from '@/constants/colors';
 import { fontFamily } from '@/constants/typography';
@@ -30,7 +33,8 @@ type SettingsRowItem = ComponentProps<typeof SettingsSection>['items'][number];
 export default function SettingsScreen() {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
-  const { user, isGuest, logout } = useAuth();
+  const { isGuest, logout } = useAuth();
+  const { displayName: profileDisplayName, email: profileEmail, avatarUrl, isAnonymous, profileReady } = useWhoIAm();
   const { t, changeLanguage, currentLanguage } = useI18n();
   const dispatch = useAppDispatch();
   const { theme, streamingEnabled } = useAppSelector((s) => s.settings);
@@ -154,6 +158,9 @@ export default function SettingsScreen() {
     ],
   );
 
+  const [modelPickerVisible, setModelPickerVisible] = useState(false);
+  const selectedAIModel = useAppSelector((s) => s.chat.selectedAIModel);
+
   const [shouldCrash, setShouldCrash] = useState(false);
   if (shouldCrash) {
     throw new Error('[SentryTest] Bilinçli test çöküşü — error boundary / Sentry akışını doğrular.');
@@ -173,9 +180,9 @@ export default function SettingsScreen() {
     ]);
   };
 
-  const guestLike = isGuest || user?.isAnonymous === true;
-  const displayName = guestLike ? t('settings.guest') : (user?.name ?? '');
-  const displayEmail = guestLike ? t('settings.loginToSync') : (user?.email ?? '');
+  const guestLike = isGuest || isAnonymous;
+  const displayName = guestLike || !profileDisplayName ? t('settings.guest') : profileDisplayName;
+  const displayEmail = guestLike ? t('settings.loginToSync') : (profileEmail || '');
   const appVersion = Constants.expoConfig?.version ?? '1.0.0';
   const buildNumber =
     Platform.OS === 'ios'
@@ -225,18 +232,38 @@ export default function SettingsScreen() {
             style={[styles.profileCard, { borderColor: colors.border }]}
           >
             <View style={styles.profileAvatarWrap}>
-              <Avatar name={displayName || 'G'} uri={user?.avatarUrl} size="lg" />
+              <Avatar name={displayName || 'G'} uri={avatarUrl} size="lg" />
               {!isGuest && (
                 <View style={[styles.onlineDot, { backgroundColor: palette.success }]} />
               )}
             </View>
             <View style={styles.profileInfo}>
-              <Text variant="h4" style={{ fontFamily: fontFamily.semiBold }}>
-                {displayName}
-              </Text>
-              <Text variant="caption" color={colors.textSecondary} style={styles.emailText}>
-                {displayEmail}
-              </Text>
+              <Skeleton
+                show={!guestLike && !profileReady}
+                colorMode={isDark ? 'dark' : 'light'}
+                width={120}
+                height={18}
+                radius={5}
+              >
+                {guestLike || profileReady ? (
+                  <Text variant="h4" style={{ fontFamily: fontFamily.semiBold }}>
+                    {displayName}
+                  </Text>
+                ) : null}
+              </Skeleton>
+              <Skeleton
+                show={!guestLike && !profileReady}
+                colorMode={isDark ? 'dark' : 'light'}
+                width={180}
+                height={14}
+                radius={4}
+              >
+                {guestLike || profileReady ? (
+                  <Text variant="caption" color={colors.textSecondary} style={styles.emailText}>
+                    {displayEmail}
+                  </Text>
+                ) : null}
+              </Skeleton>
             </View>
             <View style={[styles.profileBadge, { backgroundColor: isGuest ? colors.border : palette.primary + '18' }]}>
               <Ionicons
@@ -280,6 +307,14 @@ export default function SettingsScreen() {
           <SettingsSection
             title={t('settings.chat')}
             items={[
+              {
+                id: 'model',
+                label: t('settings.model'),
+                subtitle: selectedAIModel?.displayName ?? t('settings.modelDefault'),
+                icon: 'hardware-chip-outline',
+                iconColor: palette.primary,
+                onPress: () => setModelPickerVisible(true),
+              },
               {
                 id: 'streaming',
                 label: t('settings.streaming'),
@@ -347,13 +382,13 @@ export default function SettingsScreen() {
           style={styles.versionBadgeWrap}
         >
           <LinearGradient
-            colors={[palette.navy, palette.navyMid]}
+            colors={[palette.primary, palette.primaryDark]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={styles.versionBadge}
           >
-            <Ionicons name="airplane" size={14} color="rgba(255,255,255,0.7)" />
-            <Text variant="caption" color="rgba(255,255,255,0.85)" style={{ fontFamily: fontFamily.medium }}>
+            <Ionicons name="airplane" size={14} color={palette.white} />
+            <Text variant="caption" color={palette.white} style={{ fontFamily: fontFamily.medium }}>
               THY Asistan
             </Text>
             <View style={styles.versionPill}>
@@ -364,31 +399,11 @@ export default function SettingsScreen() {
           </LinearGradient>
         </MotiView>
 
-        {/* Logout */}
-        <MotiView
-          from={{ opacity: 0, translateY: 16 }}
-          animate={{ opacity: 1, translateY: 0 }}
-          transition={{ type: 'timing', duration: 350, delay: 360 }}
-        >
-          <SettingsSection
-            items={[
-              {
-                id: 'logout',
-                label: t('settings.logout'),
-                icon: 'log-out-outline',
-                iconColor: palette.error,
-                destructive: true,
-                onPress: handleLogout,
-              },
-            ]}
-          />
-        </MotiView>
-
         {/* Sentry / Error Boundary Test */}
         <MotiView
           from={{ opacity: 0, translateY: 16 }}
           animate={{ opacity: 1, translateY: 0 }}
-          transition={{ type: 'timing', duration: 350, delay: 440 }}
+          transition={{ type: 'timing', duration: 350, delay: 360 }}
         >
           <View style={[styles.sentryCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={styles.sentryHeader}>
@@ -437,8 +452,34 @@ export default function SettingsScreen() {
             </Pressable>
           </View>
         </MotiView>
+
+        {/* Logout */}
+        <MotiView
+          from={{ opacity: 0, translateY: 16 }}
+          animate={{ opacity: 1, translateY: 0 }}
+          transition={{ type: 'timing', duration: 350, delay: 440 }}
+        >
+          <SettingsSection
+            items={[
+              {
+                id: 'logout',
+                label: t('settings.logout'),
+                icon: 'log-out-outline',
+                iconColor: palette.error,
+                destructive: true,
+                onPress: handleLogout,
+              },
+            ]}
+          />
+        </MotiView>
         </View>
       </ScrollView>
+
+      <ModelPickerSheet
+        visible={modelPickerVisible}
+        onClose={() => setModelPickerVisible(false)}
+        variant="backdrop"
+      />
     </View>
   );
 }

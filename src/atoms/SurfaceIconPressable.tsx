@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { Pressable, StyleSheet, ViewStyle, StyleProp } from 'react-native';
 import { palette } from '@/constants/colors';
 import { shadow as shadowTokens } from '@/constants/spacing';
+import { useHaptics } from '@/hooks/useHaptics';
 
 export type SurfaceIconPressableShape = 'circle' | 'square';
 
@@ -60,7 +61,13 @@ export const SurfaceIconPressable: React.FC<SurfaceIconPressableProps> = ({
   accessibilityHint,
   testID,
 }) => {
+  const haptics = useHaptics();
   const r = resolveBorderRadius(shape, width, height, borderRadius);
+
+  const handlePress = useCallback(() => {
+    haptics.light();
+    onPress?.();
+  }, [haptics, onPress]);
 
   const surfaceStyle: ViewStyle = {
     width,
@@ -80,7 +87,7 @@ export const SurfaceIconPressable: React.FC<SurfaceIconPressableProps> = ({
 
   return (
     <Pressable
-      onPress={onPress}
+      onPress={handlePress}
       disabled={disabled}
       hitSlop={hitSlop}
       accessibilityRole="button"

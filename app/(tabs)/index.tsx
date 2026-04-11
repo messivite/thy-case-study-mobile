@@ -1,56 +1,71 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { TouchableOpacity, StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { runOnJS } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { toast } from 'sonner-native';
 import { ChatLayout } from '@/templates/ChatLayout';
 import { MessageList } from '@/organisms/MessageList';
 import { ChatInput } from '@/organisms/ChatInput';
 import { AppHeader } from '@/organisms/AppHeader';
-import { ModelSelector } from '@/molecules/ModelSelector';
 import { Avatar } from '@/atoms/Avatar';
 import { useChatSession } from '@/hooks/useChatSession';
 import { useAuth } from '@/hooks/useAuth';
+import { useWhoIAm } from '@/hooks/useWhoIAm';
 import { useI18n } from '@/hooks/useI18n';
 import { palette } from '@/constants/colors';
 import { ChatHistoryDrawer } from '@/organisms/ChatHistoryDrawer';
+import { ModelPickerSheet } from '@/organisms/ModelPickerSheet';
 import { WelcomeQuickAction } from '@/organisms/HomeWelcomePanel';
+import { ScrollToBottomButton } from '@/molecules/ScrollToBottomButton';
 
 export default function HomeScreen() {
   const { user, isGuest } = useAuth();
+  const { displayName: profileDisplayName, profileReady } = useWhoIAm();
   const { t } = useI18n();
   const {
     messages,
-    selectedModel,
+    optimisticUserMsg,
+    isStreamingActive,
+    streamingMessage,
+    streamingMessageId,
+    optimisticUserMsgId,
+    selectedAIModel,
     isTyping,
+    isLoading,
+    isFetching,
+    chatId,
+    sessionTitle,
     sendMessage,
-    changeModel,
+    onStop,
     likeMessage,
+    startNewChat,
+    loadSession,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
   } = useChatSession();
 
-  const [modelSelectorVisible, setModelSelectorVisible] = useState(false);
+  // Session seçilmiş ama mesajlar henüz yüklenmemiş → spinner göster
+  const isSessionLoading = !!chatId && (isLoading || (isFetching && messages.length === 0 && !isStreamingActive));
+
+  const [scrolledUp, setScrolledUp] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const scrollToLatestRef = useRef<(() => void) | null>(null);
+
+  const handleScrollStateChange = useCallback((isScrolledUp: boolean, count: number) => {
+    setScrolledUp(isScrolledUp);
+    setUnreadCount(count);
+  }, []);
+
+  const handleScrollToLatest = useCallback(() => {
+    scrollToLatestRef.current?.();
+  }, []);
+
+  const [modelPickerVisible, setModelPickerVisible] = useState(false);
   const [drawerVisible, setDrawerVisible] = useState(false);
+  const closeModelPicker = useCallback(() => setModelPickerVisible(false), []);
 
   // Sol kenardan sağa swipe → drawer aç
   const openDrawer = useCallback(() => setDrawerVisible(true), []);
-  const openDrawerGesture = useMemo(
-    () =>
-      Gesture.Pan()
-        .activeOffsetX([15, 999])
-        .failOffsetY([-12, 12])
-        .onEnd((e) => {
-          'worklet';
-          if (e.translationX > 40 && e.velocityX > 0) {
-            runOnJS(openDrawer)();
-          }
-        }),
-    [openDrawer],
-  );
 
   const handleSend = useCallback(
     (text: string, attachments: import('@/types/chat.types').Attachment[]) => {
@@ -91,10 +106,12 @@ export default function HomeScreen() {
 
   const displayName = useMemo(() => {
     if (isGuest) return t('settings.guest');
+    // me API'den gelen displayName once gelir, yoksa auth user.name'e fall back
+    if (profileReady && profileDisplayName) return profileDisplayName;
     const raw = user?.name?.trim();
     if (!raw) return t('settings.guest');
     return raw.split(' ')[0];
-  }, [isGuest, user?.name, t]);
+  }, [isGuest, profileReady, profileDisplayName, user?.name, t]);
 
   const handleQuickActionPress = useCallback(
     (action: WelcomeQuickAction) => {
@@ -105,7 +122,7 @@ export default function HomeScreen() {
 
   const header = (
     <AppHeader
-      title={t('assistant.title')}
+      title={sessionTitle ?? t('assistant.title')}
       leftContent={
         <TouchableOpacity
           style={styles.menuBtn}
@@ -138,52 +155,64 @@ export default function HomeScreen() {
   );
 
   return (
-    <GestureDetector gesture={openDrawerGesture}>
-      <View style={styles.root}>
+    <View style={styles.root}>
       <ChatLayout
         header={header}
-        input={
+input={
           <ChatInput
             onSend={handleSend}
-            onStop={() => {/* TODO: stream abort */}}
-            onModelSelectorPress={() => setModelSelectorVisible(true)}
-            selectedModel={selectedModel}
+            onStop={onStop}
+            onModelSelectorPress={() => setModelPickerVisible(true)}
+            selectedAIModelName={selectedAIModel?.displayName}
             isStreaming={isTyping}
             placeholder={t('assistant.placeholder')}
           />
         }
       >
         <MessageList
+          chatId={chatId}
           messages={messages}
+          optimisticUserMsg={optimisticUserMsg}
+          isStreamingActive={isStreamingActive}
+          streamingMessage={streamingMessage}
+          streamingMessageId={streamingMessageId}
+          optimisticUserMsgId={optimisticUserMsgId}
           isTyping={isTyping}
+          isSessionLoading={!!chatId && isSessionLoading}
           onLike={likeMessage}
           onLoadMore={handleLoadMore}
           hasMore={hasNextPage}
           isLoadingMore={isFetchingNextPage}
           welcomeGreeting={t('assistant.welcomeGreeting', { name: displayName })}
+          welcomeGreetingReady={!isGuest && profileReady}
           welcomeQuestion={t('assistant.welcomeQuestion')}
-          quickActions={quickActions}
+          quickActions={chatId ? [] : quickActions}
           onQuickActionPress={handleQuickActionPress}
+          onScrollStateChange={handleScrollStateChange}
+          onScrollToLatestRef={scrollToLatestRef}
         />
 
       </ChatLayout>
 
-      <ModelSelector
-        visible={modelSelectorVisible}
-        selectedModel={selectedModel}
-        onSelect={(id) => {
-          changeModel(id);
-          toast.info(t('toast.modelChanged'));
-        }}
-        onClose={() => setModelSelectorVisible(false)}
+      <ScrollToBottomButton
+        visible={scrolledUp}
+        unreadCount={unreadCount}
+        onPress={handleScrollToLatest}
+      />
+
+      <ModelPickerSheet
+        visible={modelPickerVisible}
+        onClose={closeModelPicker}
+        variant="liquidGlass"
       />
 
       <ChatHistoryDrawer
         visible={drawerVisible}
         onClose={() => setDrawerVisible(false)}
+        onNewChat={startNewChat}
+        onSelectChat={(chat) => { loadSession(chat.id); setDrawerVisible(false); }}
       />
-      </View>
-    </GestureDetector>
+    </View>
   );
 }
 

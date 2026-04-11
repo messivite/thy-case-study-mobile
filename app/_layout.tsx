@@ -25,10 +25,13 @@ import { SupabaseAuthProvider } from '@/hooks/useSupabaseAuth';
 import { AppErrorBoundary } from '@/components/AppErrorBoundary';
 import { initErrorReporting } from '@/services/errorReporting';
 import { ensureWebViewportRootStyle } from '@/lib/webViewport';
+import { realmService } from '@/services/realm';
 
 // Sentry native köprüsü her build'de bir kez init (DSN yok / dev'de enabled:false)
 initErrorReporting();
 ensureWebViewportRootStyle();
+// Realm'i splash sırasında arka planda aç — ilk getSessions() geldiğinde hazır olur
+realmService.prefetch();
 
 function RootLayout() {
   // Global font load: direct web route refresh (e.g. /auth/welcome) also gets Inter.
@@ -85,7 +88,7 @@ function AuthProvider() {
         screenOptions={{
           headerShown: false,
           contentStyle: [
-            { backgroundColor: '#FFFFFF' },
+            { backgroundColor: 'transparent' },
             Platform.OS === 'web' && styles.stackContentWeb,
           ],
         }}
@@ -98,22 +101,22 @@ function AuthProvider() {
             gestureEnabled: false,
           }}
         />
-        <Stack.Screen name="(auth)" />
+        <Stack.Screen name="(auth)" options={{ animation: 'none' }} />
         <Stack.Screen
           name="(tabs)"
           options={{
-            // Tam ekran kök uygulama — welcome/auth sonrası modal sheet değil kart geçişi
             presentation: 'card',
-            animation: 'default',
-            gestureEnabled: true,
-            contentStyle: { backgroundColor: '#FFFFFF' },
+            animation: 'none',
+            gestureEnabled: false,
+            // Welcome gradient alt rengiyle eslestirildi — beyaz flash yok
+            contentStyle: { backgroundColor: '#F0F7F9' },
           }}
         />
         <Stack.Screen
           name="webview-modal"
           options={{
             presentation: 'formSheet',
-            sheetAllowedDetents: [0.92],
+            sheetAllowedDetents: [1.0],
             sheetGrabberVisible: true,
             sheetCornerRadius: 20,
             gestureEnabled: true,

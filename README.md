@@ -24,8 +24,10 @@ Proje; onboarding, kimlik doğrulama, asistan sohbet akışı, ayarlar, çoklu d
 - [Environment Değişkenleri](#environment-değişkenleri)
 - [Geliştirme Komutları](#geliştirme-komutları)
 - [Çalışma Akışları](#çalışma-akışları)
+- [Auth ve Welcome akışı](#auth-ve-welcome-akışı)
 - [CI/CD, Codecov ve Release](#cicd-codecov-ve-release)
 - [Roadmap](#roadmap)
+  - [Yol haritası](#yol-haritası)
 
 ---
 
@@ -73,6 +75,7 @@ src/
   molecules/
   organisms/
   templates/
+  forms/          # auth şemaları (ör. welcome/login/register + Zod)
   hooks/
   services/
   store/
@@ -83,10 +86,10 @@ src/
 ```
 
 Kısa notlar:
-- `app/`: Expo Router route katmanı
+- `app/`: Expo Router route katmanı (`(auth)/_layout` auth yönlendirme kararları)
 - `src/services/`: API/auth/query client gibi servisler
 - `src/lib/mmkv.*`: platforma göre storage shim
-- `src/store/`: global store ve slice'lar
+- `src/store/`: global store ve slice'lar (`authSlice` oturum durumu)
 
 ---
 
@@ -186,22 +189,55 @@ Release workflow’u önce test + typecheck koşar; kırmızıysa APK üretilmez
 
 ### Splash + başlangıç yönlendirmesi
 
-- Uygulama açılışında splash sayfası yüklenir.
-- `onboardingInitial` veya onboarding state'e göre onboarding/auth/tabs yönlendirmesi yapılır.
+- Kök route: `app/index.tsx` — `AppSplashScreen` animasyonu bittikten sonra `navigate` çalışır.
+- **Onboarding yapılmamışsa** (`STORAGE_KEYS.ONBOARDING_DONE`): `/(onboarding)`.
+- **Onboarding bittiyse:** paralelde (mümkün olduğunca erken) `getCurrentSession()` çağrılır; sonuç:
+  - Geçerli session varsa → `/(tabs)`.
+  - Yoksa → `/(auth)/welcome`.
+- Oturumlu kullanıcı için `router.replace` gecikmesi `InteractionManager` + çift `requestAnimationFrame` ile planlanır (layout zıplamasını azaltmak için).
 
 ### Onboarding
 
-- Tek route içinde çok adımlı (slide) onboarding kurgusu vardır.
-- Onboarding tamamlandığında storage'a flag yazılır.
+- `app/(onboarding)/` — çok adımlı onboarding.
+- Tamamlanınca MMKV’de onboarding flag’i set edilir.
 
-### Auth
+### Auth ve Welcome akışı
 
-- Supabase session kontrolü ve auth listener merkezi olarak başlatılır.
+**Merkezi auth:** `SupabaseAuthProvider` (`app/_layout.tsx` içinde) + `useSupabaseAuth` / `useSupabaseAuthState`. Supabase `onAuthStateChange`, token yenileme aralığı ve `login` / `register` / `continueAsGuest` burada. Redux `authSlice` durumları: `idle` → (init sonrası) `unauthenticated` | `authenticated` | `guest` | geçici `loading` (ör. e-posta girişi sırasında `setLoading`).
+
+**Auth grubu layout:** `app/(auth)/_layout.tsx`
+
+- `useAuth().status` + `useSegments()`.
+- Oturum **authenticated** veya **guest** iken rota `welcome` / `login` / `register` ise → `<Redirect href="/(tabs)" />` (zaten giriş yapmış kullanıcıyı ana akışa iter).
+- Aksi halde → `Stack` (auth ekranları).
+
+**Welcome ekranı:** `app/(auth)/welcome/index.tsx`
+
+- `useAuth()` ile **UI durumları**: `idle` iken yalnızca gökyüzü gradient’i (session henüz net değil); `authenticated` / `guest` iken geçici olarak `null` (layout aynı anda `Redirect` ile `(tabs)`’a gider); `unauthenticated` / `loading` iken tam welcome (hero + form).
+- İlk tam gösterimde RN `Animated` ile kısa fade-in (`WELCOME_MOUNT_FADE_DURATION_MS`).
+- Üst bilgi ikonu: global `loading` veya misafir girişi beklerken soluk (`WELCOME_GUEST_AUTH_FLOW`).
+- Form ve giriş mantığı **`WelcomeAuthForm`** (`src/organisms/WelcomeAuthForm.tsx`) içinde (hero her tuşta yeniden çizilmez).
+
+**WelcomeAuthForm**
+
+- Doğrulama: `useValidatedForm` + `welcomeLoginSchema` (`src/forms/auth/welcome/schema.ts`) — Zod, `react-hook-form`, `FormField` / `Input`.
+- Giriş butonu: `formState.isSubmitting` sırasında “Giriş yapılıyor” metni + ikon.
+- Başarılı e-posta girişi: `router.replace('/(tabs)')` (layout’daki `Redirect` ile uyumlu; çift yönlendirme kabul edilebilir).
+- Hata: toast; yanlış şifrede alan **sıfırlanmaz** (UX).
+- Misafir: toast + `continueAsGuest`, ardından `router.replace('/(tabs)')`.
+- iOS Keychain “şifre kaydet” uyarısını azaltmak için `AUTH_NO_CREDENTIAL_EMAIL_PROPS` / `AUTH_NO_CREDENTIAL_PASSWORD_PROPS` (`src/constants/authCredentialAutofill.ts`); welcome’da e-posta için iOS’ta `keyboardType="default"`.
+- Form üzerinde misafir / submit beklerken Reanimated ile hafif dim.
+
+**Login / Register sayfaları:** `app/(auth)/login`, `app/(auth)/register` — kendi RHF + Zod şemaları; layout aynı `Redirect` kuralına tabi.
+
+**İleride (not):** Oturum açıldıktan sonra ayrı bir **`/me` (veya profil) API** ile Redux’u zenginleştirip öyle `replace` etmek mümkün; şu an akış doğrudan Supabase session + mevcut `replace` / `Redirect` ile home’a gider.
 
 ### Storage
 
 - Native: `react-native-mmkv`
 - Web: `localStorage` fallback (`mmkv.web.ts`)
+- Realm: son `20` sohbet oturumu ve her oturumdaki son `20` mesaj lokal tutulur.
+- Local Realm verisi remote kaynakla senkronize çalışır (sync akışı).
 
 ---
 
@@ -218,6 +254,15 @@ Release workflow’u önce test + typecheck koşar; kırmızıysa APK üretilmez
 - [x] MMKV web fallback kurgusu
 - [x] CI/CD, test, Codecov entegrasyonu ve release (tag veya elle tetikleme + debug APK)
 
+### Yol haritası
+
+- **Belge ile sohbet** — PDF yükleme; sunucuda metin çıkarıp mevcut sohbet API’siyle özet ve soru-cevap.
+- **Görüntü ile sohbet (vision)** — Fotoğrafı doğrudan destekleyen modellere güvenli şekilde iletme; çok modlu mesaj şeması.
+- **Bilgi artırma (RAG)** — Şirket / açık veri setleriyle vektör arama; cevapları kaynaklı gösterme.
+- **Yönetim paneli** — Rol, kota ve kota bypass gibi ayarların web üzerinden yönetimi (staging).
+- **Görüntü üretimi** — İsteğe bağlı üretim API’si (ör. logo / illüstrasyon); sohbetten ayrı uç.
+- **Model kataloğu** — Kısa açıklamalar, hangi modellerde stream / vision var bilgisi.
+
 ### Sıradakiler
 
 - [ ] Performans ölçüm ve optimizasyon turu
@@ -227,6 +272,7 @@ Release workflow’u önce test + typecheck koşar; kırmızıysa APK üretilmez
 
 ## TODOS
 
+- [ ] **Web — token güvenliği (XSS):** Üretim web’de access/refresh token’ları yalnızca tarayıcıda (`localStorage` / `sessionStorage` / JS bellek) tutmak XSS’te çalınabilir. Hedef mimari: oturumu **kendi backend / BFF** katmanınızdan yönetmek (ör. refresh token **httpOnly + Secure + SameSite** cookie, kısa ömürlü access token stratejisi veya sunucu tarafı session). Böylece tokenlar JS’in doğrudan okuyamayacağı kanaldan döner; XSS yüzeyi azalır. (Ayrıntılı not: `src/lib/secureStore.web.ts`.)
 - [ ] Web Push için service worker kaydı ekle (`navigator.serviceWorker.register`).
 - [ ] Web'de notification izin akışını ekle (`Notification.requestPermission`).
 - [ ] `PushManager.subscribe` ile web subscription al (VAPID public key ile).
