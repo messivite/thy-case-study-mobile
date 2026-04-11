@@ -33,6 +33,7 @@ export default function HomeScreen() {
     isStreamingDoneSV,
     streamResetCountSV,
     handleStreamingComplete,
+    lastStreamTextRef,
     selectedAIModel,
     isTyping,
     isSessionLoading,
@@ -198,6 +199,7 @@ export default function HomeScreen() {
           isStreamingDoneSV={isStreamingDoneSV}
           streamResetCountSV={streamResetCountSV}
           onStreamingComplete={handleStreamingComplete}
+          lastStreamTextRef={lastStreamTextRef}
           isTyping={isTyping}
           isSessionLoading={isSessionLoading}
           onLike={likeMessage}

@@ -147,54 +147,56 @@ const MessageBubbleInner: React.FC<Props> = ({
         </Text>
       )}
 
-      {/* Footer: hideFooter ise display:none ile DOM'dan çıkarmak yerine opacity=0 + pointerEvents=none */}
-      <View style={[styles.footer, isUser && styles.footerUser, hideFooter && styles.footerHidden]}>
-        <Text variant="micro" color={isUser ? 'rgba(255,255,255,0.65)' : colors.textSecondary}>
-          {formattedTime}
-        </Text>
+      {/* Footer: hideFooter ise layout'tan tamamen çıkar — opacity:0 layout kaymasına neden olur */}
+      {!hideFooter && (
+        <View style={[styles.footer, isUser && styles.footerUser]}>
+          <Text variant="micro" color={isUser ? 'rgba(255,255,255,0.65)' : colors.textSecondary}>
+            {formattedTime}
+          </Text>
 
-        {!isUser && (
-          <View style={styles.actions}>
-            {onSpeakToggle && (
-              <ActionButton
-                onPress={handleSpeak}
-                accessibilityRole="button"
-                accessibilityLabel={isSpeaking ? 'Sesi durdur' : 'Sesli oku'}
-              >
+          {!isUser && (
+            <View style={styles.actions}>
+              {onSpeakToggle && (
+                <ActionButton
+                  onPress={handleSpeak}
+                  accessibilityRole="button"
+                  accessibilityLabel={isSpeaking ? 'Sesi durdur' : 'Sesli oku'}
+                >
+                  <Ionicons
+                    name={isSpeaking ? 'stop-circle-outline' : 'volume-high-outline'}
+                    size={14}
+                    color={isSpeaking ? colors.primary : colors.textSecondary}
+                  />
+                </ActionButton>
+              )}
+              {message.content.length > 0 && (
+                <ActionButton onPress={handleCopy}>
+                  <Ionicons name="copy-outline" size={14} color={colors.textSecondary} />
+                </ActionButton>
+              )}
+              <ActionButton onPress={() => handleLike(true)}>
                 <Ionicons
-                  name={isSpeaking ? 'stop-circle-outline' : 'volume-high-outline'}
+                  name={message.liked === true ? 'thumbs-up' : 'thumbs-up-outline'}
                   size={14}
-                  color={isSpeaking ? colors.primary : colors.textSecondary}
+                  color={message.liked === true ? palette.success : colors.textSecondary}
                 />
               </ActionButton>
-            )}
-            {message.content.length > 0 && (
-              <ActionButton onPress={handleCopy}>
-                <Ionicons name="copy-outline" size={14} color={colors.textSecondary} />
+              <ActionButton onPress={() => handleLike(false)}>
+                <Ionicons
+                  name={message.liked === false ? 'thumbs-down' : 'thumbs-down-outline'}
+                  size={14}
+                  color={message.liked === false ? palette.error : colors.textSecondary}
+                />
               </ActionButton>
-            )}
-            <ActionButton onPress={() => handleLike(true)}>
-              <Ionicons
-                name={message.liked === true ? 'thumbs-up' : 'thumbs-up-outline'}
-                size={14}
-                color={message.liked === true ? palette.success : colors.textSecondary}
-              />
-            </ActionButton>
-            <ActionButton onPress={() => handleLike(false)}>
-              <Ionicons
-                name={message.liked === false ? 'thumbs-down' : 'thumbs-down-outline'}
-                size={14}
-                color={message.liked === false ? palette.error : colors.textSecondary}
-              />
-            </ActionButton>
-            {onRegenerate && (
-              <ActionButton onPress={() => onRegenerate(message.id)}>
-                <Ionicons name="refresh-outline" size={14} color={colors.textSecondary} />
-              </ActionButton>
-            )}
-          </View>
-        )}
-      </View>
+              {onRegenerate && (
+                <ActionButton onPress={() => onRegenerate(message.id)}>
+                  <Ionicons name="refresh-outline" size={14} color={colors.textSecondary} />
+                </ActionButton>
+              )}
+            </View>
+          )}
+        </View>
+      )}
     </View>
   );
 

@@ -29,6 +29,7 @@ type Props = {
   isStreamingDoneSV?: SharedValue<boolean> | null;
   streamResetCountSV?: SharedValue<number> | null;
   onStreamingComplete?: (text: string) => void;
+  lastStreamTextRef?: React.RefObject<string>;
   isTyping: boolean;
   isSessionLoading?: boolean;
   onLike?: (id: string, liked: boolean | null) => void;
@@ -56,6 +57,7 @@ export const MessageList: React.FC<Props> = ({
   isStreamingDoneSV,
   streamResetCountSV,
   onStreamingComplete,
+  lastStreamTextRef,
   isTyping,
   isSessionLoading = false,
   onLike,
@@ -80,6 +82,10 @@ export const MessageList: React.FC<Props> = ({
   // Son streaming ID'yi bir render daha tut — StreamingBubble→MessageBubble
   // geçişinde MotiView entry animation'ı skip etmek için
   const lastStreamingMsgIdRef = useRef<string | null>(null);
+  // Streaming bittiğinde messages.length'i sakla — 'streaming' ID'li placeholder için fallback
+  const messagesLengthAtStreamEndRef = useRef<number | null>(null);
+  // Streaming başında var olan mesaj ID'leri — streaming sonrası gelen yeni mesajlar skipAnimation alır
+  const preStreamMsgIdsRef = useRef<Set<string>>(new Set());
   const prevChatIdRef = useRef<string | null | undefined>(undefined);
   // Kullanıcı scroll etmeden (mount anında) onEndReached tetiklenmesin
   const userHasScrolledRef = useRef(false);
@@ -133,6 +139,8 @@ export const MessageList: React.FC<Props> = ({
     isAtLatestRef.current = true;
     userHasScrolledRef.current = false;
     lastStreamingMsgIdRef.current = null;
+    messagesLengthAtStreamEndRef.current = null;
+    preStreamMsgIdsRef.current = new Set();
     welcomeShownRef.current = false;
     isWelcomeExitingRef.current = false;
     setIsWelcomeExiting(false);
@@ -220,7 +228,9 @@ export const MessageList: React.FC<Props> = ({
   const renderItem = useCallback(({ item, index }: { item: Message; index: number }) => {
     const isStreamingItem = !!streamingMessageId && item.id === streamingMessageId;
     const isOptimisticUserItem = !!optimisticUserMsgId && item.id === optimisticUserMsgId;
-    const wasStreamingItem = item.id === lastStreamingMsgIdRef.current;
+    // wasStreamingItem: gerçek ID eşleşmesi VEYA streaming sonrası gelen yeni mesaj
+    const wasStreamingItem = item.id === lastStreamingMsgIdRef.current ||
+      (preStreamMsgIdsRef.current.size > 0 && !preStreamMsgIdsRef.current.has(item.id));
 
     // Streaming item → StreamingBubble (UI thread animasyonu)
     if (isStreamingItem && isStreamingActive && pendingStreamSV && isStreamingDoneSV && streamResetCountSV && onStreamingComplete) {
@@ -273,23 +283,69 @@ export const MessageList: React.FC<Props> = ({
     );
   }
 
-  // Streaming item: gerçek mesaj cache'e girince gösterme.
-  // streamingMessageId artık gerçek assistant ID'si olabilir (ya da henüz meta gelmemişse 'streaming').
-  // Her iki durumda da ID eşleşince placeholder'ı gizle.
-  const streamingAlreadyInMessages = !!streamingMessageId &&
-    streamingMessageId !== 'streaming' &&
-    messages.some((m) => m.id === streamingMessageId);
+  // Streaming bittikten sonra gerçek mesaj cache'e girene kadar placeholder'ı göstermeye devam et.
+  // Kullanılan ID: aktif streamingMessageId VEYA son streaming'in ID'si (lastStreamingMsgIdRef).
+  // 'streaming' sentinel: onMeta henüz gelmedi — gerçek ID bilinmiyor, placeholder gösterme.
+  const activeOrLastId = streamingMessageId ?? lastStreamingMsgIdRef.current;
+  const hasRealId = !!activeOrLastId && activeOrLastId !== 'streaming';
 
-  // Streaming item için placeholder — StreamingBubble kendi içeriğini yönetiyor
-  const streamingPlaceholder: Message | null = (!streamingAlreadyInMessages && streamingMessageId && isStreamingActive)
-    ? { id: streamingMessageId, role: 'assistant', content: '', timestamp: Date.now() }
+  // Streaming başlayınca mevcut mesaj ID'lerini snapshot'la
+  if (isStreamingActive && preStreamMsgIdsRef.current.size === 0 && messages.length > 0) {
+    preStreamMsgIdsRef.current = new Set(messages.map((m) => m.id));
+  }
+  // Streaming bitince messages.length'i snapshotla — gerçek ID yoksa fallback
+  if (!isStreamingActive && activeOrLastId && messagesLengthAtStreamEndRef.current === null) {
+    messagesLengthAtStreamEndRef.current = messages.length;
+  }
+  if (isStreamingActive) {
+    messagesLengthAtStreamEndRef.current = null;
+  }
+
+  // Mesaj zaten cache'de mi?
+  // Gerçek ID varsa: messages içinde ara.
+  // Sentinel 'streaming' ise: mesaj sayısı snapshot'tan fazla mı bak (API geldi mi?).
+  const streamingAlreadyInMessages = hasRealId
+    ? messages.some((m) => m.id === activeOrLastId)
+    : messagesLengthAtStreamEndRef.current !== null && messages.length > messagesLengthAtStreamEndRef.current;
+
+  // Placeholder göster:
+  // - streaming aktifse VE mesaj henüz cache'de yoksa (setQueryData erken yazınca çift önle)
+  // - streaming bitti + gerçek ID var + mesaj henüz cache'de yok
+  const shouldShowPlaceholder =
+    (isStreamingActive && !!activeOrLastId && !streamingAlreadyInMessages) ||
+    (hasRealId && !streamingAlreadyInMessages && !!lastStreamingMsgIdRef.current);
+
+  // Streaming aktifken content boş (StreamingBubble kendi yönetiyor),
+  // bittikten sonra lastStreamTextRef'ten son metni al — API gelene kadar flash olmaz.
+  const placeholderContent = isStreamingActive ? '' : (lastStreamTextRef?.current ?? '');
+
+
+
+  const streamingPlaceholder: Message | null = shouldShowPlaceholder
+    ? { id: activeOrLastId!, role: 'assistant', content: placeholderContent, timestamp: Date.now() }
     : null;
+
+  // Placeholder yoksa lastStreamingMsgIdRef'i bir sonraki render'da temizle —
+  // gerçek MessageBubble'ın skipEntryAnimation=true alması için bir frame bekle.
+  useEffect(() => {
+    if (!shouldShowPlaceholder && !isStreamingActive) {
+      lastStreamingMsgIdRef.current = null;
+      preStreamMsgIdsRef.current = new Set();
+    }
+  // shouldShowPlaceholder primitive değil, effect dep olarak güvenli
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shouldShowPlaceholder, isStreamingActive]);
+
+  // optimisticUserMsg: messages içinde gerçek ID'siyle zaten varsa ekleme — çift önle
+  const optimisticAlreadyInMessages = !!optimisticUserMsg &&
+    messages.some((m) => m.id === optimisticUserMsg.id);
 
   const displayMessages: Message[] = [
     ...(streamingPlaceholder ? [streamingPlaceholder] : []),
-    ...(optimisticUserMsg ? [optimisticUserMsg] : []),
+    ...(!optimisticAlreadyInMessages && optimisticUserMsg ? [optimisticUserMsg] : []),
     ...messages.slice().reverse(),
   ];
+
 
   // WelcomePanel overlay için greeting'i parçala
   const welcomeOverlay = showWelcome && welcomeGreeting && welcomeQuestion && onQuickActionPress

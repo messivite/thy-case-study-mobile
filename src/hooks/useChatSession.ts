@@ -56,6 +56,8 @@ export const useChatSession = () => {
 
   // Stream state — sadece boolean, metin artık UI thread'de
   const [isStreamingActive, setIsStreamingActive] = useState(false);
+  // Gerçek assistant mesaj ID'si — onMeta gelince güncellenir, re-render tetikler
+  const [streamingMsgIdState, setStreamingMsgIdState] = useState<string>('streaming');
 
   // Non-stream modunda isTyping için
   const [isNonStreamPending, setIsNonStreamPending] = useState(false);
@@ -170,25 +172,41 @@ export const useChatSession = () => {
   // handleStreamingComplete — StreamingBubble'dan runOnJS ile çağrılır
   // ---------------------------------------------------------------------------
 
-  const handleStreamingComplete = useCallback((_finalText: string) => {
+  // Son streaming metnini JS tarafında sakla — MessageList geçiş sırasında kullanır
+  const lastStreamTextRef = useRef('');
+
+  const handleStreamingComplete = useCallback((finalText: string) => {
     if (streamCancelledRef.current) return;
+
+    lastStreamTextRef.current = finalText;
 
     const cid = activeChatIdRef.current ?? null;
 
-    // State'i önce sıfırla — StreamingBubble unmount olsun, optimistic kaldırılsın
-    unstable_batchedUpdates(() => {
-      setIsStreamingActive(false);
-      setOptimisticUserMsg(null);
-    });
+    // isStreamingActive'i kapat — optimisticUserMsg'yi burada temizleme.
+    // messages içinde gerçek user mesajı gelene kadar optimistic görünmeye devam etmeli,
+    // aksi hâlde user mesajı bir frame kaybolur ve liste kayar (flash).
+    // Temizleme useChatSession'daki useEffect ile yapılır.
+    setIsStreamingActive(false);
 
     if (cid) {
-      // setQueryData yok — intermediate re-render tetiklemez.
-      // invalidate → arka planda refetch → data gelince tek bir render.
-      queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.messages(cid) });
-      queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
+      // refetchQueries: cache'e dokunmaz, arka planda fetch eder, gelince üstüne yazar.
+      queryClient.refetchQueries({ queryKey: CHAT_QUERY_KEYS.messages(cid) });
+      queryClient.refetchQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queryClient]);
+
+  // optimisticUserMsg'yi messages içinde gerçek user mesajı görününce temizle.
+  // Streaming bitti ama API henüz gelmedi → optimistic hâlâ gösterilmeli (user mesajı kaybolmasın).
+  // streamMetaRef.userMessageId gerçek ID'yi tutar; messages içinde görününce temizle.
+  useEffect(() => {
+    if (!optimisticUserMsg) return;
+    if (isStreamingActive) return;
+    const realUserMsgId = streamMetaRef.current.userMessageId;
+    if (!realUserMsgId) return;
+    const found = messages.some((m) => m.id === realUserMsgId);
+    if (found) setOptimisticUserMsg(null);
+  }, [messages, optimisticUserMsg, isStreamingActive]);
 
   // ---------------------------------------------------------------------------
   // sendMessage
@@ -243,6 +261,8 @@ export const useChatSession = () => {
         abortCtrlRef.current = ctrl;
 
         streamingMsgIdRef.current = 'streaming';
+        setStreamingMsgIdState('streaming');
+        lastStreamTextRef.current = '';
         streamCancelledRef.current = false;
         streamDoneRef.current = false;
         isStreamingDoneSV.value = false;
@@ -277,6 +297,7 @@ export const useChatSession = () => {
               onMeta: (meta) => {
                 if (meta?.assistantMessageId && streamingMsgIdRef.current === 'streaming') {
                   streamingMsgIdRef.current = meta.assistantMessageId;
+                  setStreamingMsgIdState(meta.assistantMessageId);
                 }
                 if (meta?.userMessageId && optimisticUserMsgRef.current && optimisticUserMsgRef.current.id !== meta.userMessageId) {
                   optimisticUserMsgRef.current = { ...optimisticUserMsgRef.current, id: meta.userMessageId };
@@ -398,6 +419,8 @@ export const useChatSession = () => {
     writtenLenRef.current = 0;
     pendingStreamSV.value = '';
     streamingMsgIdRef.current = 'streaming';
+    setStreamingMsgIdState('streaming');
+    lastStreamTextRef.current = '';
     optimisticUserMsgRef.current = null;
     activeChatIdRef.current = null;
     setIsStreamingActive(false);
@@ -420,6 +443,8 @@ export const useChatSession = () => {
       writtenLenRef.current = 0;
       pendingStreamSV.value = '';
       streamingMsgIdRef.current = 'streaming';
+      setStreamingMsgIdState('streaming');
+      lastStreamTextRef.current = '';
       optimisticUserMsgRef.current = null;
       activeChatIdRef.current = id;
       setIsStreamingActive(false);
@@ -452,9 +477,8 @@ export const useChatSession = () => {
 
   // streamingMessageId: isStreamingActive olduğu sürece gerçek assistant mesaj ID'sini
   // (ya da henüz meta gelmemişse sabit sentinel) döndür.
-  // Bu sayede streaming bitip mesaj cache'e girdiğinde FlatList aynı key'i reuse eder
-  // → StreamingBubble→MessageBubble geçişi anlık değil, key korunuyor.
-  const streamingMessageId = isStreamingActive ? streamingMsgIdRef.current : null;
+  // State tabanlı — onMeta gelince re-render tetiklenir, FlatList gerçek ID'yi key olarak alır.
+  const streamingMessageId = isStreamingActive ? streamingMsgIdState : null;
 
   // Hook içinde hesapla — isFetching/isLoading'i dışarı sızdırmak HomeScreen'i
   // her refetch'te re-render eder (mesaj gönderme anında çakışır).
@@ -473,6 +497,7 @@ export const useChatSession = () => {
     isStreamingDoneSV,
     streamResetCountSV,
     handleStreamingComplete,
+    lastStreamTextRef,
     optimisticUserMsgId: optimisticUserMsg?.id ?? optimisticUserMsgRef.current?.id ?? null,
     selectedAIModel,
     isTyping,
