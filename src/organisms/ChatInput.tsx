@@ -313,12 +313,26 @@ const ExpandedInputModal = memo<ExpandedInputModalProps>(({
           <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Ionicons name="chevron-down" size={24} color={colors.textSecondary} />
           </TouchableOpacity>
-          <SendButton
-            canSend={canSend}
-            isStreaming={isStreaming}
-            onSend={handleSendAndClose}
-            onStop={onStop}
-          />
+          <View style={styles.expandedHeaderRight}>
+            <Animated.Text style={[
+              growingStyles.counter,
+              {
+                color: charCount >= MAX_CHARS - 50
+                  ? '#e53e3e'
+                  : charCount >= MAX_CHARS - 100
+                  ? '#dd6b20'
+                  : colors.textSecondary + '99',
+              },
+            ]}>
+              {charCount}/{MAX_CHARS}
+            </Animated.Text>
+            <SendButton
+              canSend={canSend}
+              isStreaming={isStreaming}
+              onSend={handleSendAndClose}
+              onStop={onStop}
+            />
+          </View>
         </View>
 
         <TextInput
@@ -328,7 +342,11 @@ const ExpandedInputModal = memo<ExpandedInputModalProps>(({
           placeholderTextColor={colors.textSecondary}
           multiline
           defaultValue={defaultValue}
-          onChangeText={onChangeText}
+          maxLength={MAX_CHARS}
+          onChangeText={(t) => {
+            setCharCount(t.length);
+            onChangeText(t);
+          }}
           autoCorrect={false}
           textAlignVertical="top"
         />
@@ -918,6 +936,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingBottom: spacing[3],
+  },
+  expandedHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
   },
   expandedInput: {
     flex: 1,
