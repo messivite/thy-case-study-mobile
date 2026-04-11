@@ -1,12 +1,20 @@
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Skeleton } from 'moti/skeleton';
+import Reanimated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+  withDelay,
+  runOnJS,
+  Easing,
+} from 'react-native-reanimated';
 import { Text } from '@/atoms/Text';
 import { spacing } from '@/constants/spacing';
 import { PromptChipButton } from '@/molecules/PromptChipButton';
 import { fontFamily } from '@/constants/typography';
 import { useTheme } from '@/hooks/useTheme';
-import { MotiView } from '@/lib/motiView';
 
 export type WelcomeQuickAction = {
   id: string;
@@ -21,16 +29,70 @@ type Props = {
   question: string;
   quickActions: WelcomeQuickAction[];
   onQuickActionPress: (action: WelcomeQuickAction) => void;
-  /** true geçince cascade exit animasyonu başlar */
   isExiting?: boolean;
-  /** tüm exit animasyonları bitince çağrılır */
   onExitComplete?: () => void;
 };
 
-// Her öğenin exit animasyonu bu süre kadar sürer (ms)
-const EXIT_DURATION = 300;
-// Öğeler arası gecikme (ms) — stagger etkisi
-const EXIT_STAGGER = 60;
+// Entry stagger — her öğe bu kadar gecikmeli girer
+const ENTRY_STAGGER = 60;
+const ENTRY_DURATION = 400;
+
+// Exit: çok hızlı, mesaj gönderilince anında kaybolsun
+const EXIT_DURATION = 120;
+const EXIT_STAGGER = 20;
+
+// Toplam item sayısı: greeting + question + chips
+const TOTAL_STATIC = 2;
+
+type AnimatedItemProps = {
+  index: number;
+  isExiting: boolean;
+  onLastExitDone?: () => void;
+  isLast?: boolean;
+  children: React.ReactNode;
+};
+
+const AnimatedItem: React.FC<AnimatedItemProps> = ({ index, isExiting, onLastExitDone, isLast, children }) => {
+  const opacity = useSharedValue(0);
+  const translateY = useSharedValue(-20);
+  const scale = useSharedValue(1);
+
+  // Entry
+  useEffect(() => {
+    const delay = index * ENTRY_STAGGER;
+    opacity.value = withDelay(delay, withTiming(1, { duration: ENTRY_DURATION, easing: Easing.out(Easing.quad) }));
+    translateY.value = withDelay(delay, withSpring(0, { damping: 28, stiffness: 200, overshootClamping: true }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Exit
+  useEffect(() => {
+    if (!isExiting) return;
+    const delay = index * EXIT_STAGGER;
+    opacity.value = withDelay(delay, withTiming(0, { duration: EXIT_DURATION, easing: Easing.in(Easing.quad) }));
+    scale.value = withDelay(delay, withTiming(0.88, { duration: EXIT_DURATION, easing: Easing.in(Easing.quad) }));
+    translateY.value = withDelay(
+      delay,
+      withTiming(50, { duration: EXIT_DURATION, easing: Easing.in(Easing.quad) }, (finished) => {
+        'worklet';
+        if (finished && isLast && onLastExitDone) {
+          runOnJS(onLastExitDone)();
+        }
+      }),
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isExiting]);
+
+  const animStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [
+      { translateY: translateY.value },
+      { scale: scale.value },
+    ],
+  }));
+
+  return <Reanimated.View style={animStyle}>{children}</Reanimated.View>;
+};
 
 export const HomeWelcomePanel: React.FC<Props> = ({
   greetingPrefix,
@@ -44,66 +106,41 @@ export const HomeWelcomePanel: React.FC<Props> = ({
 }) => {
   const { colors, isDark } = useTheme();
 
-  // Toplam animasyon süresi — greeting(0) + question(1) + chips(2..N)
-  const totalItems = 2 + quickActions.length;
-  const totalDuration = EXIT_STAGGER * (totalItems - 1) + EXIT_DURATION;
-
-  const exitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    if (!isExiting) return;
-    exitTimerRef.current = setTimeout(() => {
-      onExitComplete?.();
-    }, totalDuration + 20); // küçük buffer
-    return () => {
-      if (exitTimerRef.current) clearTimeout(exitTimerRef.current);
-    };
-  }, [isExiting, totalDuration, onExitComplete]);
+  const totalItems = TOTAL_STATIC + quickActions.length;
+  const lastIndex = totalItems - 1;
 
   const handleQuickActionPress = useCallback(
     (action: WelcomeQuickAction) => () => onQuickActionPress(action),
     [onQuickActionPress],
   );
 
-  const exitAnimate = isExiting
-    ? { opacity: 0, translateY: 40 }
-    : { opacity: 1, translateY: 0 };
-
-  const exitTransition = (itemIndex: number) => ({
-    type: 'timing' as const,
-    duration: EXIT_DURATION,
-    delay: isExiting ? itemIndex * EXIT_STAGGER : 0,
-  });
-
   const chips = useMemo(
     () =>
       quickActions.map((action, idx) => (
-        <MotiView
+        <AnimatedItem
           key={action.id}
-          animate={isExiting ? { opacity: 0, translateY: 40 } : { opacity: 1, translateY: 0 }}
-          transition={{
-            type: 'timing',
-            duration: EXIT_DURATION,
-            delay: isExiting ? (2 + idx) * EXIT_STAGGER : 0,
-          }}
+          index={TOTAL_STATIC + idx}
+          isExiting={isExiting}
+          isLast={TOTAL_STATIC + idx === lastIndex}
+          onLastExitDone={onExitComplete}
         >
           <PromptChipButton
             label={action.label}
             onPress={handleQuickActionPress(action)}
           />
-        </MotiView>
+        </AnimatedItem>
       )),
-    // isExiting değişince chips yeniden render edilmeli
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [quickActions, handleQuickActionPress, isExiting],
+    [quickActions, handleQuickActionPress, isExiting, lastIndex, onExitComplete],
   );
 
   return (
     <View style={styles.root}>
-      {/* Greeting satırı — index 0 */}
-      <MotiView
-        animate={exitAnimate}
-        transition={exitTransition(0)}
+      {/* Greeting — index 0 */}
+      <AnimatedItem
+        index={0}
+        isExiting={isExiting}
+        isLast={lastIndex === 0}
+        onLastExitDone={onExitComplete}
       >
         <View style={styles.greetingRow}>
           <Text variant="h3" color={colors.text} style={styles.greeting}>
@@ -123,19 +160,21 @@ export const HomeWelcomePanel: React.FC<Props> = ({
             ) : null}
           </Skeleton>
         </View>
-      </MotiView>
+      </AnimatedItem>
 
-      {/* Soru metni — index 1 */}
-      <MotiView
-        animate={exitAnimate}
-        transition={exitTransition(1)}
+      {/* Question — index 1 */}
+      <AnimatedItem
+        index={1}
+        isExiting={isExiting}
+        isLast={lastIndex === 1}
+        onLastExitDone={onExitComplete}
       >
         <Text variant="h1" color={colors.text} style={styles.question}>
           {question}
         </Text>
-      </MotiView>
+      </AnimatedItem>
 
-      {/* Chip'ler — index 2, 3, 4, 5 */}
+      {/* Chips — index 2+ */}
       <View style={styles.chipsWrap}>{chips}</View>
     </View>
   );

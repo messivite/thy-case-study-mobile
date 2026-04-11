@@ -86,25 +86,27 @@ export const MessageList: React.FC<Props> = ({
   const canShowWelcome = !hasContent && welcomeReady;
 
   const [isWelcomeExiting, setIsWelcomeExiting] = useState(false);
-  // welcomeShownRef: panel bir kez gösterildikten sonra exit animasyonu için DOM'da tut
+  const isWelcomeExitingRef = useRef(false);
+  // welcomeShownRef: panel bir kez gösterildikten sonra DOM'da tut
   const welcomeShownRef = useRef(false);
+
+  // render sırasında sync: canShowWelcome true iken shown=true yap
   if (canShowWelcome) welcomeShownRef.current = true;
 
-  // canShowWelcome false olduğunda exit animasyonunu tetikle
-  useEffect(() => {
-    if (!canShowWelcome && welcomeShownRef.current && !isWelcomeExiting) {
-      setIsWelcomeExiting(true);
-    } else if (canShowWelcome) {
-      setIsWelcomeExiting(false);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canShowWelcome]);
+  // canShowWelcome false olduğu ilk render'da hemen exiting=true olarak işaretle
+  // useEffect bir sonraki render'da çalışır — biz render sırasında hesaplıyoruz
+  if (!canShowWelcome && welcomeShownRef.current && !isWelcomeExitingRef.current) {
+    isWelcomeExitingRef.current = true;
+    // state update → ikinci render tetikler, ama ref zaten true
+    setIsWelcomeExiting(true);
+  }
 
-  // showWelcome: canShowWelcome true VEYA exit animasyonu devam ediyor
-  const showWelcome = canShowWelcome || isWelcomeExiting;
+  // showWelcome: welcome gösterilmişse ve exit tamamlanmadıysa mount'ta tut
+  const showWelcome = canShowWelcome || isWelcomeExitingRef.current;
 
   const handleWelcomeExitComplete = useCallback(() => {
     welcomeShownRef.current = false;
+    isWelcomeExitingRef.current = false;
     setIsWelcomeExiting(false);
   }, []);
 
