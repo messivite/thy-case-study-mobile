@@ -1,10 +1,10 @@
 import React, { useRef, useCallback, useState, useEffect } from 'react';
 import { View, StyleSheet, ActivityIndicator, FlatList, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
+import { SharedValue } from 'react-native-reanimated';
 import * as Speech from 'expo-speech';
 import { Message } from '@/types/chat.types';
 import { MessageBubble } from '@/molecules/MessageBubble';
-import { ActivityThyLoading } from '@/atoms/ActivityThyLoading';
-import { radius } from '@/constants/spacing';
+import { StreamingBubble } from '@/molecules/StreamingBubble';
 import { Text } from '@/atoms/Text';
 import { HomeWelcomePanel, WelcomeQuickAction } from '@/organisms/HomeWelcomePanel';
 import { useTheme } from '@/hooks/useTheme';
@@ -13,45 +13,21 @@ import { useI18n } from '@/hooks/useI18n';
 import { stripTextForSpeech, speechLocaleForAppLang } from '@/lib/chatSpeech';
 import { toast } from '@/lib/toast';
 
-// inverted FlatList'te "aşağı" aslında offset=0 (en üst görsel = en yeni mesaj)
-// Kullanıcı "yukarı" kaydırınca eski mesajlara gider
-const AT_TOP_THRESHOLD = 80; // inverted'da "bottom" aslında offset=0 yani top
+const AT_TOP_THRESHOLD = 80;
 
-const WaitingBubble: React.FC = () => {
-  const { colors } = useTheme();
-  const { t } = useI18n();
-  return (
-    <View style={[waitingStyles.bubble, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-      <ActivityThyLoading mode="pulse" size={20} />
-      <Text variant="caption" color={colors.textSecondary}>{t('assistant.awaitingResponse')}</Text>
-    </View>
-  );
-};
-
-const waitingStyles = StyleSheet.create({
-  bubble: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    marginHorizontal: spacing[4],
-    marginVertical: spacing[1],
-    borderRadius: radius.lg,
-    borderBottomLeftRadius: radius.sm,
-    borderWidth: 1,
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[2],
-    gap: spacing[2],
-  },
-});
 
 type Props = {
   chatId?: string | null;
   messages: Message[];
   optimisticUserMsg?: Message | null;
   isStreamingActive?: boolean;
-  streamingMessage?: Message | null;
   streamingMessageId?: string | null;
   optimisticUserMsgId?: string | null;
+  // UI thread streaming — SharedValue ile
+  pendingStreamSV?: SharedValue<string> | null;
+  isStreamingDoneSV?: SharedValue<boolean> | null;
+  streamResetCountSV?: SharedValue<number> | null;
+  onStreamingComplete?: (text: string) => void;
   isTyping: boolean;
   isSessionLoading?: boolean;
   onLike?: (id: string, liked: boolean | null) => void;
@@ -73,9 +49,12 @@ export const MessageList: React.FC<Props> = ({
   messages,
   optimisticUserMsg,
   isStreamingActive = false,
-  streamingMessage,
   streamingMessageId,
   optimisticUserMsgId,
+  pendingStreamSV,
+  isStreamingDoneSV,
+  streamResetCountSV,
+  onStreamingComplete,
   isTyping,
   isSessionLoading = false,
   onLike,
@@ -95,25 +74,52 @@ export const MessageList: React.FC<Props> = ({
   const { t, currentLanguage } = useI18n();
   const listRef = useRef<FlatList<Message>>(null);
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
-  // inverted modda offset=0 = en yeni mesaj (görsel olarak en altta)
-  // Kullanıcı eski mesajlara kaydırınca offset artar
-  const isAtLatestRef = useRef(true); // offset=0 → en yeni mesajda mı?
+  const isAtLatestRef = useRef(true);
   const prevCountRef = useRef(0);
   const unreadCountRef = useRef(0);
+  // Son streaming ID'yi bir render daha tut — StreamingBubble→MessageBubble
+  // geçişinde MotiView entry animation'ı skip etmek için
+  const lastStreamingMsgIdRef = useRef<string | null>(null);
+
+  const hasContent = messages.length > 0 || !!optimisticUserMsg || !!streamingMessageId || isTyping;
+  const welcomeReady = quickActions.length > 0 && !!welcomeGreeting && !!welcomeQuestion && !!onQuickActionPress;
+  const canShowWelcome = !hasContent && welcomeReady;
+
+  const [isWelcomeExiting, setIsWelcomeExiting] = useState(false);
+  // welcomeShownRef: panel bir kez gösterildikten sonra exit animasyonu için DOM'da tut
+  const welcomeShownRef = useRef(false);
+  if (canShowWelcome) welcomeShownRef.current = true;
+
+  // canShowWelcome false olduğunda exit animasyonunu tetikle
+  useEffect(() => {
+    if (!canShowWelcome && welcomeShownRef.current && !isWelcomeExiting) {
+      setIsWelcomeExiting(true);
+    } else if (canShowWelcome) {
+      setIsWelcomeExiting(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canShowWelcome]);
+
+  // showWelcome: canShowWelcome true VEYA exit animasyonu devam ediyor
+  const showWelcome = canShowWelcome || isWelcomeExiting;
+
+  const handleWelcomeExitComplete = useCallback(() => {
+    welcomeShownRef.current = false;
+    setIsWelcomeExiting(false);
+  }, []);
 
   useEffect(() => () => { void Speech.stop(); }, []);
 
-  // Session değişince sıfırla
   useEffect(() => {
     prevCountRef.current = 0;
     unreadCountRef.current = 0;
     isAtLatestRef.current = true;
+    lastStreamingMsgIdRef.current = null;
     onScrollStateChange?.(false, 0);
   }, [chatId]);
 
-  // Yeni mesaj gelince: en yenideyse badge yok (zaten görüyor), değilse badge göster
   useEffect(() => {
-    const total = messages.length + (optimisticUserMsg ? 1 : 0) + (streamingMessage ? 1 : 0);
+    const total = messages.length + (optimisticUserMsg ? 1 : 0) + (streamingMessageId ? 1 : 0);
     const prev = prevCountRef.current;
     if (total === prev || total === 0) return;
     const added = total - prev;
@@ -123,9 +129,8 @@ export const MessageList: React.FC<Props> = ({
       unreadCountRef.current += added;
       onScrollStateChange?.(true, unreadCountRef.current);
     }
-  }, [messages.length, optimisticUserMsg, streamingMessage]);
+  }, [messages.length, optimisticUserMsg, streamingMessageId]);
 
-  // inverted modda scroll event: contentOffset.y=0 → en yeni mesajda
   const handleScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offsetY = e.nativeEvent.contentOffset.y;
     const atLatest = offsetY < AT_TOP_THRESHOLD;
@@ -142,7 +147,6 @@ export const MessageList: React.FC<Props> = ({
     onScrollStateChange?.(false, 0);
   }, [onScrollStateChange]);
 
-  // Dışarıdan scroll-to-latest tetiklenebilsin
   useEffect(() => {
     if (onScrollToLatestRef) {
       onScrollToLatestRef.current = handleScrollToLatest;
@@ -175,6 +179,25 @@ export const MessageList: React.FC<Props> = ({
   const renderItem = useCallback(({ item, index }: { item: Message; index: number }) => {
     const isStreamingItem = !!streamingMessageId && item.id === streamingMessageId;
     const isOptimisticUserItem = !!optimisticUserMsgId && item.id === optimisticUserMsgId;
+
+    // streamingMessageId aktifken güncelle, null olunca bir render daha eski ID'yi koru
+    if (streamingMessageId) {
+      lastStreamingMsgIdRef.current = streamingMessageId;
+    }
+    const wasStreamingItem = item.id === lastStreamingMsgIdRef.current;
+
+    // Streaming item → StreamingBubble (UI thread animasyonu)
+    if (isStreamingItem && isStreamingActive && pendingStreamSV && isStreamingDoneSV && streamResetCountSV && onStreamingComplete) {
+      return (
+        <StreamingBubble
+          pendingSV={pendingStreamSV}
+          isStreamingDoneSV={isStreamingDoneSV}
+          streamResetCountSV={streamResetCountSV}
+          onComplete={onStreamingComplete}
+        />
+      );
+    }
+
     return (
       <MessageBubble
         message={item}
@@ -182,8 +205,8 @@ export const MessageList: React.FC<Props> = ({
         onRegenerate={onRegenerate}
         index={index}
         isSpeaking={speakingMessageId === item.id}
-        skipEntryAnimation={isStreamingItem || isOptimisticUserItem}
-        hideFooter={(isStreamingItem && isStreamingActive) || isOptimisticUserItem}
+        skipEntryAnimation={isStreamingItem || isOptimisticUserItem || wasStreamingItem}
+        hideFooter={isStreamingItem || isOptimisticUserItem}
         onSpeakToggle={
           item.role === 'assistant' && item.content.trim().length > 0
             ? () => handleSpeakToggle(item.id, item.content)
@@ -191,7 +214,19 @@ export const MessageList: React.FC<Props> = ({
         }
       />
     );
-  }, [streamingMessageId, isStreamingActive, optimisticUserMsgId, onLike, onRegenerate, speakingMessageId, handleSpeakToggle]);
+  }, [
+    streamingMessageId,
+    isStreamingActive,
+    optimisticUserMsgId,
+    pendingStreamSV,
+    isStreamingDoneSV,
+    streamResetCountSV,
+    onStreamingComplete,
+    onLike,
+    onRegenerate,
+    speakingMessageId,
+    handleSpeakToggle,
+  ]);
 
   if (isSessionLoading) {
     return (
@@ -201,70 +236,83 @@ export const MessageList: React.FC<Props> = ({
     );
   }
 
-  const hasContent = messages.length > 0 || !!optimisticUserMsg || !!streamingMessage || isTyping;
-
-  if (!hasContent) {
-    if (quickActions.length > 0 && welcomeGreeting && welcomeQuestion && onQuickActionPress) {
-      const spaceIdx = welcomeGreeting.indexOf(' ');
-      const greetingPrefix = spaceIdx !== -1 ? welcomeGreeting.slice(0, spaceIdx) : welcomeGreeting;
-      const greetingName = spaceIdx !== -1 ? welcomeGreeting.slice(spaceIdx + 1) : '';
-      return (
-        <HomeWelcomePanel
-          greetingPrefix={greetingPrefix}
-          greetingName={greetingName}
-          greetingReady={welcomeGreetingReady}
-          question={welcomeQuestion}
-          quickActions={quickActions}
-          onQuickActionPress={onQuickActionPress}
-        />
-      );
-    }
-    return (
-      <View style={styles.center}>
-        <Text variant="h4" align="center" color={colors.text}>{t('assistant.emptyTitle')}</Text>
-        <Text variant="body" align="center" color={colors.textSecondary} style={styles.emptySubtitle}>
-          {t('assistant.emptySubtitle')}
-        </Text>
-      </View>
-    );
-  }
-
-  // inverted FlatList — en yeni mesaj dizinin başında (index 0), görsel olarak en altta
-  // Real message cache'e girince streaming item'ı gösterme — aynı ID zaten messages'ta var
+  // Streaming item: gerçek mesaj cache'e girince gösterme (aynı ID zaten messages'ta)
   const streamingAlreadyInMessages = !!streamingMessageId && messages.some((m) => m.id === streamingMessageId);
+
+  // Streaming item için placeholder — StreamingBubble kendi içeriğini yönetiyor
+  const streamingPlaceholder: Message | null = (!streamingAlreadyInMessages && streamingMessageId && isStreamingActive)
+    ? { id: streamingMessageId, role: 'assistant', content: '', timestamp: Date.now() }
+    : null;
+
   const displayMessages: Message[] = [
-    ...(!streamingAlreadyInMessages && streamingMessage ? [streamingMessage] : []),
+    ...(streamingPlaceholder ? [streamingPlaceholder] : []),
     ...(optimisticUserMsg ? [optimisticUserMsg] : []),
     ...messages.slice().reverse(),
   ];
 
+  // WelcomePanel overlay için greeting'i parçala
+  const welcomeOverlay = showWelcome && welcomeGreeting && welcomeQuestion && onQuickActionPress
+    ? (() => {
+        const spaceIdx = welcomeGreeting.indexOf(' ');
+        const greetingPrefix = spaceIdx !== -1 ? welcomeGreeting.slice(0, spaceIdx) : welcomeGreeting;
+        const greetingName = spaceIdx !== -1 ? welcomeGreeting.slice(spaceIdx + 1) : '';
+        return { greetingPrefix, greetingName };
+      })()
+    : null;
+
   return (
     <View style={styles.fill}>
-      <FlatList
-        ref={listRef}
-        data={displayMessages}
-        renderItem={renderItem}
-        keyExtractor={(item) => item.id}
-        inverted
-        contentContainerStyle={styles.listContent}
-        ListHeaderComponent={isTyping && !streamingMessage && !streamingAlreadyInMessages ? <WaitingBubble /> : null}
-        ListFooterComponent={
-          isLoadingMore ? (
-            <View style={styles.loadingMore}>
-              <ActivityIndicator size="small" color={colors.primary} />
-            </View>
-          ) : null
-        }
-        onEndReached={() => {
-          if (hasMore && !isLoadingMore && onLoadMore) onLoadMore();
-        }}
-        onEndReachedThreshold={0.5}
-        onScroll={handleScroll}
-        scrollEventThrottle={100}
-        showsVerticalScrollIndicator={false}
-        keyboardDismissMode="interactive"
-        keyboardShouldPersistTaps="handled"
-      />
+      {/* FlatList her zaman mount — mesajlar welcome animasyonu arkasında hazır */}
+      {hasContent ? (
+        <FlatList
+          ref={listRef}
+          data={displayMessages}
+          renderItem={renderItem}
+          keyExtractor={(item) => item.id}
+          inverted
+          contentContainerStyle={styles.listContent}
+          ListHeaderComponent={null}
+          ListFooterComponent={
+            isLoadingMore ? (
+              <View style={styles.loadingMore}>
+                <ActivityIndicator size="small" color={colors.primary} />
+              </View>
+            ) : null
+          }
+          onEndReached={() => {
+            if (hasMore && !isLoadingMore && onLoadMore) onLoadMore();
+          }}
+          onEndReachedThreshold={0.5}
+          onScroll={handleScroll}
+          scrollEventThrottle={100}
+          showsVerticalScrollIndicator={false}
+          keyboardDismissMode="interactive"
+          keyboardShouldPersistTaps="handled"
+        />
+      ) : !showWelcome ? (
+        <View style={styles.center}>
+          <Text variant="h4" align="center" color={colors.text}>{t('assistant.emptyTitle')}</Text>
+          <Text variant="body" align="center" color={colors.textSecondary} style={styles.emptySubtitle}>
+            {t('assistant.emptySubtitle')}
+          </Text>
+        </View>
+      ) : null}
+
+      {/* WelcomePanel: absolute overlay — FlatList ile aynı anda var olabilir */}
+      {welcomeOverlay && (
+        <View style={styles.welcomeOverlay}>
+          <HomeWelcomePanel
+            greetingPrefix={welcomeOverlay.greetingPrefix}
+            greetingName={welcomeOverlay.greetingName}
+            greetingReady={welcomeGreetingReady}
+            question={welcomeQuestion!}
+            quickActions={quickActions}
+            onQuickActionPress={onQuickActionPress!}
+            isExiting={isWelcomeExiting}
+            onExitComplete={handleWelcomeExitComplete}
+          />
+        </View>
+      )}
     </View>
   );
 };
@@ -275,6 +323,9 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  welcomeOverlay: {
+    ...StyleSheet.absoluteFillObject,
   },
   listContent: {
     paddingVertical: spacing[3],

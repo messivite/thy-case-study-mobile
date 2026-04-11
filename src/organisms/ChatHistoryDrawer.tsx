@@ -704,8 +704,8 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
   );
 
   const extraData = useMemo(
-    () => ({ deletedIds, colors, highlightedId: contextMenu?.chat.id, deletingId }),
-    [deletedIds, colors, contextMenu, deletingId],
+    () => ({ deletedIds, highlightedId: contextMenu?.chat.id, deletingId }),
+    [deletedIds, contextMenu, deletingId],
   );
 
   // ---------------------------------------------------------------------------
@@ -714,11 +714,14 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
 
   useEffect(() => {
     if (visible) {
-      setModalVisible(true);
       translateX.value = -DRAWER_WIDTH;
+      overlayOpacity.value = 0;
       requestAnimationFrame(() => {
-        translateX.value = withSpring(0, SPRING_CONFIG);
-        overlayOpacity.value = withTiming(0.55, { duration: 260 });
+        setModalVisible(true);
+        requestAnimationFrame(() => {
+          translateX.value = withSpring(0, SPRING_CONFIG);
+          overlayOpacity.value = withTiming(0.55, { duration: 260 });
+        });
       });
     } else {
       overlayOpacity.value = withTiming(0, { duration: 200 });

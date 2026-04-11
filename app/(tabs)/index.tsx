@@ -25,9 +25,12 @@ export default function HomeScreen() {
     messages,
     optimisticUserMsg,
     isStreamingActive,
-    streamingMessage,
     streamingMessageId,
     optimisticUserMsgId,
+    pendingStreamSV,
+    isStreamingDoneSV,
+    streamResetCountSV,
+    handleStreamingComplete,
     selectedAIModel,
     isTyping,
     isLoading,
@@ -45,7 +48,7 @@ export default function HomeScreen() {
   } = useChatSession();
 
   // Session seçilmiş ama mesajlar henüz yüklenmemiş → spinner göster
-  const isSessionLoading = !!chatId && (isLoading || (isFetching && messages.length === 0 && !isStreamingActive));
+  const isSessionLoading = !!chatId && !isStreamingActive && !optimisticUserMsg && (isLoading || (isFetching && messages.length === 0));
 
   const [scrolledUp, setScrolledUp] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -63,6 +66,11 @@ export default function HomeScreen() {
   const [modelPickerVisible, setModelPickerVisible] = useState(false);
   const [drawerVisible, setDrawerVisible] = useState(false);
   const closeModelPicker = useCallback(() => setModelPickerVisible(false), []);
+  const openModelPicker = useCallback(() => setModelPickerVisible(true), []);
+
+  // Stable strings — dil değişmediği sürece yeni referans üretme
+  const chatPlaceholder = useMemo(() => t('assistant.placeholder'), [t]);
+  const aiModelName = useMemo(() => selectedAIModel?.displayName, [selectedAIModel?.displayName]);
 
   // Sol kenardan sağa swipe → drawer aç
   const openDrawer = useCallback(() => setDrawerVisible(true), []);
@@ -120,14 +128,14 @@ export default function HomeScreen() {
     [handleSend],
   );
 
-  const header = (
+  const header = useMemo(() => (
     <AppHeader
       title={sessionTitle ?? t('assistant.title')}
       leftContent={
         <TouchableOpacity
           style={styles.menuBtn}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          onPress={() => setDrawerVisible(true)}
+          onPress={openDrawer}
           accessibilityRole="button"
           accessibilityLabel="Sohbet geçmişi menüsü"
         >
@@ -152,7 +160,8 @@ export default function HomeScreen() {
       }
       subtitle={undefined}
     />
-  );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  ), [sessionTitle, t, openDrawer, user?.avatarUrl, user?.name, isGuest]);
 
   return (
     <View style={styles.root}>
@@ -162,10 +171,10 @@ input={
           <ChatInput
             onSend={handleSend}
             onStop={onStop}
-            onModelSelectorPress={() => setModelPickerVisible(true)}
-            selectedAIModelName={selectedAIModel?.displayName}
+            onModelSelectorPress={openModelPicker}
+            selectedAIModelName={aiModelName}
             isStreaming={isTyping}
-            placeholder={t('assistant.placeholder')}
+            placeholder={chatPlaceholder}
           />
         }
       >
@@ -174,11 +183,14 @@ input={
           messages={messages}
           optimisticUserMsg={optimisticUserMsg}
           isStreamingActive={isStreamingActive}
-          streamingMessage={streamingMessage}
           streamingMessageId={streamingMessageId}
           optimisticUserMsgId={optimisticUserMsgId}
+          pendingStreamSV={pendingStreamSV}
+          isStreamingDoneSV={isStreamingDoneSV}
+          streamResetCountSV={streamResetCountSV}
+          onStreamingComplete={handleStreamingComplete}
           isTyping={isTyping}
-          isSessionLoading={!!chatId && isSessionLoading}
+          isSessionLoading={isSessionLoading}
           onLike={likeMessage}
           onLoadMore={handleLoadMore}
           hasMore={hasNextPage}

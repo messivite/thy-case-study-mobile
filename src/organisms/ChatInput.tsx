@@ -545,8 +545,9 @@ const ChatInputInner: React.FC<Props> = ({
   }, [focusProgress]);
 
   const handleContentSizeChange = useCallback((e: any) => {
-    const lines = Math.round(e.nativeEvent.contentSize.height / LINE_HEIGHT);
-    setLineCount(Math.max(1, lines));
+    const lines = Math.max(1, Math.round(e.nativeEvent.contentSize.height / LINE_HEIGHT));
+    // Sadece gerçekten değişince setState — her keystroke'ta re-render olmasın
+    setLineCount((prev) => prev === lines ? prev : lines);
   }, []);
 
   const handleExpandPress = useCallback(() => {

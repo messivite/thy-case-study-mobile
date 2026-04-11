@@ -2,9 +2,16 @@ import React, { useCallback } from 'react';
 import {
   View,
   StyleSheet,
-  TouchableOpacity,
+  Pressable,
   Image,
 } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withSequence,
+  Easing,
+} from 'react-native-reanimated';
 import Svg, { Path } from 'react-native-svg';
 import * as Clipboard from 'expo-clipboard';
 import { MotiView } from '@/lib/motiView';
@@ -29,6 +36,36 @@ type Props = {
   onSpeakToggle?: () => void;
   skipEntryAnimation?: boolean;
   hideFooter?: boolean;
+};
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+const AnimatedActionButton: React.FC<{
+  onPress: () => void;
+  children: React.ReactNode;
+  style?: object;
+  accessibilityRole?: 'button' | 'link' | 'none';
+  accessibilityLabel?: string;
+}> = ({ onPress, children, style, accessibilityRole, accessibilityLabel }) => {
+  const scale = useSharedValue(1);
+  const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+
+  return (
+    <AnimatedPressable
+      onPress={() => {
+        scale.value = withSequence(
+          withTiming(0.75, { duration: 80, easing: Easing.out(Easing.quad) }),
+          withTiming(1, { duration: 120, easing: Easing.out(Easing.quad) }),
+        );
+        onPress();
+      }}
+      style={[style, animStyle]}
+      accessibilityRole={accessibilityRole}
+      accessibilityLabel={accessibilityLabel}
+    >
+      {children}
+    </AnimatedPressable>
+  );
 };
 
 // Kullanıcı tail — bubble'ın sağ alt köşesine tam oturur
@@ -165,7 +202,7 @@ const MessageBubbleInner: React.FC<Props> = ({
             {!isUser && (
               <View style={styles.actions}>
                 {onSpeakToggle && (
-                  <TouchableOpacity
+                  <AnimatedActionButton
                     onPress={handleSpeak}
                     style={styles.actionBtn}
                     accessibilityRole="button"
@@ -176,31 +213,31 @@ const MessageBubbleInner: React.FC<Props> = ({
                       size={14}
                       color={isSpeaking ? colors.primary : colors.textSecondary}
                     />
-                  </TouchableOpacity>
+                  </AnimatedActionButton>
                 )}
                 {message.content.length > 0 && (
-                  <TouchableOpacity onPress={handleCopy} style={styles.actionBtn}>
+                  <AnimatedActionButton onPress={handleCopy} style={styles.actionBtn}>
                     <Ionicons name="copy-outline" size={14} color={colors.textSecondary} />
-                  </TouchableOpacity>
+                  </AnimatedActionButton>
                 )}
-                <TouchableOpacity onPress={() => handleLike(true)} style={styles.actionBtn}>
+                <AnimatedActionButton onPress={() => handleLike(true)} style={styles.actionBtn}>
                   <Ionicons
                     name={message.liked === true ? 'thumbs-up' : 'thumbs-up-outline'}
                     size={14}
-                    color={message.liked === true ? colors.primary : colors.textSecondary}
+                    color={message.liked === true ? palette.success : colors.textSecondary}
                   />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => handleLike(false)} style={styles.actionBtn}>
+                </AnimatedActionButton>
+                <AnimatedActionButton onPress={() => handleLike(false)} style={styles.actionBtn}>
                   <Ionicons
                     name={message.liked === false ? 'thumbs-down' : 'thumbs-down-outline'}
                     size={14}
                     color={message.liked === false ? palette.error : colors.textSecondary}
                   />
-                </TouchableOpacity>
+                </AnimatedActionButton>
                 {onRegenerate && (
-                  <TouchableOpacity onPress={() => onRegenerate(message.id)} style={styles.actionBtn}>
+                  <AnimatedActionButton onPress={() => onRegenerate(message.id)} style={styles.actionBtn}>
                     <Ionicons name="refresh-outline" size={14} color={colors.textSecondary} />
-                  </TouchableOpacity>
+                  </AnimatedActionButton>
                 )}
               </View>
             )}
