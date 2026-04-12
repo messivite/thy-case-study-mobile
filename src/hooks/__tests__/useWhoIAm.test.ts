@@ -42,18 +42,24 @@ const mockMe: MeResponse = {
   user: {
     id: 'u1',
     email: 'test@example.com',
+    role: 'authenticated',
+    roles: ['editor'],
     appMetadata: { roles: ['editor'] },
   },
   profile: {
+    id: 'u1',
     displayName: 'Test User',
     role: 'user',
     isAnonymous: false,
+    isActive: true,
     locale: 'tr',
     timezone: 'Europe/Istanbul',
     onboardingCompleted: true,
     avatarUrl: 'https://example.com/avatar.png',
     preferredProvider: 'openai',
     preferredModel: 'gpt-4o',
+    createdAt: '2024-01-01T00:00:00Z',
+    updatedAt: '2024-01-01T00:00:00Z',
   },
 };
 
@@ -71,8 +77,9 @@ function makeStore(preloadedProfile?: ReturnType<typeof profileReducer>) {
 }
 
 function wrapper(store: ReturnType<typeof makeStore>) {
-  return ({ children }: { children: React.ReactNode }) =>
-    React.createElement(Provider, { store }, children);
+  return function Wrapper({ children }: { children: React.ReactNode }) {
+    return React.createElement(Provider, { store, children });
+  };
 }
 
 describe('useWhoIAm', () => {

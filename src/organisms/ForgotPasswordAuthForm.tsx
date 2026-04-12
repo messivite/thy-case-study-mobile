@@ -11,10 +11,10 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { toast } from '@/lib/toast';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/atoms/Text';
 import { FormField } from '@/molecules/FormField';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
-import { useI18n } from '@/hooks/useI18n';
 import { useValidatedForm } from '@/hooks/useValidatedForm';
 import { palette } from '@/constants/colors';
 import { spacing, radius } from '@/constants/spacing';
@@ -38,17 +38,17 @@ type Props = {
 };
 
 export function ForgotPasswordAuthForm({ webScaled, footer }: Props) {
-  const { t, currentLanguage } = useI18n();
+  const { t, i18n } = useTranslation();
   const { forgotPassword } = useSupabaseAuth();
   const haptics = useHaptics();
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- t referansı stabil değil; dil değişince yeterli
-  const schema = useMemo(() => forgotPasswordSchema(t), [currentLanguage]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const schema = useMemo(() => forgotPasswordSchema(t), [i18n.language]);
 
   const {
     control,
     handleSubmit,
-    formState: { isValid, isSubmitting },
+    formState: { isSubmitting },
   } = useValidatedForm<ForgotPasswordFormValues>(schema, {
     defaultValues: { email: '' },
   });
@@ -79,7 +79,7 @@ export function ForgotPasswordAuthForm({ webScaled, footer }: Props) {
     [forgotPassword, t],
   );
 
-  const submitOpacity = isSubmitting ? 1 : !isValid ? WELCOME_LOGIN_BUTTON_DISABLED_OPACITY : 1;
+  const submitOpacity = isSubmitting ? 1 : WELCOME_LOGIN_BUTTON_DISABLED_OPACITY;
 
   return (
     <Animated.View
@@ -106,12 +106,12 @@ export function ForgotPasswordAuthForm({ webScaled, footer }: Props) {
               styles.submitBtn,
               webScaled?.submitBtn,
               { opacity: submitOpacity },
-              (!isValid || isSubmitting) && styles.submitBtnDisabled,
+              isSubmitting && styles.submitBtnDisabled,
             ]}
             onPress={() => { haptics.medium(); handleSubmit(onSubmit)(); }}
             activeOpacity={0.85}
-            disabled={!isValid || isSubmitting}
-            accessibilityState={{ disabled: !isValid || isSubmitting }}
+            disabled={isSubmitting}
+            accessibilityState={{ disabled: isSubmitting }}
           >
             {isSubmitting ? (
               <View style={styles.submitBtn}>

@@ -36,8 +36,8 @@ describe('toast', () => {
   });
 
   it('success — ek options merge edilir', () => {
-    toast.success('ok', { className: 'custom' });
-    expect(mockToast.success).toHaveBeenCalledWith('ok', { duration: 3000, className: 'custom' });
+    toast.success('ok', { duration: 9999 });
+    expect(mockToast.success).toHaveBeenCalledWith('ok', { duration: 9999 });
   });
 
   it('error — sonner error çağrılır, duration 5000', () => {

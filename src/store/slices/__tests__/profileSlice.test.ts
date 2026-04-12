@@ -16,18 +16,24 @@ const mockMe: MeResponse = {
   user: {
     id: 'u1',
     email: 'test@example.com',
+    role: 'authenticated',
+    roles: ['editor'],
     appMetadata: { roles: ['editor'] },
   },
   profile: {
+    id: 'u1',
     displayName: 'Test User',
     role: 'user',
     isAnonymous: false,
+    isActive: true,
     locale: 'tr',
     timezone: 'Europe/Istanbul',
     onboardingCompleted: true,
-    avatarUrl: null,
+    avatarUrl: undefined,
     preferredProvider: 'openai',
     preferredModel: 'gpt-4o',
+    createdAt: '2024-01-01T00:00:00Z',
+    updatedAt: '2024-01-01T00:00:00Z',
   },
 };
 

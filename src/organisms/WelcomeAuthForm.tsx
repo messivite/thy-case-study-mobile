@@ -17,10 +17,10 @@ import Animated, {
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { toast } from '@/lib/toast';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/atoms/Text';
 import { FormField } from '@/molecules/FormField';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
-import { useI18n } from '@/hooks/useI18n';
 import { useValidatedForm } from '@/hooks/useValidatedForm';
 import { palette } from '@/constants/colors';
 import { spacing, radius } from '@/constants/spacing';
@@ -69,17 +69,17 @@ export function WelcomeAuthForm({
   guestAuthPending,
   setGuestAuthPending,
 }: Props) {
-  const { t, currentLanguage } = useI18n();
+  const { t, i18n } = useTranslation();
   const { login, loginWithGoogle, continueAsGuest } = useSupabaseAuth();
   const mountedRef = useRef(true);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- t referansı stabil değil; dil değişince yeterli
-  const schema = useMemo(() => welcomeLoginSchema(t), [currentLanguage]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const schema = useMemo(() => welcomeLoginSchema(t), [i18n.language]);
 
   const {
     control,
     handleSubmit,
-    formState: { isValid, isSubmitting },
+    formState: { isSubmitting },
   } = useValidatedForm<WelcomeLoginFormValues>(schema, {
     defaultValues: { email: '', password: '' },
   });
@@ -92,7 +92,6 @@ export function WelcomeAuthForm({
   }, []);
 
   const anyPending = isSubmitting || guestAuthPending;
-
   const dim = useSharedValue(1);
   useEffect(() => {
     dim.value = withTiming(anyPending ? WELCOME_GUEST_AUTH_FLOW.dimTargetOpacity : 1, {
@@ -163,9 +162,7 @@ export function WelcomeAuthForm({
     router.push('/(auth)/register');
   }, []);
 
-  /** Üstteki Reanimated dim ayrı; buton sadece geçersizken soluk (pending’de zaten tüm form soluk). */
-  const loginBtnOpacity =
-    anyPending ? 1 : !isValid ? WELCOME_LOGIN_BUTTON_DISABLED_OPACITY : 1;
+  const loginBtnOpacity = anyPending ? 1 : WELCOME_LOGIN_BUTTON_DISABLED_OPACITY;
 
   return (
     <Animated.View
@@ -213,12 +210,12 @@ export function WelcomeAuthForm({
               styles.loginBtn,
               webScaled?.loginBtn,
               { opacity: loginBtnOpacity },
-              (!isValid || anyPending) && styles.loginBtnDisabled,
+              anyPending && styles.loginBtnDisabled,
             ]}
             onPress={handleSubmit(onSubmit)}
             activeOpacity={0.85}
-            disabled={!isValid || anyPending}
-            accessibilityState={{ disabled: !isValid || anyPending }}
+            disabled={anyPending}
+            accessibilityState={{ disabled: anyPending }}
           >
             {isSubmitting ? (
               <View style={styles.loginBtnRow}>

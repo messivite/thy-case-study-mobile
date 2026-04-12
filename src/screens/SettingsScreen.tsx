@@ -305,7 +305,7 @@ export default function SettingsScreen() {
                     color={isGuest ? colors.textSecondary : palette.primary}
                   />
                 </View>
-                {!guestLike && (
+                {!isGuest && (
                   <Pressable
                     onPress={() => setEditProfileOpen(true)}
                     style={[styles.editBtn, { backgroundColor: colors.border }]}
