@@ -91,6 +91,8 @@ export interface ChatHistoryDrawerProps {
   onHidden?: () => void;
   onSelectChat?: (chat: ChatListItem) => void;
   onNewChat?: () => void;
+  activeChatId?: string | null;
+  onDeleteActiveChat?: () => void;
 }
 
 type ContextMenuState = {
@@ -221,6 +223,7 @@ const ChatHistoryItem = React.memo<ChatHistoryItemProps>(
             <View style={styles.chipRow}>
               <ModelChip model={item.model} color={providerColor} isDark={isDark} />
               <View style={styles.itemActions}>
+                {/* Arşivleme geçici olarak devre dışı
                 <Pressable
                   onPress={(e) => { e.stopPropagation?.(); onArchive(item.id); }}
                   hitSlop={6}
@@ -228,12 +231,13 @@ const ChatHistoryItem = React.memo<ChatHistoryItemProps>(
                 >
                   <Ionicons name="archive-outline" size={moderateScale(16)} color={textSecondary} />
                 </Pressable>
+                */}
                 <Pressable
                   onPress={(e) => { e.stopPropagation?.(); onDelete(item.id); }}
                   hitSlop={6}
                   style={styles.itemActionBtn}
                 >
-                  <Ionicons name="trash-outline" size={moderateScale(16)} color={palette.error + 'CC'} />
+                  <Ionicons name="trash-outline" size={moderateScale(20)} color={palette.error + 'CC'} />
                 </Pressable>
               </View>
             </View>
@@ -328,11 +332,13 @@ const ContextMenuOverlay = React.memo(({
         entering={FadeIn.springify().damping(20).stiffness(300)}
         style={[styles.contextMenu, { top: clampedTop, left: menuLeft, backgroundColor: surfaceColor, borderColor }]}
       >
+        {/* Arşivleme geçici olarak devre dışı
         <TouchableOpacity style={styles.contextItem} onPress={onArchive} activeOpacity={0.75}>
           <Ionicons name="archive-outline" size={18} color={textColor} />
           <Text style={[styles.contextLabel, { color: textColor }]}>{t('chatHistory.archive')}</Text>
         </TouchableOpacity>
         <View style={[styles.contextDivider, { backgroundColor: borderColor }]} />
+        */}
         <TouchableOpacity style={styles.contextItem} onPress={onDelete} activeOpacity={0.75}>
           <Ionicons name="trash-outline" size={18} color={palette.error} />
           <Text style={[styles.contextLabel, { color: palette.error }]}>{t('chatHistory.delete')}</Text>
@@ -535,6 +541,8 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
   onHidden,
   onSelectChat,
   onNewChat,
+  activeChatId,
+  onDeleteActiveChat,
 }) => {
   const { colors, isDark } = useTheme();
   const { t } = useI18n();
@@ -771,6 +779,10 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
             text: t('chatHistory.deleteAlertConfirm'),
             style: 'destructive',
             onPress: () => {
+              // 0. Aktif session ise hemen sıfırla
+              if (activeChatId === item.id) {
+                onDeleteActiveChat?.();
+              }
               // 1. Animate out başlat
               setDeletingId(item.id);
               // 2. Animasyon bitmeden mutation başlat (220ms sonra cache'den kaldır)
@@ -798,7 +810,7 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
         ],
       );
     },
-    [t, deleteChatMutate],
+    [t, deleteChatMutate, activeChatId, onDeleteActiveChat],
   );
 
 

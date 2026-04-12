@@ -398,6 +398,7 @@ export const useChatSession = () => {
 
   const prevMessagesRef = useRef<Message[]>([]);
   const messages: Message[] = useMemo(() => {
+    if (!chatId) return [];
     if (!messagesQuery.data) return prevMessagesRef.current.length ? [] : prevMessagesRef.current;
 
     const allMsgs = [...messagesQuery.data.pages].reverse().flatMap((page) => page?.messages ?? []);
@@ -626,6 +627,7 @@ export const useChatSession = () => {
     setStreamingMsgIdState('streaming');
     lastStreamTextRef.current = '';
     optimisticUserMsgRef.current = null;
+    const prevChatId = activeChatIdRef.current;
     activeChatIdRef.current = null;
     setIsStreamingActive(false);
     setOptimisticUserMsg(null);

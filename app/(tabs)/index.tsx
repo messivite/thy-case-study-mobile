@@ -84,6 +84,10 @@ export default function HomeScreen() {
   const openDrawer = useCallback(() => { setDrawerVisible(true); }, []);
   const closeDrawer = useCallback(() => setDrawerVisible(false), []);
   const handleDrawerHidden = useCallback(() => {}, []);
+  const handleDeleteActiveChat = useCallback(() => {
+    startNewChat();
+    setDrawerVisible(false);
+  }, [startNewChat]);
   const handleSelectChat = useCallback((chat: import('@/types/chat.api.types').ChatListItem) => {
     loadSession(chat.id);
     setDrawerVisible(false);
@@ -243,6 +247,8 @@ export default function HomeScreen() {
         onHidden={handleDrawerHidden}
         onNewChat={startNewChat}
         onSelectChat={handleSelectChat}
+        activeChatId={chatId}
+        onDeleteActiveChat={handleDeleteActiveChat}
       />
 
       <NetworkConnectivitySheets promptOnMount />
