@@ -71,7 +71,7 @@ export const ErrorBoundaryScreen: React.FC<ErrorBoundaryScreenProps> = ({
           <MotiView
             from={{ opacity: 0, translateY: -20 }}
             animate={{ opacity: 1, translateY: 0 }}
-            transition={{ type: 'spring', damping: 15, delay: 100 }}
+            transition={{ type: 'timing', duration: 500, delay: 100 }}
             style={styles.logoContainer}
           >
             <MotiView
@@ -93,7 +93,7 @@ export const ErrorBoundaryScreen: React.FC<ErrorBoundaryScreenProps> = ({
           <MotiView
             from={{ opacity: 0, scale: 0.5 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ type: 'spring', damping: 12, delay: 300 }}
+            transition={{ type: 'timing', duration: 450, delay: 300 }}
             style={styles.iconContainer}
           >
             <View style={styles.errorIconCircle}>
@@ -146,7 +146,7 @@ export const ErrorBoundaryScreen: React.FC<ErrorBoundaryScreenProps> = ({
         <MotiView
           from={{ opacity: 0, translateY: 20 }}
           animate={{ opacity: 1, translateY: 0 }}
-          transition={{ type: 'spring', damping: 15, delay: 900 }}
+          transition={{ type: 'timing', duration: 450, delay: 900 }}
           style={styles.buttonContainer}
         >
           <GradientButton
