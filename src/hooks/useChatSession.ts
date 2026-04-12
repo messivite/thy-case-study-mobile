@@ -52,6 +52,8 @@ export const useChatSession = () => {
   const dispatch = useAppDispatch();
   const queryClient = useQueryClient();
   const { isOnline } = useNetworkStatus();
+  const isOnlineRef = useRef(isOnline);
+  useEffect(() => { isOnlineRef.current = isOnline; }, [isOnline]);
 
   // Tek subscription — 4 ayrı useAppSelector yerine bir kez Redux store'u dinle.
   // Her biri ayrı subscription açsaydı, birisi değişince 4 ayrı re-render tetiklerdi.
@@ -221,17 +223,18 @@ export const useChatSession = () => {
         }
       },
       onOptimisticSuccess: (payload) => {
-        if (!isOnline) {
+        if (!isOnlineRef.current) {
           // Sadece offline'da: optimistic bubble + toast
-          optimisticUserMsgRef.current = payload.optimisticMsg;
+          const queuedMsg = { ...payload.optimisticMsg, queued: true };
+          optimisticUserMsgRef.current = queuedMsg;
           if (streamingEnabledRef.current) {
             unstable_batchedUpdates(() => {
-              setOptimisticUserMsg(payload.optimisticMsg);
+              setOptimisticUserMsg(queuedMsg);
               setIsStreamingActive(false);
             });
           } else {
             unstable_batchedUpdates(() => {
-              setOptimisticUserMsg(payload.optimisticMsg);
+              setOptimisticUserMsg(queuedMsg);
               setIsNonStreamPending(false);
             });
           }

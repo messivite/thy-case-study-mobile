@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Message } from '@/types/chat.types';
 import { Text } from '@/atoms/Text';
 import { AttachmentPreview } from '@/molecules/AttachmentPreview';
-import { useTheme } from '@/hooks/useTheme';
+import { ThemeColors } from '@/constants/colors';
 import { useHaptics } from '@/hooks/useHaptics';
 import { palette } from '@/constants/colors';
 import { radius, spacing } from '@/constants/spacing';
@@ -22,6 +22,7 @@ import { toast } from '@/lib/toast';
 
 type Props = {
   message: Message;
+  colors: ThemeColors;
   onLike?: (id: string, liked: boolean | null) => void;
   onRegenerate?: (id: string) => void;
   isSpeaking?: boolean;
@@ -58,6 +59,7 @@ const UserTail = ({ color }: { color: string }) => (
 
 const MessageBubbleInner: React.FC<Props> = ({
   message,
+  colors,
   onLike,
   onRegenerate,
   isSpeaking = false,
@@ -65,7 +67,6 @@ const MessageBubbleInner: React.FC<Props> = ({
   hideFooter = false,
   hideModelLabel = false,
 }) => {
-  const { colors } = useTheme();
   const haptics = useHaptics();
 
   const isUser = message.role === 'user';
@@ -203,6 +204,14 @@ const MessageBubbleInner: React.FC<Props> = ({
     >
       {isUser ? (
         <View style={[styles.bubbleRow, styles.bubbleRowUser]}>
+          {message.queued && (
+            <Ionicons
+              name="warning"
+              size={16}
+              color={palette.error}
+              style={styles.queuedIcon}
+            />
+          )}
           {bubbleContent}
           <UserTail color={colors.primary} />
         </View>
@@ -229,12 +238,14 @@ export const MessageBubble = React.memo(MessageBubbleInner, (prev, next) => {
   if (prev.message.timestamp !== next.message.timestamp) return false;
   if (prev.message.model !== next.message.model) return false;
   if (prev.message.liked !== next.message.liked) return false;
+  if (prev.message.queued !== next.message.queued) return false;
   if (prev.isSpeaking !== next.isSpeaking) return false;
   if (prev.onSpeakToggle !== next.onSpeakToggle) return false;
   if (prev.onLike !== next.onLike) return false;
   if (prev.onRegenerate !== next.onRegenerate) return false;
   if (prev.hideFooter !== next.hideFooter) return false;
   if (prev.hideModelLabel !== next.hideModelLabel) return false;
+  if (prev.colors !== next.colors) return false;
   return true;
 });
 
@@ -257,6 +268,11 @@ const styles = StyleSheet.create({
   },
   bubbleRowUser: {
     maxWidth: '75%',
+  },
+  queuedIcon: {
+    alignSelf: 'flex-end',
+    marginRight: spacing[1],
+    marginBottom: spacing[1],
   },
   bubbleRowAi: {
     flex: 1,

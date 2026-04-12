@@ -245,6 +245,7 @@
     "networkError": "No internet connection",
     "unknownError": "An error occurred",
     "messageSendFailed": "Failed to send message",
-    "speechError": "Could not start text-to-speech"
+    "speechError": "Could not start text-to-speech",
+    "profileLoadFailed": "Could not load profile"
   }
 }

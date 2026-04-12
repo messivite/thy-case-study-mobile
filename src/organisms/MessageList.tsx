@@ -242,7 +242,6 @@ export const MessageList: React.FC<Props> = ({
   const renderItem = useCallback(({ item, index }: { item: Message; index: number }) => {
     const isStreamingItem = item.id === STREAMING_KEY;
 
-    // Streaming item → StreamingBubble (UI thread animasyonu)
     if (isStreamingItem && isStreamingActive && pendingStreamSV && isStreamingDoneSV && streamResetCountSV && onStreamingComplete) {
       return (
         <StreamingBubble
@@ -254,12 +253,12 @@ export const MessageList: React.FC<Props> = ({
       );
     }
 
-    // FlatList inverted — index 0 en son mesaj
     const isLastMessage = index === 0;
 
     return (
       <MessageBubble
         message={item}
+        colors={colors}
         onLike={onLike}
         onRegenerate={onRegenerate}
         isSpeaking={speakingMessageIdRef.current === item.id}
@@ -281,6 +280,7 @@ export const MessageList: React.FC<Props> = ({
     onStreamingComplete,
     onLike,
     onRegenerate,
+    colors,
   ]);
 
   // Streaming bittikten sonra gerçek mesaj cache'e girene kadar placeholder'ı göstermeye devam et.

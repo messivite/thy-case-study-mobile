@@ -71,7 +71,6 @@ export default function HomeScreen() {
 
   const [modelPickerVisible, setModelPickerVisible] = useState(false);
   const [drawerVisible, setDrawerVisible] = useState(false);
-  const [drawerEverOpened, setDrawerEverOpened] = useState(false);
   const closeModelPicker = useCallback(() => setModelPickerVisible(false), []);
   const openModelPicker = useCallback(() => setModelPickerVisible(true), []);
 
@@ -79,7 +78,7 @@ export default function HomeScreen() {
   const chatPlaceholder = useMemo(() => t('assistant.placeholder'), [t]);
   const aiModelName = useMemo(() => selectedAIModel?.displayName, [selectedAIModel?.displayName]);
 
-  const openDrawer = useCallback(() => { setDrawerEverOpened(true); setDrawerVisible(true); }, []);
+  const openDrawer = useCallback(() => { setDrawerVisible(true); }, []);
   const closeDrawer = useCallback(() => setDrawerVisible(false), []);
   const handleDrawerHidden = useCallback(() => {}, []);
   const handleSelectChat = useCallback((chat: import('@/types/chat.api.types').ChatListItem) => {
@@ -234,15 +233,13 @@ export default function HomeScreen() {
         variant="liquidGlass"
       />
 
-      {drawerEverOpened && (
-        <ChatHistoryDrawer
-          visible={drawerVisible}
-          onClose={closeDrawer}
-          onHidden={handleDrawerHidden}
-          onNewChat={startNewChat}
-          onSelectChat={handleSelectChat}
-        />
-      )}
+      <ChatHistoryDrawer
+        visible={drawerVisible}
+        onClose={closeDrawer}
+        onHidden={handleDrawerHidden}
+        onNewChat={startNewChat}
+        onSelectChat={handleSelectChat}
+      />
 
       <NetworkConnectivitySheets />
     </View>

@@ -101,7 +101,7 @@ type ContextMenuState = {
 // Constants
 // ---------------------------------------------------------------------------
 
-const SPRING_CONFIG = { damping: 28, stiffness: 300, mass: 0.8 } as const;
+const SPRING_CONFIG = { damping: 32, stiffness: 380, mass: 0.6 } as const;
 const CLOSE_THRESHOLD = 80;
 const SWIPE_VELOCITY_THRESHOLD = 600;
 const CONTEXT_MENU_WIDTH = 200;
@@ -689,14 +689,13 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
       translateX.value = -DRAWER_WIDTH;
       overlayOpacity.value = 0;
       setModalVisible(true);
-      requestAnimationFrame(() => {
-        translateX.value = withSpring(0, SPRING_CONFIG);
-        overlayOpacity.value = withTiming(0.55, { duration: 260 });
-      });
+      translateX.value = withSpring(0, SPRING_CONFIG);
+      overlayOpacity.value = withTiming(0.55, { duration: 260 });
       return;
     } else {
       overlayOpacity.value = withTiming(0, { duration: 200 });
       translateX.value = withTiming(-DRAWER_WIDTH, { duration: 220 }, (done) => {
+        'worklet';
         if (done) { runOnJS(setModalVisible)(false); runOnJS(callOnHidden)(); }
       });
       // Arama state'ini temizle
@@ -877,6 +876,10 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
     if (hasNextPage && !isFetchingNextPage) fetchNextPage();
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
+  const textColor = colors.text;
+  const textSecondary = colors.textSecondary;
+  const borderColor = colors.border;
+
   const renderItem = useCallback(
     ({ item }: { item: ChatListItem }) => (
       <ChatHistoryItem
@@ -885,13 +888,13 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
         onDelete={handleSwipeDeleteById}
         onArchive={handleSwipeArchiveById}
         isDeleting={deletingId === item.id}
-        textColor={colors.text}
-        textSecondary={colors.textSecondary}
-        borderColor={colors.border}
+        textColor={textColor}
+        textSecondary={textSecondary}
+        borderColor={borderColor}
         isDark={isDark}
       />
     ),
-    [handleSelectChatById, handleSwipeDeleteById, handleSwipeArchiveById, deletingId, colors, isDark],
+    [handleSelectChatById, handleSwipeDeleteById, handleSwipeArchiveById, deletingId, textColor, textSecondary, borderColor, isDark],
   );
 
   // ---------------------------------------------------------------------------
@@ -978,6 +981,10 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
                 showsVerticalScrollIndicator={false}
                 onEndReachedThreshold={0.2}
                 onEndReached={handleEndReached}
+                initialNumToRender={12}
+                maxToRenderPerBatch={8}
+                windowSize={5}
+                removeClippedSubviews
                 ListFooterComponent={
                   isFetchingNextPage ? (
                     <View style={styles.footerLoader}>

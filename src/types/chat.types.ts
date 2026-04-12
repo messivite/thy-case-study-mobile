@@ -29,6 +29,7 @@ export type Message = {
   model?: string;
   timestamp: number;
   isLoading?: boolean;
+  queued?: boolean;
   liked?: boolean | null;
   attachments?: Attachment[];
 };

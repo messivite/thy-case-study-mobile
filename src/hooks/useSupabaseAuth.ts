@@ -49,6 +49,7 @@ import { authEventEmitter, AUTH_EVENTS } from '@/services/api';
 import { authMutex } from '@/lib/authMutex';
 import { setErrorReportingUser } from '@/services/errorReporting';
 import { toast } from '@/lib/toast';
+import { useI18n } from '@/hooks/useI18n';
 import { getMe, updateMe } from '@/api/user.api';
 import { setProfile, setProfileError } from '@/store/slices/profileSlice';
 import type { AuthStatus } from '@/types/auth.types';
@@ -103,6 +104,7 @@ export const useSupabaseAuth = (): SupabaseAuthApi => {
 
 function useSupabaseAuthState(): SupabaseAuthApi {
   const dispatch = useAppDispatch();
+  const { t } = useI18n();
   const { accessToken, refreshToken, expiresAt, status } = useAppSelector((s) => s.auth);
   const refreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isRefreshingRef = useRef(false);
@@ -156,7 +158,10 @@ function useSupabaseAuthState(): SupabaseAuthApi {
             });
         }
       })
-      .catch(() => dispatch(setProfileError()));
+      .catch(() => {
+        dispatch(setProfileError());
+        toast.error(t('toast.profileLoadFailed'));
+      });
   }, [dispatch]);
 
   const dispatchRefreshedTokens = useCallback(
@@ -242,7 +247,7 @@ function useSupabaseAuthState(): SupabaseAuthApi {
     const unsub = authEventEmitter.on(AUTH_EVENTS.SESSION_EXPIRED, () => {
       doLogout(true);
     });
-    return () => unsub();
+    return () => { unsub(); };
   }, [doLogout]);
 
   // -------------------------------------------------------------------------

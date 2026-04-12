@@ -54,7 +54,7 @@ interface RetryableConfig extends InternalAxiosRequestConfig {
 // Auth gerektiren istekler için (interceptor'lı)
 export const api = axios.create({
   baseURL: BASE_URL,
-  timeout: 15000,
+  timeout: 8000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -63,7 +63,7 @@ export const api = axios.create({
 // Auth gerektirmeyen public istekler için (interceptor'sız)
 export const publicApi = axios.create({
   baseURL: BASE_URL,
-  timeout: 15000,
+  timeout: 8000,
   headers: {
     'Content-Type': 'application/json',
   },

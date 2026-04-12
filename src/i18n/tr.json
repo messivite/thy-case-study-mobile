@@ -245,6 +245,7 @@
     "networkError": "İnternet bağlantısı yok",
     "unknownError": "Bir hata oluştu",
     "messageSendFailed": "Mesaj gönderilemedi",
-    "speechError": "Sesli okuma başlatılamadı"
+    "speechError": "Sesli okuma başlatılamadı",
+    "profileLoadFailed": "Profil bilgileri yüklenemedi"
   }
 }
