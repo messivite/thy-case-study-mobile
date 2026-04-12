@@ -81,26 +81,33 @@ export const GlassView: React.FC<Props> = ({
 
 // --- Variant base styles ---
 
+// Web'de overflow:hidden içerik keser — visible yap
+const webOverflow: ViewStyle = Platform.OS === 'web' ? { overflow: 'visible' } : {};
+
 const VARIANT_STYLES: Record<GlassVariant, ViewStyle> = {
   sheet: {
     borderRadius: radius['2xl'],
     borderWidth: 0,
     overflow: 'hidden',
+    ...webOverflow,
   },
   card: {
     borderRadius: radius.xl,
     borderWidth: 1,
     overflow: 'hidden',
+    ...webOverflow,
   },
   overlay: {
     borderRadius: 0,
     borderWidth: 0,
     overflow: 'hidden',
+    ...webOverflow,
   },
   subtle: {
     borderRadius: radius.lg,
     borderWidth: 1,
     overflow: 'hidden',
+    ...webOverflow,
   },
 };
 
@@ -138,5 +145,6 @@ function getAndroidGlassStyle(isDark: boolean, variant: GlassVariant): ViewStyle
 const styles = StyleSheet.create({
   base: {
     overflow: 'hidden',
+    ...webOverflow,
   },
 });
