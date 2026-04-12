@@ -1,17 +1,21 @@
-import React, { useCallback, useMemo, memo } from 'react';
-import { View, StyleSheet } from 'react-native';
+import React, { useState, useRef, memo } from 'react';
+import {
+  View,
+  TextInput,
+  StyleSheet,
+  Platform,
+  Text as RNText,
+} from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { LiquidBottomSheet } from '@/molecules/LiquidBottomSheet';
-import { FormField } from '@/molecules/FormField';
 import { Button } from '@/atoms/Button';
 import { Text } from '@/atoms/Text';
 import { useWhoIAm } from '@/hooks/useWhoIAm';
 import { useUpdateMeMutation } from '@/hooks/api/useUpdateMe';
-import { useValidatedForm } from '@/hooks/useValidatedForm';
-import { useI18n } from '@/hooks/useI18n';
 import { useTheme } from '@/hooks/useTheme';
 import { toast } from '@/lib/toast';
-import { spacing } from '@/constants/spacing';
-import { editProfileSchema, type EditProfileFormValues } from '@/forms/profile/editProfile/schema';
+import { spacing, radius } from '@/constants/spacing';
+import { fontFamily, fontSize } from '@/constants/typography';
 
 type Props = {
   open: boolean;
@@ -23,30 +27,50 @@ type FormProps = {
   onClose: () => void;
 };
 
-/**
- * Form ayrı component'te — her onChange yalnızca burayı re-render eder,
- * LiquidBottomSheet animasyon state'ini etkilemez.
- */
+const MIN_LENGTH = 2;
+
 const EditProfileForm = memo(function EditProfileForm({ initialDisplayName, onClose }: FormProps) {
-  const { t, currentLanguage } = useI18n();
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const { mutate, isPending } = useUpdateMeMutation();
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const schema = useMemo(() => editProfileSchema(t), [currentLanguage]);
+  // Uncontrolled — ref ile değer takip, re-render yok
+  const inputRef = useRef<TextInput>(null);
+  const valueRef = useRef(initialDisplayName);
+  const [error, setError] = useState<string | undefined>();
+  const [focused, setFocused] = useState(false);
 
-  const { control, handleSubmit, formState: { isValid } } = useValidatedForm<EditProfileFormValues>(schema, {
-    defaultValues: { displayName: initialDisplayName },
-  });
+  const validate = (val: string) => {
+    const trimmed = val.trim();
+    if (trimmed.length < MIN_LENGTH) return t('settings.displayNameMin');
+    return undefined;
+  };
 
-  const onSubmit = useCallback(
-    (values: EditProfileFormValues) => {
-      mutate({ displayName: values.displayName.trim() });
-      toast.success(t('settings.profileUpdated'));
-      onClose();
-    },
-    [mutate, t, onClose],
-  );
+  const handleChangeText = (text: string) => {
+    valueRef.current = text;
+    // Sadece hata varsa clear et — yeni hata gösterme (onBlur'da göster)
+    if (error) setError(undefined);
+  };
+
+  const handleBlur = () => {
+    setFocused(false);
+    setError(validate(valueRef.current));
+  };
+
+  const handleSubmit = () => {
+    const trimmed = valueRef.current.trim();
+    const err = validate(trimmed);
+    if (err) { setError(err); return; }
+    mutate({ displayName: trimmed });
+    toast.success(t('settings.profileUpdated'));
+    onClose();
+  };
+
+  const borderColor = error
+    ? colors.error
+    : focused
+      ? colors.primary
+      : colors.border;
 
   return (
     <View style={styles.container}>
@@ -54,21 +78,38 @@ const EditProfileForm = memo(function EditProfileForm({ initialDisplayName, onCl
         {t('settings.editProfile')}
       </Text>
 
-      <FormField
-        control={control}
-        name="displayName"
-        label={t('settings.displayName')}
-        labelColor={colors.textSecondary}
-        placeholder={t('settings.displayNamePlaceholder')}
-        autoCapitalize="words"
-        editable={!isPending}
-      />
+      <View style={styles.fieldWrap}>
+        <RNText style={[styles.label, { color: colors.textSecondary, fontFamily: fontFamily.medium, fontSize: fontSize.sm }]}>
+          {t('settings.displayName')}
+        </RNText>
+        <View style={[styles.inputBox, { backgroundColor: colors.inputBg, borderColor }]}>
+          <TextInput
+            ref={inputRef}
+            defaultValue={initialDisplayName}
+            onChangeText={handleChangeText}
+            onFocus={() => setFocused(true)}
+            onBlur={handleBlur}
+            placeholder={t('settings.displayNamePlaceholder')}
+            placeholderTextColor={colors.textSecondary}
+            autoCapitalize="words"
+            editable={!isPending}
+            style={[styles.input, { color: colors.text, fontFamily: fontFamily.regular, fontSize: fontSize.base }]}
+            returnKeyType="done"
+            onSubmitEditing={handleSubmit}
+          />
+        </View>
+        {error ? (
+          <RNText style={[styles.errorText, { color: colors.error, fontFamily: fontFamily.regular, fontSize: fontSize.xs }]}>
+            {error}
+          </RNText>
+        ) : null}
+      </View>
 
       <Button
         title={t('common.save')}
-        onPress={handleSubmit(onSubmit)}
+        onPress={handleSubmit}
         loading={isPending}
-        disabled={!isValid || isPending}
+        disabled={isPending}
       />
     </View>
   );
@@ -76,9 +117,6 @@ const EditProfileForm = memo(function EditProfileForm({ initialDisplayName, onCl
 
 export function EditProfileSheet({ open, onClose }: Props) {
   const { displayName } = useWhoIAm();
-
-  // Sheet her açıldığında güncel displayName'i key olarak kullan —
-  // EditProfileForm remount olur ve form fresh defaultValues alır.
   const formKey = open ? (displayName ?? '') : null;
 
   return (
@@ -102,5 +140,27 @@ const styles = StyleSheet.create({
   },
   title: {
     marginBottom: spacing[2],
+  },
+  fieldWrap: {
+    marginBottom: spacing[4],
+  },
+  label: {
+    marginBottom: spacing[1],
+  },
+  inputBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing[4],
+    minHeight: 52,
+  },
+  input: {
+    flex: 1,
+    paddingVertical: Platform.OS === 'ios' ? spacing[4] : spacing[3],
+  },
+  errorText: {
+    marginTop: spacing[1],
+    marginLeft: spacing[1],
   },
 });

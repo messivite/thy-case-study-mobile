@@ -46,9 +46,8 @@ export function FormField<T extends FieldValues>({
         </View>
       );
     },
-    // inputProps spread edildiginden sadece stable referanslari dep olarak aliyoruz
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [label, labelColor, secure, leftIcon],
+    [label, labelColor, secure, leftIcon, inputProps.editable, inputProps.placeholder, inputProps.autoCapitalize],
   );
 
   return (

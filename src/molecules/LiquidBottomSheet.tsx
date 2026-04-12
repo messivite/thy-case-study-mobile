@@ -6,7 +6,6 @@ import {
   StyleSheet,
   Platform,
   KeyboardAvoidingView,
-  useWindowDimensions,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
@@ -19,9 +18,9 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { GlassView } from '@/atoms/GlassView';
 import { useTheme } from '@/hooks/useTheme';
-import { useI18n } from '@/hooks/useI18n';
 import { useHaptics } from '@/hooks/useHaptics';
 import { radius, spacing } from '@/constants/spacing';
 
@@ -40,6 +39,8 @@ type Props = {
   closeOnBackdropPress?: boolean;
   children: React.ReactNode;
   contentStyle?: StyleProp<ViewStyle>;
+  /** Input içermeyen sheet'lerde KAV'ı devre dışı bırak (default: true) */
+  avoidKeyboard?: boolean;
 };
 
 const SLIDE_IN = { duration: 320, easing: Easing.out(Easing.cubic) } as const;
@@ -53,21 +54,24 @@ export const LiquidBottomSheet: React.FC<Props> = ({
   closeOnBackdropPress = true,
   children,
   contentStyle,
+  avoidKeyboard = true,
 }) => {
   const { colors, isDark } = useTheme();
-  const { t } = useI18n();
+  const { t } = useTranslation();
   const haptics = useHaptics();
   const insets = useSafeAreaInsets();
-  const { height: winH } = useWindowDimensions();
-  const offscreen = winH * 0.55;
+
+  // Sabit offscreen mesafesi — useWindowDimensions kullanmıyoruz çünkü
+  // klavye açılınca winH değişir → offscreen değişir → useEffect tetiklenir → sheet zıplar.
+  const OFFSCREEN = 600;
 
   const [modalVisible, setModalVisible] = useState(open);
-  const translateY = useSharedValue(offscreen);
+  const translateY = useSharedValue(OFFSCREEN);
   const backdropOp = useSharedValue(0);
 
   useEffect(() => {
     if (open) {
-      translateY.value = offscreen;
+      translateY.value = OFFSCREEN;
       setModalVisible(true);
       requestAnimationFrame(() => {
         translateY.value = withTiming(0, SLIDE_IN);
@@ -75,12 +79,12 @@ export const LiquidBottomSheet: React.FC<Props> = ({
       });
     } else {
       backdropOp.value = withTiming(0, { duration: 240 });
-      translateY.value = withTiming(offscreen, { duration: 280 }, (finished) => {
+      translateY.value = withTiming(OFFSCREEN, { duration: 280 }, (finished) => {
         if (finished) runOnJS(setModalVisible)(false);
       });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- shared values stable
-  }, [open, offscreen]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- shared values stable, OFFSCREEN sabiti
+  }, [open]);
 
   const backdropStyle = useAnimatedStyle(() => ({
     opacity: backdropOp.value,
@@ -121,6 +125,49 @@ export const LiquidBottomSheet: React.FC<Props> = ({
       </View>
     );
 
+  const innerContent = (
+    <View style={styles.root} pointerEvents="box-none">
+      <Animated.View style={[styles.backdrop, backdropStyle]}>
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={handleBackdrop}
+          accessibilityRole="button"
+          accessibilityLabel={t('common.close')}
+        />
+      </Animated.View>
+
+      <Animated.View
+        style={[styles.sheetWrap, sheetStyle]}
+        pointerEvents="box-none"
+      >
+        <View style={styles.sheetMaxWidth} pointerEvents="box-none">
+          <View style={[styles.sheetCard, IS_WEB && { overflow: 'visible' }]}>
+            {showHandle && (
+              <View style={[styles.handle, { backgroundColor: colors.textSecondary }]} />
+            )}
+            {showCloseButton && (
+              <Pressable
+                onPress={() => { haptics.light(); onClose(); }}
+                style={styles.closeBtn}
+                hitSlop={12}
+                accessibilityRole="button"
+                accessibilityLabel={t('common.close')}
+              >
+                <Ionicons
+                  name="close"
+                  size={26}
+                  color={isDark ? 'rgba(255,255,255,0.90)' : 'rgba(0,0,0,0.55)'}
+                />
+              </Pressable>
+            )}
+
+            {sheetBody}
+          </View>
+        </View>
+      </Animated.View>
+    </View>
+  );
+
   return (
     <Modal
       visible={modalVisible}
@@ -129,51 +176,18 @@ export const LiquidBottomSheet: React.FC<Props> = ({
       statusBarTranslucent={Platform.OS === 'android'}
       onRequestClose={onClose}
     >
-      <KeyboardAvoidingView
-        style={styles.keyboardAvoid}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
-      <View style={styles.root} pointerEvents="box-none">
-        <Animated.View style={[styles.backdrop, backdropStyle]}>
-          <Pressable
-            style={StyleSheet.absoluteFill}
-            onPress={handleBackdrop}
-            accessibilityRole="button"
-            accessibilityLabel={t('common.close')}
-          />
-        </Animated.View>
-
-        <Animated.View
-          style={[styles.sheetWrap, sheetStyle]}
-          pointerEvents="box-none"
+      {avoidKeyboard ? (
+        <KeyboardAvoidingView
+          style={styles.keyboardAvoid}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
-          <View style={styles.sheetMaxWidth} pointerEvents="box-none">
-            <View style={[styles.sheetCard, IS_WEB && { overflow: 'visible' }]}>
-              {showHandle && (
-                <View style={[styles.handle, { backgroundColor: colors.textSecondary }]} />
-              )}
-              {showCloseButton && (
-                <Pressable
-                  onPress={() => { haptics.light(); onClose(); }}
-                  style={styles.closeBtn}
-                  hitSlop={12}
-                  accessibilityRole="button"
-                  accessibilityLabel={t('common.close')}
-                >
-                  <Ionicons
-                    name="close"
-                    size={26}
-                    color={isDark ? 'rgba(255,255,255,0.90)' : 'rgba(0,0,0,0.55)'}
-                  />
-                </Pressable>
-              )}
-
-              {sheetBody}
-            </View>
-          </View>
-        </Animated.View>
-      </View>
-      </KeyboardAvoidingView>
+          {innerContent}
+        </KeyboardAvoidingView>
+      ) : (
+        <View style={styles.keyboardAvoid}>
+          {innerContent}
+        </View>
+      )}
     </Modal>
   );
 };
