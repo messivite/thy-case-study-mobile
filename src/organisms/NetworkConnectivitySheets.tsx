@@ -4,7 +4,6 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
-  withSpring,
   Easing,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
@@ -101,7 +100,7 @@ export function NetworkConnectivitySheets({ enabled = true, promptOnMount = fals
   const preview = devConfig.networkSheetPreview;
 
   const { isOnline } = useNetworkStatus();
-  const { queue, pendingCount, isSyncing, syncNow } = useOfflineQueue();
+  const { pendingCount, isSyncing, syncNow } = useOfflineQueue();
   const { percentage, completedCount, totalCount, failedCount, items } = useSyncProgress();
 
   // items filtresi — her render'da yeniden hesaplanmasın
@@ -149,16 +148,18 @@ export function NetworkConnectivitySheets({ enabled = true, promptOnMount = fals
 
   useOfflineSyncInterceptor({
     onPromptNeeded: useCallback(() => {
-      if (!enabled) return;
+      if (!enabled || !chatId) return;
+      if (_dismissedChatIds.has(chatId)) return;
       setOfflineOpen(false);
       setOnlineOpen(true);
-    }, [enabled]),
+    }, [enabled, chatId]),
   });
 
   useEffect(() => {
     if (!enabled || preview != null) return;
     if (isOnline == null) return;
     if (!isOnline) {
+      console.log('[NetworkSheets] setting offlineOpen=true');
       setOfflineOpen(true);
       setOnlineOpen(false);
     }

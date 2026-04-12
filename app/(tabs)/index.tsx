@@ -256,13 +256,11 @@ export default function HomeScreen() {
         />
       )}
 
-      {!!chatId && (
-        <NetworkConnectivitySheets
-          promptOnMount
-          chatId={chatId}
-          forceOpen={syncTrigger}
-        />
-      )}
+      <NetworkConnectivitySheets
+        promptOnMount
+        chatId={chatId}
+        forceOpen={syncTrigger}
+      />
       <ServerUnavailableSheet />
     </View>
   );
