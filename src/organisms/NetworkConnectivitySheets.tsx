@@ -130,16 +130,14 @@ export function NetworkConnectivitySheets({ enabled = true, promptOnMount = fals
 
   useEffect(() => {
     if (!enabled) return;
-    OfflineManager.configure({
-      onOnlineRestore: ({ pendingCount: count }) => {
-        if (count > 0 && isOnlineRef.current) {
-          setOfflineOpen(false);
-          setOnlineOpen(true);
-        }
-      },
-    });
+    OfflineManager.onOnlineRestore = ({ pendingCount: count }) => {
+      if (count > 0 && isOnlineRef.current) {
+        setOfflineOpen(false);
+        setOnlineOpen(true);
+      }
+    };
     return () => {
-      OfflineManager.configure({ onOnlineRestore: undefined });
+      OfflineManager.onOnlineRestore = undefined;
     };
   }, [enabled]);
 

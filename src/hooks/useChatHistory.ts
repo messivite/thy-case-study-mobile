@@ -20,7 +20,7 @@
  * Guest / anonymous: API cagrisi yapilmaz, sadece Realm gosterilir.
  */
 
-import { useMemo, useCallback } from 'react';
+import { useMemo, useCallback, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   useInfiniteChatsQuery,
@@ -64,10 +64,13 @@ export function useChatHistory(searchQuery: string): ChatHistoryData {
 
   const chatsQuery = useInfiniteChatsQuery();
 
-  const sessions = useMemo(
-    () => chatsQuery.data?.pages.flatMap((p) => p.items) ?? [],
-    [chatsQuery.data],
-  );
+  // Refetch sırasında data geçici boşalırsa son iyi değeri koru
+  const lastSessionsRef = useRef<ChatListItem[]>([]);
+  const sessions = useMemo(() => {
+    const items = chatsQuery.data?.pages.flatMap((p) => p.items) ?? [];
+    if (items.length > 0) lastSessionsRef.current = items;
+    return items.length > 0 ? items : lastSessionsRef.current;
+  }, [chatsQuery.data]);
 
   const invalidate = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });

@@ -496,6 +496,7 @@ const SearchOverlay = React.memo(({
               onEndReachedThreshold={0.3}
               onEndReached={() => { if (hasNext && !isFetchingNext) onLoadMore(); }}
               ListFooterComponent={searchFooter}
+              keyboardShouldPersistTaps="handled"
             />
           </View>
         )
@@ -524,6 +525,7 @@ const SearchOverlay = React.memo(({
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.listContent}
             ListHeaderComponent={recentHeader}
+            keyboardShouldPersistTaps="handled"
           />
         </View>
       )}
@@ -586,6 +588,9 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
   const searchInputRef = useRef<SearchInputRef>(null);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Overlay input focus'tan bağımsız — query doluyken veya input focus'tayken açık kalır
+  const searchOverlayVisible = searchFocused || debouncedQuery.trim().length > 0;
+
   // Toolbar animation — newChat slides out on focus
   const newChatOpacity = useSharedValue(1);
   const newChatMaxHeight = useSharedValue(48);
@@ -606,14 +611,13 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
     searchHasNextPage: searchHasNext,
   } = useChatHistory(debouncedQuery);
 
-  // Search focus'a gelince Realm'den canlı oku — drawer zaten açık, Realm hazır olur
+  // Search focus'a gelince React Query cache'inden oku — sessions zaten güncel
   const [focusInitialSessions, setFocusInitialSessions] = useState<ChatListItem[]>([]);
   useEffect(() => {
-    if (searchFocused) {
-      const all = realmService.getSessions().items;
-      setFocusInitialSessions(all.filter((c) => !deletedIds.has(c.id)));
+    if (searchOverlayVisible) {
+      setFocusInitialSessions(sessions.filter((c) => c?.id && !deletedIds.has(c.id)));
     }
-  }, [searchFocused, deletedIds]);
+  }, [searchOverlayVisible, sessions, deletedIds]);
 
   // QueryState: sadece debouncedQuery'e göre hesapla — her karakter basışında re-render yok.
   const queryState = useMemo((): QueryState => {
@@ -626,6 +630,11 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
   const chats = useMemo(
     () => sessions.filter((c) => c?.id && !deletedIds.has(c.id)),
     [sessions, deletedIds],
+  );
+
+  const filteredSearchResults = useMemo(
+    () => searchResults.filter((r) => r?.sessionId && !deletedIds.has(r.sessionId)),
+    [searchResults, deletedIds],
   );
 
   const extraData = useMemo(
@@ -654,6 +663,8 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
       // Arama state'ini temizle
       setSearchFocused(false);
       searchQueryRef.current = '';
+      setDebouncedQuery('');
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
       newChatOpacity.value = 1;
       newChatMaxHeight.value = 48;
     }
@@ -713,9 +724,9 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
     } else {
       newChatOpacity.value = withTiming(1, { duration: 200 });
       newChatMaxHeight.value = withTiming(48, { duration: 200 });
-      searchQueryRef.current = '';
-      setDebouncedQuery('');
-      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+      // Query'yi burada temizleme — onSubmitEditing sonrası blur gelince sonuçları siler.
+      // Temizlik: İptal butonu (handleCancel içinde onClear), drawer kapanışı (visible effect) ve
+      // handleSelectSearchResult tarafından yapılır.
     }
   }, [newChatOpacity, newChatMaxHeight]);
 
@@ -735,16 +746,18 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
   }, []);
 
   const handleSelectSearchResult = useCallback((item: ChatSearchResultItem) => {
-    searchInputRef.current?.blur();
-    setSearchFocused(false);
-    searchQueryRef.current = '';
-    setDebouncedQuery('');
+    // Önce session'ı yükle, sonra overlay'i kapat — sıra önemli
     if (onSelectChat) {
-      onSelectChat({ id: item.sessionId } as ChatListItem);
+      onSelectChat({ id: item.sessionId, title: item.title } as ChatListItem);
     } else {
       dispatch(setSessionId(item.sessionId));
       onClose();
     }
+    // State'i temizle (blur'dan önce — blur onFocusChange tetikler, o da state'i temizler; çift temizlik zararsız)
+    searchQueryRef.current = '';
+    setDebouncedQuery('');
+    setSearchFocused(false);
+    searchInputRef.current?.blur();
   }, [dispatch, onSelectChat, onClose]);
 
   // ---------------------------------------------------------------------------
@@ -758,7 +771,7 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
     (id: string) => {
       if (onSelectChat) {
         const chat = chatsRef.current.find((c) => c.id === id);
-        if (chat) onSelectChat(chat);
+        onSelectChat(chat ?? ({ id } as ChatListItem));
       } else {
         dispatch(setSessionId(id));
         onClose();
@@ -888,6 +901,12 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
                 onChangeText={handleSearchChange}
                 onFocusChange={handleSearchFocus}
                 onClear={() => { searchQueryRef.current = ''; setDebouncedQuery(''); }}
+                onSubmitEditing={() => {
+                  // Debounce beklemeden anında ara
+                  if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+                  const q = searchQueryRef.current.trim();
+                  if (q) setDebouncedQuery(q);
+                }}
                 showCancelOnFocus
                 cancelLabel={t('chatHistory.cancel')}
                 containerStyle={styles.searchInputContainer}
@@ -948,20 +967,29 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
             )}
           </View>
 
-          {/* Search overlay — focus olunca liste üstünü kaplar, fixed area altından başlar */}
-          {searchFocused && (
+          {/* Search overlay — focus veya dolu query varken açık kalır */}
+          {searchOverlayVisible && (
             <SearchOverlay
               queryState={queryState}
               queryText={debouncedQuery}
               isSearching={isSearching}
               isFetchingNext={isSearchFetchingNext}
               hasNext={searchHasNext ?? false}
-              searchResults={searchResults}
+              searchResults={filteredSearchResults}
               focusInitialSessions={focusInitialSessions}
               topOffset={fixedAreaHeight}
               onLoadMore={searchFetchNext}
               onSelectResult={handleSelectSearchResult}
-              onSelectSession={(item) => handleSelectChatById(item.id)}
+              onSelectSession={(item) => {
+                if (onSelectChat) {
+                  onSelectChat(item);
+                } else {
+                  dispatch(setSessionId(item.id));
+                  onClose();
+                }
+                setSearchFocused(false);
+                searchInputRef.current?.blur();
+              }}
               textColor={colors.text}
               textSecondary={colors.textSecondary}
               borderColor={colors.border}

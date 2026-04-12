@@ -23,6 +23,11 @@ const getRealmAdapter = Platform.OS !== 'web'
   ? () => require('@mustafaaksoy41/react-native-offline-queue').getRealmAdapter()
   : () => null;
 
+// Module-level sabit — her render'da yeni referans üretmez, OfflineProvider config effect'i tetiklenmez
+const offlineConfig = Platform.OS !== 'web'
+  ? { storage: getRealmAdapter(), syncMode: 'manual' as const }
+  : null;
+
 import { store } from '@/store';
 import { queryClient } from '@/services/queryClient';
 import i18n from '@/i18n';
@@ -61,10 +66,7 @@ function RootLayout() {
             <QueryClientProvider client={queryClient}>
               <I18nextProvider i18n={i18n}>
                 {Platform.OS !== 'web' ? (
-                  <OfflineProvider config={{
-                    storage: getRealmAdapter(),
-                    syncMode: 'manual',
-                  }}>
+                  <OfflineProvider config={offlineConfig!}>
                     <AppErrorBoundary>
                       {fontsLoaded ? <AuthProvider /> : null}
                     </AppErrorBoundary>
