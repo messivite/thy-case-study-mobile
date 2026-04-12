@@ -610,9 +610,10 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
   const [focusInitialSessions, setFocusInitialSessions] = useState<ChatListItem[]>([]);
   useEffect(() => {
     if (searchFocused) {
-      setFocusInitialSessions(realmService.getSessions().items);
+      const all = realmService.getSessions().items;
+      setFocusInitialSessions(all.filter((c) => !deletedIds.has(c.id)));
     }
-  }, [searchFocused]);
+  }, [searchFocused, deletedIds]);
 
   // QueryState: sadece debouncedQuery'e göre hesapla — her karakter basışında re-render yok.
   const queryState = useMemo((): QueryState => {
@@ -770,45 +771,36 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
   // Silme onayı + animasyon + mutation — hem context menu hem swipe için ortak
   const confirmDelete = useCallback(
     (item: ChatListItem) => {
-      Alert.alert(
-        t('chatHistory.deleteAlertTitle'),
-        t('chatHistory.deleteAlertMessage', { title: item.title }),
-        [
-          { text: t('chatHistory.deleteAlertCancel'), style: 'cancel' },
-          {
-            text: t('chatHistory.deleteAlertConfirm'),
-            style: 'destructive',
-            onPress: () => {
-              // 0. Aktif session ise hemen sıfırla
-              if (activeChatId === item.id) {
-                onDeleteActiveChat?.();
-              }
-              // 1. Animate out başlat
-              setDeletingId(item.id);
-              // 2. Animasyon bitmeden mutation başlat (220ms sonra cache'den kaldır)
-              setTimeout(() => {
-                setDeletedIds((prev) => new Set([...prev, item.id]));
-                setDeletingId(null);
-              }, 220);
-              // 3. Remote sil
-              deleteChatMutate(item.id, {
-                onSuccess: () => {
-                  toast.success(t('chatHistory.deleteSuccess'));
-                },
-                onError: () => {
-                  // Rollback: cache useDeleteChatMutation onError'da zaten restore ediyor
-                  setDeletedIds((prev) => {
-                    const next = new Set(prev);
-                    next.delete(item.id);
-                    return next;
-                  });
-                  toast.error(t('chatHistory.deleteError'));
-                },
-              });
-            },
+      const doDelete = () => {
+        if (activeChatId === item.id) onDeleteActiveChat?.();
+        setDeletingId(item.id);
+        setTimeout(() => {
+          setDeletedIds((prev) => new Set([...prev, item.id]));
+          setDeletingId(null);
+        }, 220);
+        deleteChatMutate(item.id, {
+          onSuccess: () => toast.success(t('chatHistory.deleteSuccess')),
+          onError: () => {
+            setDeletedIds((prev) => { const next = new Set(prev); next.delete(item.id); return next; });
+            toast.error(t('chatHistory.deleteError'));
           },
-        ],
-      );
+        });
+      };
+
+      if (IS_WEB) {
+        if (window.confirm(`${t('chatHistory.deleteAlertTitle')}\n${t('chatHistory.deleteAlertMessage', { title: item.title })}`)) {
+          doDelete();
+        }
+      } else {
+        Alert.alert(
+          t('chatHistory.deleteAlertTitle'),
+          t('chatHistory.deleteAlertMessage', { title: item.title }),
+          [
+            { text: t('chatHistory.deleteAlertCancel'), style: 'cancel' },
+            { text: t('chatHistory.deleteAlertConfirm'), style: 'destructive', onPress: doDelete },
+          ],
+        );
+      }
     },
     [t, deleteChatMutate, activeChatId, onDeleteActiveChat],
   );
@@ -885,10 +877,7 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
           >
             <AppHeader
               title={t('chatHistory.title')}
-              style={{
-                paddingHorizontal: spacing[3],
-                paddingTop: Math.max(0, insets.top - verticalScale(6)),
-              }}
+              style={{ paddingHorizontal: spacing[3] }}
             />
 
             {/* Toolbar: search + new chat */}

@@ -637,7 +637,7 @@ export const useChatSession = () => {
   }, [dispatch]);
 
   const loadSession = useCallback(
-    (id: string) => {
+    (id: string, title?: string) => {
       if (id === sessionId) return;
       streamCancelledRef.current = true;
       streamDoneRef.current = false;
@@ -655,6 +655,8 @@ export const useChatSession = () => {
       activeChatIdRef.current = id;
       setIsStreamingActive(false);
       setOptimisticUserMsg(null);
+      // Title anında set et — chatsData'nın güncellenmesini bekleme
+      if (title !== undefined) setSessionTitle(title);
       dispatch(setSessionId(id));
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -33,7 +33,6 @@ import { scale } from '@/lib/responsive';
 import { fontFamily } from '@/constants/typography';
 
 const HEADER_ROW_HEIGHT = scale(50);
-const SIDE_SLOT_WIDTH = scale(72);
 
 // ---------------------------------------------------------------------------
 // Types
@@ -89,8 +88,8 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
     }
   };
 
-  const sideLeftStyle = [styles.sideSlot, styles.sideSlotLeft, IS_WEB && { width: 56, height: rowHeight }];
-  const sideRightStyle = [styles.sideSlot, styles.sideSlotRight, IS_WEB && { width: 56, height: rowHeight }];
+  const sideLeftStyle = [styles.sideSlot, styles.sideSlotLeft];
+  const sideRightStyle = [styles.sideSlot, styles.sideSlotRight];
 
   const renderLeft = () => {
     if (leftContent) return <View style={sideLeftStyle}>{leftContent}</View>;
@@ -137,9 +136,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
           >
             <Ionicons name={icon.name} size={scale(22)} color={palette.white} />
             {icon.badge !== undefined && icon.badge > 0 && (
-              <View
-                style={styles.badge}
-              >
+              <View style={styles.badge}>
                 <Text style={styles.badgeText}>
                   {icon.badge > 99 ? '99+' : String(icon.badge)}
                 </Text>
@@ -160,7 +157,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
       style={[
         styles.gradientOuter,
         {
-          paddingTop: safeAreaTop ? (IS_WEB ? 0 : insets.top) : 0,
+          paddingTop: safeAreaTop ? (IS_WEB ? 0 : Platform.OS === 'ios' ? Math.max(0, insets.top - 20) : insets.top) : 0,
         },
         style,
       ]}
@@ -185,18 +182,17 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
 
 const styles = StyleSheet.create({
   gradientOuter: {
-    paddingHorizontal: spacing[4],
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.12)',
     minHeight: HEADER_ROW_HEIGHT,
-    ...(Platform.OS === 'web' && { minHeight: 50 }),
+    ...(Platform.OS === 'web' && { minHeight: 50, paddingHorizontal: 16 }),
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
   },
   sideSlot: {
-    width: SIDE_SLOT_WIDTH,
     height: HEADER_ROW_HEIGHT,
     justifyContent: 'center',
   },
@@ -205,6 +201,7 @@ const styles = StyleSheet.create({
   },
   sideSlotRight: {
     alignItems: 'flex-end',
+    paddingRight: scale(15),
   },
   rightRow: {
     flexDirection: 'row',
@@ -214,7 +211,6 @@ const styles = StyleSheet.create({
   },
   centerBlock: {
     flex: 1,
-    minWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
   },

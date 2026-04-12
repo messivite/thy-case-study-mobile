@@ -83,13 +83,13 @@ export default function HomeScreen() {
 
   const openDrawer = useCallback(() => { setDrawerVisible(true); }, []);
   const closeDrawer = useCallback(() => setDrawerVisible(false), []);
-  const handleDrawerHidden = useCallback(() => {}, []);
+  const handleDrawerHidden = useCallback(() => { }, []);
   const handleDeleteActiveChat = useCallback(() => {
     startNewChat();
     setDrawerVisible(false);
   }, [startNewChat]);
   const handleSelectChat = useCallback((chat: import('@/types/chat.api.types').ChatListItem) => {
-    loadSession(chat.id);
+    loadSession(chat.id, chat.title);
     setDrawerVisible(false);
   }, [loadSession]);
 
@@ -190,12 +190,11 @@ export default function HomeScreen() {
       }
       subtitle={undefined}
     />
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   ), [sessionTitle, t, openDrawer, resolvedAvatarUri, user?.name, isGuest]);
 
   return (
     <View style={styles.root}>
-<StatusBar style="light" />
       <ChatLayout
         header={header}
         input={chatInput}
@@ -241,15 +240,17 @@ export default function HomeScreen() {
         variant="liquidGlass"
       />
 
-      <ChatHistoryDrawer
-        visible={drawerVisible}
-        onClose={closeDrawer}
-        onHidden={handleDrawerHidden}
-        onNewChat={startNewChat}
-        onSelectChat={handleSelectChat}
-        activeChatId={chatId}
-        onDeleteActiveChat={handleDeleteActiveChat}
-      />
+      {drawerVisible && (
+        <ChatHistoryDrawer
+          visible={drawerVisible}
+          onClose={closeDrawer}
+          onHidden={handleDrawerHidden}
+          onNewChat={startNewChat}
+          onSelectChat={handleSelectChat}
+          activeChatId={chatId}
+          onDeleteActiveChat={handleDeleteActiveChat}
+        />
+      )}
 
       <NetworkConnectivitySheets promptOnMount />
       <ServerUnavailableSheet />
@@ -263,10 +264,10 @@ const styles = StyleSheet.create({
   },
   /** AppHeader satırı scale(48); layout şişmesin, dokunma hitSlop ile kalır. */
   menuBtn: {
-    width: 44,
     height: 44,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 16,
   },
   avatarBtn: {
     borderRadius: 999,

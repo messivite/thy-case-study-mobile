@@ -29,11 +29,12 @@ const ChatLayoutInner: React.FC<Props> = ({ header, children, input }) => {
 
   return (
     <View style={rootStyle}>
+      {IS_WEB ? header : null}
       <KeyboardAvoidingView
         behavior={IS_WEB ? undefined : IS_ANDROID ? 'height' : 'padding'}
         style={IS_WEB ? styles.kavWeb : styles.kav}
       >
-        {header}
+        {IS_WEB ? null : header}
         {inner}
       </KeyboardAvoidingView>
     </View>
