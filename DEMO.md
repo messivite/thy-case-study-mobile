@@ -5,10 +5,12 @@
 | Platform | Link |
 |----------|------|
 | 🌐 Web | https://thy-case-study-mobile.vercel.app/ |
-| 🤖 Android APK | https://github.com/messivite/thy-case-study-mobile/releases |
-| 🍎 iOS Demo (Video) | https://youtube.com/TODO |
-| 🔌 API | https://TODO-api.railway.app |
-| 📖 API Swagger | https://TODO-api.railway.app/swagger |
+| 🤖 Android Release APK | https://github.com/messivite/thy-case-study-mobile/releases/tag/v0.0.6 |
+| 🍎 iOS Demo (Video) | https://www.youtube.com/watch?v=FstNY3vFQJ0 |
+| 🔌 Production Base Api URL | https://go-thy-case-study-backend-production.up.railway.app |
+| 🔌 Production API | https://go-thy-case-study-backend-production.up.railway.app/api |
+| 📖 API Swagger | https://go-thy-case-study-backend-production.up.railway.app/docs-thy-case-study-backend/ |
+| 📖 Backend Side Github Repo | https://github.com/messivite/go-thy-case-study-backend |
 
 ---
 
@@ -16,10 +18,10 @@
 
 | | |
 |-|---|
-| E-posta | demo@example.com |
-| Şifre | Demo1234! |
+| E-posta | test@thycasestudy.com |
+| Şifre | 123456 |
 
-> Misafir olarak da giriş yapılabilir — kayıt gerektirmez.
+> Misafir olarak da giriş yapılabilir — e-posta ile üyede olabilirsiniz.
 
 ---
 
@@ -59,5 +61,5 @@
 ## Notlar
 
 - Backend: Go — Railway üzerinde çalışıyor
-- Desteklenen modeller: Claude (Anthropic), GPT (OpenAI)
-- Offline queue: Realm tabanlı, uygulama kapatılsa bile kuyruk korunur
+- Desteklenen modeller: Claude (Anthropic), GPT (OpenAI), Gemini (Google)
+- Offline queue: Realm tabanlı, uygulama kapatılsa bile kuyruk korunur, Sohbet mesajları ve Chat session sync
