@@ -4,9 +4,11 @@
 
 | Platform | Link |
 |----------|------|
-| Web | https://thy-case-study-mobile.vercel.app/ |
-| Android APK | https://github.com/messivite/thy-case-study-mobile/releases |
-| iOS Demo (Video) | https://youtube.com/TODO |
+| 🌐 Web | https://thy-case-study-mobile.vercel.app/ |
+| 🤖 Android APK | https://github.com/messivite/thy-case-study-mobile/releases |
+| 🍎 iOS Demo (Video) | https://youtube.com/TODO |
+| 🔌 API | https://TODO-api.railway.app |
+| 📖 API Swagger | https://TODO-api.railway.app/swagger |
 
 ---
 
