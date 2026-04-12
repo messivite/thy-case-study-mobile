@@ -224,7 +224,9 @@ export default function WebViewModal() {
   }, []);
 
   const handleNavigationChange = useCallback((nav: WebViewNavigation) => {
-    setCurrentUrl(nav.url);
+    if (nav.url && !nav.url.startsWith('about:')) {
+      setCurrentUrl(nav.url);
+    }
   }, []);
 
   if (!safeUrl) {
