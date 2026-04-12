@@ -1,5 +1,19 @@
 # THY Asistan (Mobile + Web)
 
+## Demo & Test
+
+| Platform | Link |
+|----------|------|
+| 🌐 Web | https://thy-case-study-mobile.vercel.app/ |
+| 🤖 Android APK | https://github.com/messivite/thy-case-study-mobile/releases |
+| 🍎 iOS Demo (Video) | https://youtube.com/TODO |
+
+**Test Hesabı:** `demo@example.com` / `Demo1234!` — veya misafir olarak giriş yapılabilir.
+
+> Detaylı test senaryoları için [DEMO.md](./DEMO.md) dosyasına bakın.
+
+---
+
 [![Expo SDK](https://img.shields.io/badge/Expo%20SDK-54-000020?logo=expo&logoColor=white)](https://docs.expo.dev/)
 [![React Native](https://img.shields.io/badge/React%20Native-0.81-61DAFB?logo=react&logoColor=000)](https://reactnative.dev/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=000)](https://react.dev/)

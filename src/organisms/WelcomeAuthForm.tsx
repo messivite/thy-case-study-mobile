@@ -82,7 +82,6 @@ export function WelcomeAuthForm({
     formState: { isSubmitting, isValid },
   } = useValidatedForm<WelcomeLoginFormValues>(schema, {
     defaultValues: { email: '', password: '' },
-    mode: 'onChange',
   });
 
   useEffect(() => {
