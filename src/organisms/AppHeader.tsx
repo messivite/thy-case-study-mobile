@@ -201,7 +201,7 @@ const styles = StyleSheet.create({
   },
   sideSlotRight: {
     alignItems: 'flex-end',
-    paddingRight: scale(15),
+    paddingRight: Platform.OS === 'web' ? 0 : scale(15),
   },
   rightRow: {
     flexDirection: 'row',
@@ -231,6 +231,7 @@ const styles = StyleSheet.create({
   backBtn: {
     alignItems: 'center',
     justifyContent: 'center',
+    marginLeft: scale(15),
   },
   backCircle: {
     width: scale(34),
