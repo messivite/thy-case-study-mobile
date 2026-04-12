@@ -144,7 +144,7 @@ function AuthProvider() {
         <Stack.Screen
           name="settings-sheet"
           options={{
-            presentation: 'formSheet',
+            presentation: Platform.OS === 'android' ? 'modal' : 'formSheet',
             sheetAllowedDetents: [1.0],
             sheetGrabberVisible: true,
             sheetCornerRadius: 20,

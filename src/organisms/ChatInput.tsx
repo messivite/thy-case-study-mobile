@@ -285,7 +285,7 @@ const ExpandedInputModal = memo<ExpandedInputModalProps>(({
     styles.expandedSheet,
     {
       backgroundColor: colors.background,
-      paddingTop: insets.top + spacing[2],
+      paddingTop: (Platform.OS === 'ios' ? Math.max(spacing[2], insets.top - 10) : insets.top) + spacing[2],
       paddingBottom: insets.bottom + spacing[3],
     },
   ]), [colors.background, insets.top, insets.bottom]);
