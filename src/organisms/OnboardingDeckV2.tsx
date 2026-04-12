@@ -618,7 +618,7 @@ export const OnboardingDeckV2: React.FC<OnboardingDeckV2Props> = ({
     return mainStyles.safe;
   }, [insets.top]);
 
-  const MainColumn = Platform.OS === 'web' ? View : SafeAreaView;
+  const MainColumn = Platform.OS === 'web' ? View : View;
 
   return (
     <View style={[mainStyles.root, rootWebLayout]}>
@@ -635,7 +635,7 @@ export const OnboardingDeckV2: React.FC<OnboardingDeckV2Props> = ({
       <MainColumn style={safeAreaStyle}>
         {/* Header tam genişlik — web’de gradient / arka plan yanlara yayılır */}
         <View style={mainStyles.header}>
-          <View style={mainStyles.logoAbsolute}>
+          <View style={[mainStyles.logoCenter, { top: insets.top }]}>
             <View style={mainStyles.logoBox}>
               <Logo width={deckScale(100)} />
             </View>
@@ -819,6 +819,14 @@ const mainStyles = StyleSheet.create({
   },
   logoAbsolute: {
     ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoCenter: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
     alignItems: 'center',
     justifyContent: 'center',
   },

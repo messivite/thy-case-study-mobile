@@ -33,7 +33,6 @@ import { initErrorReporting } from '@/services/errorReporting';
 import { ensureWebViewportRootStyle } from '@/lib/webViewport';
 import { realmService } from '@/services/realm';
 import { ThemeProvider } from '@/contexts/ThemeContext';
-import Head from 'expo-router/head';
 
 // Sentry native köprüsü her build'de bir kez init (DSN yok / dev'de enabled:false)
 initErrorReporting();
@@ -52,7 +51,6 @@ function RootLayout() {
 
 
   return (
-    <Head.Provider>
     <GestureHandlerRootView
       style={[styles.root, Platform.OS === 'web' && styles.rootWeb]}
     >
@@ -88,7 +86,6 @@ function RootLayout() {
       </SafeAreaProvider>
       </KeyboardProvider>
     </GestureHandlerRootView>
-    </Head.Provider>
   );
 }
 

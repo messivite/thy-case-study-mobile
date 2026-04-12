@@ -1,4 +1,3 @@
-import Head from 'expo-router/head';
 import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { TouchableOpacity, StyleSheet, View, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -14,6 +13,7 @@ import { useChatSession } from '@/hooks/useChatSession';
 import { useAuth } from '@/hooks/useAuth';
 import { useWhoIAm } from '@/hooks/useWhoIAm';
 import { useI18n } from '@/hooks/useI18n';
+import { usePageTitle } from '@/hooks/usePageTitle';
 import { palette } from '@/constants/colors';
 import { moderateScale } from '@/lib/responsive';
 import { ChatHistoryDrawer } from '@/organisms/ChatHistoryDrawer';
@@ -30,6 +30,7 @@ export default function HomeScreen() {
   // profileAvatarUrl değişince (upload sonrası) MMKV'den tekrar oku
   const resolvedAvatarUri = profileAvatarUrl ?? user?.avatarUrl;
   const { t } = useI18n();
+  usePageTitle(`${t('meta.home')} | ${t('meta.suffix')}`);
   const {
     messages,
     optimisticUserMsg,
@@ -188,8 +189,7 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.root}>
-      <Head><title>{t('meta.home')} | {t('meta.suffix')}</title></Head>
-      <StatusBar style="light" />
+<StatusBar style="light" />
       <ChatLayout
         header={header}
         input={chatInput}

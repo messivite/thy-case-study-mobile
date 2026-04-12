@@ -1,4 +1,3 @@
-import Head from 'expo-router/head';
 import React, { useCallback, useMemo, useState, type ComponentProps } from 'react';
 import { ScrollView, View, StyleSheet, Alert, Platform, Pressable, Linking, ActivityIndicator } from 'react-native';
 import * as Notifications from 'expo-notifications';
@@ -19,6 +18,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { useAuth } from '@/hooks/useAuth';
 import { useWhoIAm } from '@/hooks/useWhoIAm';
 import { useI18n } from '@/hooks/useI18n';
+import { usePageTitle } from '@/hooks/usePageTitle';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { useNotificationPermission } from '@/hooks/useNotificationPermission';
 import { canDeliverPushNotifications } from '@/lib/notificationPermission';
@@ -45,6 +45,7 @@ export default function SettingsScreen() {
   const { isGuest, logout } = useAuth();
   const { displayName: profileDisplayName, email: profileEmail, avatarUrl, isAnonymous, profileReady } = useWhoIAm();
   const { t, currentLanguage } = useI18n();
+  usePageTitle(`${t('meta.settings')} | ${t('meta.suffix')}`);
   const dispatch = useAppDispatch();
   const { theme, streamingEnabled } = useAppSelector((s) => s.settings);
   const {
@@ -209,8 +210,7 @@ export default function SettingsScreen() {
 
   return (
     <View style={{ flex: 1 }}>
-      <Head><title>{t('meta.settings')} | {t('meta.suffix')}</title></Head>
-      <AppHeader
+<AppHeader
         title={t('settings.title')}
         safeAreaTop={false}
         rightIcons={[
