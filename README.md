@@ -65,32 +65,60 @@ Proje; onboarding, kimlik doğrulama, asistan sohbet akışı, ayarlar, çoklu d
 
 ```text
 app/
-  _layout.tsx
-  index.tsx
-  (onboarding)/
-  (auth)/
-  (tabs)/
+  _layout.tsx          # Kök layout — SupabaseAuthProvider, Redux Provider
+  index.tsx            # Splash + başlangıç yönlendirme
+  (onboarding)/        # Onboarding akışı (MMKV flag ile tek seferlik)
+  (auth)/              # Login, Register, ForgotPassword, Welcome
+  (tabs)/              # Ana uygulama — Chat, Settings
 
 src/
-  atoms/
-  molecules/
-  organisms/
-  templates/
-  forms/          # auth şemaları (ör. welcome/login/register + Zod)
+  atoms/               # Temel UI bileşenleri (Button, Input, Text, GlassView…)
+  molecules/           # Birleşik bileşenler (FormField, MessageBubble, LiquidBottomSheet…)
+  organisms/           # Özellik odaklı bileşenler (ChatInput, AppHeader, WelcomeAuthForm…)
+  templates/           # Sayfa iskeletleri (ChatLayout…)
+  screens/             # Tam ekran bileşenleri (SettingsScreen, ErrorBoundaryScreen…)
+  forms/               # Zod şemaları + form tipleri (auth/welcome, auth/register…)
   hooks/
+    api/               # TanStack Query hook'ları (useModels, useUpdateMe…)
+    useSupabaseAuth    # Supabase auth işlemleri + token yenileme
+    useI18n            # Dil değiştirme (AppLanguage tipli)
+    useTheme           # Tema (ThemeMode tipli)
+    useChatSession     # Streaming + mesaj yönetimi
   services/
+    authService.ts     # Supabase auth wrap + AuthErrorCode mapper
+    api.ts             # Axios instance (ngrok header desteği dahil)
+    realm.ts           # Offline-first Realm ORM (native/.web shim)
   store/
+    slices/
+      authSlice        # AuthStatus, AuthState
+      settingsSlice    # ThemeMode, AppLanguage (settings.types'tan)
+      profileSlice     # ProfileLoadStatus (settings.types'tan)
+      chatSlice        # Aktif oturum + mesaj listesi
   lib/
+    mmkv.*             # Platforma göre storage shim (native/web)
+    responsive.ts      # scale/verticalScale/moderateScale (web'de identity)
+    offlineQueue.ts    # Realm tabanlı offline mesaj kuyruğu
+    batchedUpdates.*   # React 18 web uyumlu shim
   i18n/
-  constants/
+    en.json / tr.json  # Çeviri stringleri
+  constants/           # Renk, tipografi, spacing, sabitler
+  config/
+    devConfig.ts       # Geliştirme önizleme bayrakları (tipli: OnboardingBackgroundVariant, NetworkPreview)
   types/
+    auth.types.ts      # AuthStatus, AuthState, AuthErrorCode
+    chat.types.ts      # Message, MessageRole, AttachmentType, AttachmentStatus
+    chat.api.types.ts  # Stream event discriminated union'ları, arama tipleri
+    user.api.types.ts  # MeResponse, UpdateMeProfileRequest
+    ui.types.ts        # HapticType, NetworkPreview, OnboardingBackgroundVariant
+    settings.types.ts  # AppLanguage, ThemeMode, ProfileLoadStatus
 ```
 
 Kısa notlar:
-- `app/`: Expo Router route katmanı (`(auth)/_layout` auth yönlendirme kararları)
-- `src/services/`: API/auth/query client gibi servisler
-- `src/lib/mmkv.*`: platforma göre storage shim
-- `src/store/`: global store ve slice'lar (`authSlice` oturum durumu)
+- `app/`: Expo Router route katmanı — `(auth)/_layout` auth yönlendirme kararlarını yönetir
+- `src/types/`: Tüm paylaşılan TypeScript tipleri; bileşen-lokal tipler kendi dosyasında kalır
+- `src/services/`: API/auth/Realm gibi saf servis katmanı (React bağımlılığı yok)
+- `src/lib/mmkv.*`: Platform bazlı storage shim — native `react-native-mmkv`, web `localStorage`
+- `src/store/`: Redux Toolkit slice'ları; slice-lokal tipler `src/types/settings.types.ts`'ten beslenir
 
 ---
 
