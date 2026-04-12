@@ -99,7 +99,8 @@
     "onlineMessage": "If you have messages queued while offline, you can sync them with the server now.",
     "onlineSync": "Sync now",
     "onlineLater": "Later",
-    "syncPlaceholder": "Sync will be wired up with the offline queue next."
+    "onlineMessagePending": "{{count}} message(s) queued while offline. Sync now to send them.",
+    "syncSuccess": "Messages synced successfully"
   },
   "assistant": {
     "title": "Assistant",
@@ -160,7 +161,16 @@
     "logout": "Sign Out",
     "logoutConfirm": "Are you sure you want to sign out?",
     "guest": "Guest User",
-    "loginToSync": "Sign in to sync your data"
+    "loginToSync": "Sign in to sync your data",
+    "editProfile": "Edit Profile",
+    "changeAvatar": "Change profile photo",
+    "avatarUpdated": "Profile photo updated",
+    "avatarUpdateFailed": "Failed to upload photo",
+    "profileUpdated": "Profile saved",
+    "profileUpdateFailed": "Failed to save profile",
+    "displayName": "Display Name",
+    "displayNamePlaceholder": "Your name",
+    "displayNameMin": "Name must be at least 2 characters"
   },
   "models": {
     "gemini": "Gemini",
@@ -233,6 +243,7 @@
     "settingsSaved": "Settings saved",
     "networkError": "No internet connection",
     "unknownError": "An error occurred",
+    "messageSendFailed": "Failed to send message",
     "speechError": "Could not start text-to-speech"
   }
 }

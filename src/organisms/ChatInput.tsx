@@ -56,7 +56,7 @@ const MAX_LINES = 4;
 const MAX_INPUT_HEIGHT = LINE_HEIGHT * MAX_LINES;
 const MAX_CHARS = 600;
 const CHAR_WARN_THRESHOLD = 100; // bu kadar kala counter görünür
-const SIZE = scaleSize(36);
+const SIZE = scaleSize(42);
 const ICON_SIZE = SIZE - scaleSize(10);
 
 // ---------------------------------------------------------------------------
@@ -903,6 +903,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[2],
+    marginRight: spacing[1],
   },
   inputRow: {
     flexDirection: 'row',

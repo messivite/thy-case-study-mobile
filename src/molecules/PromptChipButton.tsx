@@ -34,7 +34,7 @@ const PromptChipButtonInner: React.FC<Props> = ({ label, onPress }) => {
 
   return (
     <Pressable onPress={handlePress} style={getPressableStyle}>
-      <Text variant="body" style={styles.label}>
+      <Text variant="body" color={colors.text} style={styles.label}>
         {label}
       </Text>
     </Pressable>

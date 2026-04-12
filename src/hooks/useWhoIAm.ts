@@ -27,6 +27,8 @@ export type WhoIAm = {
   onboardingCompleted: boolean;
   /** auth.user.avatarUrl — me'de yoksa auth store'dan gelir */
   avatarUrl: string | undefined;
+  preferredProvider: string | undefined;
+  preferredModel: string | undefined;
   /** true = me API basarili dondu ve store doldu */
   profileReady: boolean;
 };
@@ -40,6 +42,8 @@ const EMPTY: WhoIAm = {
   locale: 'tr',
   onboardingCompleted: false,
   avatarUrl: undefined,
+  preferredProvider: undefined,
+  preferredModel: undefined,
   profileReady: false,
 };
 
@@ -58,8 +62,10 @@ export function useWhoIAm(): WhoIAm {
       isAnonymous: data.profile.isAnonymous,
       locale: data.profile.locale,
       onboardingCompleted: data.profile.onboardingCompleted,
-      // me API'de avatarUrl alani yok — auth store'daki Supabase user'dan al
-      avatarUrl: authUser?.avatarUrl,
+      // me API profile.avatarUrl öncelikli; yoksa auth store'daki Supabase user'dan al
+      avatarUrl: data.profile.avatarUrl ?? authUser?.avatarUrl,
+      preferredProvider: data.profile.preferredProvider,
+      preferredModel: data.profile.preferredModel,
       profileReady: true,
     };
   }, shallowEqual);

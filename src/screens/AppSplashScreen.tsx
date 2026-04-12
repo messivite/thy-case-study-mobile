@@ -56,9 +56,9 @@ export function AppSplashScreen({
   }));
 
   return (
-    <View style={styles.root}>
-      <View style={[StyleSheet.absoluteFill, styles.bg]}>
-        <Animated.View style={[styles.logoWrap]}>
+    <View style={[styles.root, { backgroundColor: palette.white }]}>
+      <View style={[StyleSheet.absoluteFill, styles.bg, { backgroundColor: palette.white }]}>
+        <Animated.View style={styles.logoWrap}>
           <Animated.View style={logoStyle}>
             <Image
               source={require('../../assets/svg/compact-logo.png')}
@@ -74,10 +74,8 @@ export function AppSplashScreen({
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: palette.white,
   },
   bg: {
-    backgroundColor: palette.white,
     alignItems: 'center',
     justifyContent: 'center',
   },

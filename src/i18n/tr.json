@@ -99,7 +99,8 @@
     "onlineMessage": "Çevrimdışıyken biriken mesajların varsa şimdi sunucuyla eşitleyebilirsin.",
     "onlineSync": "Senkronize et",
     "onlineLater": "Sonra",
-    "syncPlaceholder": "Senkronizasyon bir sonraki adımda (offline kuyruk) eklenecek."
+    "onlineMessagePending": "Çevrimdışıyken {{count}} mesaj kuyruğa alındı. Şimdi göndermek ister misiniz?",
+    "syncSuccess": "Mesajlar başarıyla senkronize edildi"
   },
   "assistant": {
     "title": "Asistan",
@@ -160,7 +161,16 @@
     "logout": "Çıkış Yap",
     "logoutConfirm": "Çıkış yapmak istediğinize emin misiniz?",
     "guest": "Misafir Kullanıcı",
-    "loginToSync": "Senkronizasyon için giriş yapın"
+    "loginToSync": "Senkronizasyon için giriş yapın",
+    "editProfile": "Profili Düzenle",
+    "changeAvatar": "Profil fotoğrafını değiştir",
+    "avatarUpdated": "Profil fotoğrafı güncellendi",
+    "avatarUpdateFailed": "Fotoğraf yüklenemedi",
+    "profileUpdated": "Profil kaydedildi",
+    "profileUpdateFailed": "Profil kaydedilemedi",
+    "displayName": "Görünen Ad",
+    "displayNamePlaceholder": "Adınız",
+    "displayNameMin": "Ad en az 2 karakter olmalı"
   },
   "models": {
     "gemini": "Gemini",
@@ -233,6 +243,7 @@
     "settingsSaved": "Ayarlar kaydedildi",
     "networkError": "İnternet bağlantısı yok",
     "unknownError": "Bir hata oluştu",
+    "messageSendFailed": "Mesaj gönderilemedi",
     "speechError": "Sesli okuma başlatılamadı"
   }
 }

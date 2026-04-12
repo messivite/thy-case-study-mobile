@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState, type ComponentProps } from 'react';
-import { ScrollView, View, StyleSheet, Alert, Platform, Pressable, Linking } from 'react-native';
+import { ScrollView, View, StyleSheet, Alert, Platform, Pressable, Linking, ActivityIndicator } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -23,6 +23,8 @@ import { useNotificationPermission } from '@/hooks/useNotificationPermission';
 import { canDeliverPushNotifications } from '@/lib/notificationPermission';
 import { setTheme, setStreaming } from '@/store/slices/settingsSlice';
 import { ModelPickerSheet } from '@/organisms/ModelPickerSheet';
+import { EditProfileSheet } from '@/organisms/EditProfileSheet';
+import { useUploadAvatar, getLocalAvatarUri } from '@/hooks/api/useUploadAvatar';
 import { spacing, radius } from '@/constants/spacing';
 import { palette } from '@/constants/colors';
 import { fontFamily } from '@/constants/typography';
@@ -159,7 +161,18 @@ export default function SettingsScreen() {
   );
 
   const [modelPickerVisible, setModelPickerVisible] = useState(false);
+  const [editProfileOpen, setEditProfileOpen] = useState(false);
   const selectedAIModel = useAppSelector((s) => s.chat.selectedAIModel);
+
+  const { optimisticUri, isUploading, pickAndUpload } = useUploadAvatar();
+  const handlePickAvatar = useCallback(() => {
+    pickAndUpload({
+      onSuccess: () => toast.success(t('settings.avatarUpdated')),
+      onError: () => toast.error(t('settings.avatarUpdateFailed')),
+    });
+  }, [pickAndUpload, t]);
+  const localAvatarUri = getLocalAvatarUri();
+  const resolvedAvatarUri = optimisticUri ?? localAvatarUri ?? avatarUrl;
 
   const [shouldCrash, setShouldCrash] = useState(false);
   if (shouldCrash) {
@@ -231,46 +244,84 @@ export default function SettingsScreen() {
             end={{ x: 1, y: 1 }}
             style={[styles.profileCard, { borderColor: colors.border }]}
           >
-            <View style={styles.profileAvatarWrap}>
-              <Avatar name={displayName || 'G'} uri={avatarUrl} size="lg" />
-              {!isGuest && (
-                <View style={[styles.onlineDot, { backgroundColor: palette.success }]} />
-              )}
-            </View>
-            <View style={styles.profileInfo}>
-              <Skeleton
-                show={!guestLike && !profileReady}
-                colorMode={isDark ? 'dark' : 'light'}
-                width={120}
-                height={18}
-                radius={5}
-              >
-                {guestLike || profileReady ? (
-                  <Text variant="h4" style={{ fontFamily: fontFamily.semiBold }}>
-                    {displayName}
-                  </Text>
-                ) : null}
-              </Skeleton>
-              <Skeleton
-                show={!guestLike && !profileReady}
-                colorMode={isDark ? 'dark' : 'light'}
-                width={180}
-                height={14}
-                radius={4}
-              >
-                {guestLike || profileReady ? (
-                  <Text variant="caption" color={colors.textSecondary} style={styles.emailText}>
-                    {displayEmail}
-                  </Text>
-                ) : null}
-              </Skeleton>
-            </View>
-            <View style={[styles.profileBadge, { backgroundColor: isGuest ? colors.border : palette.primary + '18' }]}>
-              <Ionicons
-                name={isGuest ? 'person-outline' : 'shield-checkmark-outline'}
-                size={14}
-                color={isGuest ? colors.textSecondary : palette.primary}
+            {/* Avatar */}
+            <Pressable
+              style={styles.profileAvatarWrap}
+              onPress={!guestLike ? handlePickAvatar : undefined}
+              disabled={isUploading}
+              accessibilityRole="button"
+              accessibilityLabel={t('settings.changeAvatar')}
+            >
+              <Avatar
+                name={displayName || 'G'}
+                uri={resolvedAvatarUri}
+                width={100}
+                height={100}
+                style={isUploading ? styles.avatarUploading : undefined}
               />
+              {!isGuest && (
+                <View style={[styles.onlineDot, { backgroundColor: palette.success, borderColor: colors.background }]} />
+              )}
+              {!guestLike && (
+                <View style={[styles.avatarUploadBadge, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                  {isUploading
+                    ? <ActivityIndicator size={14} color={palette.primary} />
+                    : <Ionicons name="camera-outline" size={14} color={colors.textSecondary} />
+                  }
+                </View>
+              )}
+            </Pressable>
+
+            {/* İsim + email + aksiyonlar */}
+            <View style={styles.profileBottom}>
+              <View style={styles.profileInfo}>
+                <Skeleton
+                  show={!guestLike && !profileReady}
+                  colorMode={isDark ? 'dark' : 'light'}
+                  width={120}
+                  height={18}
+                  radius={5}
+                >
+                  {guestLike || profileReady ? (
+                    <Text variant="h4" color={colors.text} style={{ fontFamily: fontFamily.semiBold, textAlign: 'center' }}>
+                      {displayName}
+                    </Text>
+                  ) : null}
+                </Skeleton>
+                <Skeleton
+                  show={!guestLike && !profileReady}
+                  colorMode={isDark ? 'dark' : 'light'}
+                  width={180}
+                  height={14}
+                  radius={4}
+                >
+                  {guestLike || profileReady ? (
+                    <Text variant="caption" color={colors.textSecondary} style={[styles.emailText, { textAlign: 'center' }]}>
+                      {displayEmail}
+                    </Text>
+                  ) : null}
+                </Skeleton>
+              </View>
+              <View style={styles.profileActions}>
+                <View style={[styles.profileBadge, { backgroundColor: isGuest ? colors.border : palette.primary + '18' }]}>
+                  <Ionicons
+                    name={isGuest ? 'person-outline' : 'shield-checkmark-outline'}
+                    size={14}
+                    color={isGuest ? colors.textSecondary : palette.primary}
+                  />
+                </View>
+                {!guestLike && (
+                  <Pressable
+                    onPress={() => setEditProfileOpen(true)}
+                    style={[styles.editBtn, { backgroundColor: colors.border }]}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('settings.editProfile')}
+                  >
+                    <Ionicons name="pencil-outline" size={14} color={colors.textSecondary} />
+                  </Pressable>
+                )}
+              </View>
             </View>
           </LinearGradient>
         </MotiView>
@@ -480,6 +531,11 @@ export default function SettingsScreen() {
         onClose={() => setModelPickerVisible(false)}
         variant="backdrop"
       />
+
+      <EditProfileSheet
+        open={editProfileOpen}
+        onClose={() => setEditProfileOpen(false)}
+      />
     </View>
   );
 }
@@ -501,9 +557,9 @@ const styles = StyleSheet.create({
     paddingTop: spacing[4],
   },
   profileCard: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
-    gap: spacing[4],
+    gap: spacing[3],
     padding: spacing[4],
     borderRadius: 16,
     borderWidth: 1,
@@ -517,24 +573,55 @@ const styles = StyleSheet.create({
   profileAvatarWrap: {
     position: 'relative',
   },
+  profileBottom: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: spacing[2],
+    width: '100%',
+  },
+  avatarUploading: {
+    opacity: 0.45,
+  },
+  avatarUploadBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+  },
   onlineDot: {
     position: 'absolute',
-    bottom: 1,
-    right: 1,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    bottom: 2,
+    left: 2,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
     borderWidth: 2,
-    borderColor: '#fff',
   },
   profileInfo: {
-    flex: 1,
     gap: 3,
+    alignItems: 'center',
   },
   emailText: {
     marginTop: 1,
   },
+  profileActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+  },
   profileBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editBtn: {
     width: 32,
     height: 32,
     borderRadius: radius.md,

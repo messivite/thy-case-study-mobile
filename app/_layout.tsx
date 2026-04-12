@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -16,6 +16,8 @@ import {
   Inter_600SemiBold,
   Inter_700Bold,
 } from '@expo-google-fonts/inter';
+import { OfflineProvider, getRealmAdapter } from '@mustafaaksoy41/react-native-offline-queue';
+import type Realm from 'realm';
 
 import { store } from '@/store';
 import { queryClient } from '@/services/queryClient';
@@ -25,7 +27,7 @@ import { SupabaseAuthProvider } from '@/hooks/useSupabaseAuth';
 import { AppErrorBoundary } from '@/components/AppErrorBoundary';
 import { initErrorReporting } from '@/services/errorReporting';
 import { ensureWebViewportRootStyle } from '@/lib/webViewport';
-import { realmService } from '@/services/realm';
+import { realmService, openRealm } from '@/services/realm';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 
 // Sentry native köprüsü her build'de bir kez init (DSN yok / dev'de enabled:false)
@@ -43,6 +45,13 @@ function RootLayout() {
     Inter_700Bold,
   });
 
+  // Realm instance'ı async alınıyor — OfflineProvider'a geçmek için bekliyoruz.
+  // realmService.prefetch() zaten modül yüklenince başlattı, bu sadece hazır olunca state'e yazar.
+  const [realmInstance, setRealmInstance] = useState<Realm | null>(null);
+  useEffect(() => {
+    openRealm().then(setRealmInstance).catch(() => {});
+  }, []);
+
   return (
     <GestureHandlerRootView
       style={[styles.root, Platform.OS === 'web' && styles.rootWeb]}
@@ -57,10 +66,15 @@ function RootLayout() {
           <ThemeProvider>
             <QueryClientProvider client={queryClient}>
               <I18nextProvider i18n={i18n}>
-                <AppErrorBoundary>
-                  {/* AuthProvider: Supabase listener + token refresh burada başlar */}
-                  {fontsLoaded ? <AuthProvider /> : null}
-                </AppErrorBoundary>
+                <OfflineProvider config={{
+                  storageType: realmInstance ? 'realm' : 'memory',
+                  storage: realmInstance ? getRealmAdapter({ realmInstance }) : undefined,
+                  syncMode: 'manual',
+                }}>
+                  <AppErrorBoundary>
+                    {fontsLoaded ? <AuthProvider /> : null}
+                  </AppErrorBoundary>
+                </OfflineProvider>
               </I18nextProvider>
             </QueryClientProvider>
           </ThemeProvider>

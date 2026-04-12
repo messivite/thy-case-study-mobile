@@ -5,6 +5,7 @@ import {
   View,
   StyleSheet,
   Platform,
+  KeyboardAvoidingView,
   useWindowDimensions,
   type StyleProp,
   type ViewStyle,
@@ -12,8 +13,8 @@ import {
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
-  withSpring,
   withTiming,
+  Easing,
   runOnJS,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -41,7 +42,7 @@ type Props = {
   contentStyle?: StyleProp<ViewStyle>;
 };
 
-const SPRING = { damping: 26, stiffness: 280 } as const;
+const SLIDE_IN = { duration: 320, easing: Easing.out(Easing.cubic) } as const;
 
 export const LiquidBottomSheet: React.FC<Props> = ({
   open,
@@ -69,7 +70,7 @@ export const LiquidBottomSheet: React.FC<Props> = ({
       translateY.value = offscreen;
       setModalVisible(true);
       requestAnimationFrame(() => {
-        translateY.value = withSpring(0, SPRING);
+        translateY.value = withTiming(0, SLIDE_IN);
         backdropOp.value = withTiming(0.52, { duration: 280 });
       });
     } else {
@@ -93,21 +94,24 @@ export const LiquidBottomSheet: React.FC<Props> = ({
     if (closeOnBackdropPress) { haptics.light(); onClose(); }
   };
 
+  const innerStyle = [styles.sheetInner, { paddingBottom: spacing[5] + insets.bottom }, contentStyle];
+
   const sheetBody =
     variant === 'glass' ? (
-      <GlassView variant="sheet" style={[styles.sheetInner, contentStyle]}>
+      <GlassView
+        variant="sheet"
+        tint="light"
+        intensity={80}
+        style={innerStyle}
+      >
         {children}
       </GlassView>
     ) : (
       <View
         style={[
-          styles.sheetInner,
+          innerStyle,
           styles.solidSheet,
-          {
-            backgroundColor: colors.surface,
-            borderColor: colors.border,
-          },
-          contentStyle,
+          { backgroundColor: colors.surface },
         ]}
       >
         {children}
@@ -122,6 +126,10 @@ export const LiquidBottomSheet: React.FC<Props> = ({
       statusBarTranslucent={Platform.OS === 'android'}
       onRequestClose={onClose}
     >
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoid}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
       <View style={styles.root} pointerEvents="box-none">
         <Animated.View style={[styles.backdrop, backdropStyle]}>
           <Pressable
@@ -133,11 +141,7 @@ export const LiquidBottomSheet: React.FC<Props> = ({
         </Animated.View>
 
         <Animated.View
-          style={[
-            styles.sheetWrap,
-            sheetStyle,
-            { paddingBottom: Math.max(insets.bottom, spacing[4]) },
-          ]}
+          style={[styles.sheetWrap, sheetStyle]}
           pointerEvents="box-none"
         >
           <View style={styles.sheetMaxWidth} pointerEvents="box-none">
@@ -155,8 +159,8 @@ export const LiquidBottomSheet: React.FC<Props> = ({
                 >
                   <Ionicons
                     name="close"
-                    size={22}
-                    color={isDark ? 'rgba(255,255,255,0.85)' : colors.textSecondary}
+                    size={26}
+                    color={isDark ? 'rgba(255,255,255,0.90)' : 'rgba(0,0,0,0.55)'}
                   />
                 </Pressable>
               )}
@@ -166,11 +170,15 @@ export const LiquidBottomSheet: React.FC<Props> = ({
           </View>
         </Animated.View>
       </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
+  keyboardAvoid: {
+    flex: 1,
+  },
   root: {
     flex: 1,
     justifyContent: 'flex-end',
@@ -180,7 +188,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#0A0A12',
   },
   sheetWrap: {
-    paddingHorizontal: spacing[4],
     width: '100%',
     alignItems: 'center',
   },
@@ -190,33 +197,31 @@ const styles = StyleSheet.create({
   },
   handle: {
     alignSelf: 'center',
-    width: 40,
+    width: 36,
     height: 4,
     borderRadius: 2,
-    opacity: 0.35,
+    opacity: 0.25,
     marginTop: spacing[2],
     marginBottom: spacing[1],
   },
   sheetCard: {
     position: 'relative',
+    overflow: 'hidden',
     borderTopLeftRadius: radius['2xl'],
     borderTopRightRadius: radius['2xl'],
-    overflow: 'hidden',
   },
   closeBtn: {
     position: 'absolute',
-    top: spacing[3],
-    right: spacing[3],
+    top: spacing[5],
+    right: spacing[4],
     zIndex: 2,
     padding: spacing[1],
   },
   sheetInner: {
-    paddingTop: spacing[4],
+    paddingTop: spacing[3],
     paddingHorizontal: spacing[5],
-    paddingBottom: spacing[4],
   },
   solidSheet: {
-    borderWidth: 1,
     borderTopLeftRadius: radius['2xl'],
     borderTopRightRadius: radius['2xl'],
   },

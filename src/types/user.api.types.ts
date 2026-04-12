@@ -25,6 +25,10 @@ export type MeUserInfo = {
 export type MeProfile = {
   id: string;
   displayName?: string;     // guest/anonymous'ta gelmez
+  avatarUrl?: string;
+  preferredProvider?: string;
+  preferredModel?: string;
+  timezone?: string;
   role: string;
   isActive: boolean;
   locale: string;
@@ -37,4 +41,17 @@ export type MeProfile = {
 export type MeResponse = {
   user: MeUserInfo;
   profile: MeProfile;
+};
+
+// ---------------------------------------------------------------------------
+// PATCH /api/me — Request
+// ---------------------------------------------------------------------------
+
+export type UpdateMeProfileRequest = {
+  displayName?: string;
+  preferredProvider?: string;
+  preferredModel?: string;
+  locale?: string;
+  timezone?: string;
+  onboardingCompleted?: boolean;
 };

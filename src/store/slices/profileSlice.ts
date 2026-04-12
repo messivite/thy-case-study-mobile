@@ -1,5 +1,5 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import { MeResponse } from '@/types/user.api.types';
+import { MeResponse, UpdateMeProfileRequest } from '@/types/user.api.types';
 
 type ProfileState = {
   data: MeResponse | null;
@@ -19,6 +19,16 @@ const profileSlice = createSlice({
       state.data = action.payload;
       state.status = 'success';
     },
+    patchProfile(state, action: PayloadAction<UpdateMeProfileRequest>) {
+      if (!state.data) return;
+      const p = action.payload;
+      if (p.displayName !== undefined) state.data.profile.displayName = p.displayName;
+      if (p.preferredProvider !== undefined) state.data.profile.preferredProvider = p.preferredProvider;
+      if (p.preferredModel !== undefined) state.data.profile.preferredModel = p.preferredModel;
+      if (p.locale !== undefined) state.data.profile.locale = p.locale;
+      if (p.timezone !== undefined) state.data.profile.timezone = p.timezone;
+      if (p.onboardingCompleted !== undefined) state.data.profile.onboardingCompleted = p.onboardingCompleted;
+    },
     setProfileLoading(state) {
       state.status = 'loading';
     },
@@ -28,5 +38,5 @@ const profileSlice = createSlice({
   },
 });
 
-export const { setProfile, setProfileLoading, setProfileError } = profileSlice.actions;
+export const { setProfile, patchProfile, setProfileLoading, setProfileError } = profileSlice.actions;
 export default profileSlice.reducer;

@@ -36,6 +36,7 @@ import { THYIcon } from '@/atoms/thy-icon';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import { useModels } from '@/hooks/api/useModels';
+import { useUpdateMeMutation } from '@/hooks/api/useUpdateMe';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setSelectedAIModel } from '@/store/slices/chatSlice';
 import { palette } from '@/constants/colors';
@@ -280,6 +281,7 @@ export const ModelPickerSheet: React.FC<ModelPickerSheetProps> = ({
   const insets = useSafeAreaInsets();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const dispatch = useAppDispatch();
+  const { mutate: updateMeProfile } = useUpdateMeMutation();
   const selectedAIModel = useAppSelector((s) => s.chat.selectedAIModel);
   const { models, isLoading } = useModels();
 
@@ -371,8 +373,10 @@ export const ModelPickerSheet: React.FC<ModelPickerSheetProps> = ({
       model: record.model,
       displayName: record.displayName,
     }));
+    // Silent backend sync — fire and forget, toast yok, UX block etmez
+    updateMeProfile({ preferredProvider: record.provider, preferredModel: record.model });
     closeWithAnimation();
-  }, [dispatch, closeWithAnimation]);
+  }, [dispatch, updateMeProfile, closeWithAnimation]);
 
   // closeWithAnimation ref — gesture rebuild olmadan güncel fonksiyonu tutar
   const closeRef = useRef(closeWithAnimation);

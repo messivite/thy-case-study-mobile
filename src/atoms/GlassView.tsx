@@ -84,7 +84,7 @@ export const GlassView: React.FC<Props> = ({
 const VARIANT_STYLES: Record<GlassVariant, ViewStyle> = {
   sheet: {
     borderRadius: radius['2xl'],
-    borderWidth: 1,
+    borderWidth: 0,
     overflow: 'hidden',
   },
   card: {
@@ -106,12 +106,12 @@ const VARIANT_STYLES: Record<GlassVariant, ViewStyle> = {
 
 // Tint overlay on top of blur (gives color cast + depth)
 function getBlurOverlayStyle(isDark: boolean, variant: GlassVariant): ViewStyle {
-  const lightOverlay = 'rgba(255,255,255,0.30)';
-  const darkOverlay = 'rgba(15,15,30,0.40)';
+  const lightOverlay = variant === 'sheet' ? 'rgba(255,255,255,0.82)' : 'rgba(255,255,255,0.30)';
+  const darkOverlay = variant === 'sheet' ? 'rgba(15,15,30,0.55)' : 'rgba(15,15,30,0.40)';
 
   const borderColor = isDark
-    ? 'rgba(255,255,255,0.10)'
-    : 'rgba(255,255,255,0.60)';
+    ? 'rgba(255,255,255,0.08)'
+    : 'rgba(0,0,0,0)';
 
   return {
     backgroundColor: isDark ? darkOverlay : lightOverlay,

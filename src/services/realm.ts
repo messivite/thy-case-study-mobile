@@ -79,7 +79,7 @@ export const openRealm = (): Promise<Realm> => {
 
   _realmPromise = Realm.open({
     schema: [RealmSession, RealmMessage],
-    schemaVersion: 7,
+    schemaVersion: 8,
     onMigration: (_oldRealm: Realm, newRealm: Realm) => {
       // v1 → v2: lastMessagePreview alani eklendi, mevcutlara bos string ver
       const sessions = newRealm.objects('RealmSession');

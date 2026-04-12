@@ -49,7 +49,7 @@ import { authEventEmitter, AUTH_EVENTS } from '@/services/api';
 import { authMutex } from '@/lib/authMutex';
 import { setErrorReportingUser } from '@/services/errorReporting';
 import { toast } from '@/lib/toast';
-import { getMe } from '@/api/user.api';
+import { getMe, updateMe } from '@/api/user.api';
 import { setProfile, setProfileError } from '@/store/slices/profileSlice';
 import type { AuthStatus } from '@/types/auth.types';
 import type { AuthResult } from '@/services/authService';
@@ -144,7 +144,18 @@ function useSupabaseAuthState(): SupabaseAuthApi {
   // /api/me → profileSlice — session kurulduktan hemen sonra arka planda çağrılır
   const fetchAndSetProfile = useCallback(() => {
     getMe()
-      .then((data) => dispatch(setProfile(data)))
+      .then((data) => {
+        dispatch(setProfile(data));
+        // Onboarding sync: yerel onboarding tamamlandı ama backend henüz bilmiyor
+        const localDone = mmkvStorage.getBoolean(STORAGE_KEYS.ONBOARDING_DONE) === true;
+        if (!data.profile.onboardingCompleted && localDone) {
+          updateMe({ onboardingCompleted: true })
+            .then((updated) => dispatch(setProfile(updated)))
+            .catch(() => {
+              // Sessizce yoksay — bir sonraki girişte tekrar denenecek
+            });
+        }
+      })
       .catch(() => dispatch(setProfileError()));
   }, [dispatch]);
 

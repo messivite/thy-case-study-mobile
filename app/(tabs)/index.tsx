@@ -18,10 +18,15 @@ import { ChatHistoryDrawer } from '@/organisms/ChatHistoryDrawer';
 import { ModelPickerSheet } from '@/organisms/ModelPickerSheet';
 import { WelcomeQuickAction } from '@/organisms/HomeWelcomePanel';
 import { ScrollToBottomButton } from '@/molecules/ScrollToBottomButton';
+import { NetworkConnectivitySheets } from '@/organisms/NetworkConnectivitySheets';
+import { getLocalAvatarUri } from '@/hooks/api/useUploadAvatar';
 
 export default function HomeScreen() {
   const { user, isGuest } = useAuth();
-  const { displayName: profileDisplayName, profileReady } = useWhoIAm();
+  const { displayName: profileDisplayName, profileReady, avatarUrl: profileAvatarUrl } = useWhoIAm();
+  // Local disk'te kayıtlı avatar: remote'tan önce göster (hızlı + upload sonrası anında güncellenir)
+  const [localAvatarUri] = React.useState(() => getLocalAvatarUri());
+  const resolvedAvatarUri = localAvatarUri ?? profileAvatarUrl ?? user?.avatarUrl;
   const { t } = useI18n();
   const {
     messages,
@@ -169,7 +174,7 @@ export default function HomeScreen() {
           style={styles.avatarBtn}
         >
           <Avatar
-            uri={user?.avatarUrl}
+            uri={resolvedAvatarUri}
             name={isGuest ? 'G' : (user?.name ?? 'U')}
             width={30}
             height={30}
@@ -179,7 +184,7 @@ export default function HomeScreen() {
       subtitle={undefined}
     />
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  ), [sessionTitle, t, openDrawer, user?.avatarUrl, user?.name, isGuest]);
+  ), [sessionTitle, t, openDrawer, resolvedAvatarUri, user?.name, isGuest]);
 
   return (
     <View style={styles.root}>
@@ -238,6 +243,8 @@ export default function HomeScreen() {
           onSelectChat={handleSelectChat}
         />
       )}
+
+      <NetworkConnectivitySheets />
     </View>
   );
 }

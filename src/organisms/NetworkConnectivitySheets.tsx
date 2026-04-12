@@ -1,7 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { useNetInfo } from '@react-native-community/netinfo';
 import { Ionicons } from '@expo/vector-icons';
+import {
+  useNetworkStatus,
+  useOfflineQueue,
+  useOfflineSyncInterceptor,
+} from '@mustafaaksoy41/react-native-offline-queue';
 import { LiquidBottomSheet } from '@/molecules/LiquidBottomSheet';
 import { Text } from '@/atoms/Text';
 import { Button } from '@/atoms/Button';
@@ -15,71 +19,59 @@ import { fontFamily, fontSize } from '@/constants/typography';
 import { useHaptics } from '@/hooks/useHaptics';
 import { toast } from '@/lib/toast';
 
-type Preview = typeof devConfig.networkSheetPreview;
-
 type NetworkConnectivitySheetsProps = {
-  /** false → sheet’ler kapalı (ör. onboarding’de sadece 1. slayt) */
   enabled?: boolean;
 };
 
-/**
- * NetInfo + isteğe bağlı devConfig.networkSheetPreview ile alt sheet’ler.
- * Offline kuyruk iş mantığı yok — sadece UI; sync butonu placeholder toast.
- */
 export function NetworkConnectivitySheets({ enabled = true }: NetworkConnectivitySheetsProps) {
   const { t } = useI18n();
   const { colors } = useTheme();
   const haptics = useHaptics();
-  const netInfo = useNetInfo();
-  const preview = devConfig.networkSheetPreview as Preview;
+  const preview = devConfig.networkSheetPreview;
 
-  const [offlineOpen, setOfflineOpen] = useState(false);
-  const [onlineOpen, setOnlineOpen] = useState(false);
-  const prevConnectedRef = useRef<boolean | null>(null);
+  // Paketin state'leri
+  const { isOnline } = useNetworkStatus();
+  const { pendingCount, syncNow } = useOfflineQueue();
 
+  // Sheet görünürlük state'leri — paketin isOnline'ından türetilir
+  const [offlineOpen, setOfflineOpen] = useState(() => enabled && preview === 'offline');
+  const [onlineOpen, setOnlineOpen] = useState(() => enabled && preview === 'online');
+  // Online restore → online sheet
+  useOfflineSyncInterceptor({
+    onPromptNeeded: useCallback(() => {
+      if (!enabled) return;
+      setOfflineOpen(false);
+      setOnlineOpen(true);
+    }, [enabled]),
+  });
+
+  // Offline algılama → offline sheet
+  const prevOnlineRef = useRef<boolean | null>(null);
   useEffect(() => {
-    if (!enabled) {
-      setOfflineOpen(false);
-      setOnlineOpen(false);
-      return;
-    }
+    if (!enabled || preview != null) return;
+    if (isOnline == null) return;
 
-    if (preview === 'offline') {
+    if (!isOnline) {
       setOfflineOpen(true);
       setOnlineOpen(false);
-      return;
-    }
-    if (preview === 'online') {
-      setOfflineOpen(false);
-      setOnlineOpen(true);
-      return;
     }
 
-    const connected = netInfo.isConnected;
-    if (connected == null) return;
-
-    if (!connected) {
-      setOfflineOpen(true);
-      setOnlineOpen(false);
-      prevConnectedRef.current = false;
-      return;
-    }
-
-    setOfflineOpen(false);
-    if (prevConnectedRef.current === false) {
-      setOnlineOpen(true);
-    }
-    prevConnectedRef.current = true;
-  }, [netInfo.isConnected, preview, enabled]);
+    prevOnlineRef.current = isOnline;
+  }, [isOnline, enabled, preview]);
 
   const closeOffline = useCallback(() => setOfflineOpen(false), []);
   const closeOnline = useCallback(() => setOnlineOpen(false), []);
 
-  const onSyncPress = useCallback(() => {
+  const onSyncPress = useCallback(async () => {
     haptics.success();
-    toast.info(t('network.syncPlaceholder'));
     setOnlineOpen(false);
-  }, [haptics, t]);
+    try {
+      await syncNow();
+      toast.success(t('network.syncSuccess'));
+    } catch {
+      toast.error(t('toast.unknownError'));
+    }
+  }, [haptics, t, syncNow]);
 
   return (
     <>
@@ -119,15 +111,15 @@ export function NetworkConnectivitySheets({ enabled = true }: NetworkConnectivit
             {t('network.onlineTitle')}
           </Text>
           <Text variant="body" color={colors.textSecondary} style={styles.message}>
-            {t('network.onlineMessage')}
+            {pendingCount > 0
+              ? t('network.onlineMessagePending', { count: pendingCount })
+              : t('network.onlineMessage')}
           </Text>
           <Button
             title={t('network.onlineSync')}
             onPress={onSyncPress}
             fullWidth
-            icon={
-              <Ionicons name="sync-outline" size={20} color={palette.white} />
-            }
+            icon={<Ionicons name="sync-outline" size={20} color={palette.white} />}
           />
           <TextButton
             title={t('network.onlineLater')}
