@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useRef } from 'react';
-import { TouchableOpacity, StyleSheet, View } from 'react-native';
+import { TouchableOpacity, StyleSheet, View, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -175,8 +175,8 @@ export default function HomeScreen() {
         >
           <Avatar
             uri={resolvedAvatarUri}
-            width={moderateScale(38)}
-            height={moderateScale(38)}
+            width={Platform.OS === 'web' ? 38 : moderateScale(38)}
+            height={Platform.OS === 'web' ? 38 : moderateScale(38)}
           />
         </TouchableOpacity>
       }

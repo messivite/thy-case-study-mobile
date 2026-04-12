@@ -18,6 +18,7 @@ import axios, {
   AxiosRequestConfig,
   InternalAxiosRequestConfig,
 } from 'axios';
+import { Platform } from 'react-native';
 import { supabase } from '@/services/supabase';
 import { authMutex } from '@/lib/authMutex';
 import { captureApiError } from '@/services/errorReporting';
@@ -51,12 +52,20 @@ interface RetryableConfig extends InternalAxiosRequestConfig {
 
 // ---------------------------------------------------------------------------
 
+// ngrok free plan'da tarayıcıya "warning page" döner ve CORS header koymaz.
+// Bu header ile ngrok o sayfayı atlar, direkt API response döner.
+// Sadece web'de gerekli — mobil native HTTP client'ı warning page'e düşmüyor.
+const ngrokHeaders = Platform.OS === 'web' && BASE_URL.includes('ngrok')
+  ? { 'ngrok-skip-browser-warning': '1' }
+  : {};
+
 // Auth gerektiren istekler için (interceptor'lı)
 export const api = axios.create({
   baseURL: BASE_URL,
   timeout: 8000,
   headers: {
     'Content-Type': 'application/json',
+    ...ngrokHeaders,
   },
 });
 
@@ -66,6 +75,7 @@ export const publicApi = axios.create({
   timeout: 8000,
   headers: {
     'Content-Type': 'application/json',
+    ...ngrokHeaders,
   },
 });
 

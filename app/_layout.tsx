@@ -16,7 +16,12 @@ import {
   Inter_600SemiBold,
   Inter_700Bold,
 } from '@expo-google-fonts/inter';
-import { OfflineProvider, getRealmAdapter } from '@mustafaaksoy41/react-native-offline-queue';
+import { OfflineProvider } from '@mustafaaksoy41/react-native-offline-queue';
+// getRealmAdapter: web'de Realm yok — runtime'da Platform check ile lazy yükle
+const getRealmAdapter = Platform.OS !== 'web'
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  ? () => require('@mustafaaksoy41/react-native-offline-queue').getRealmAdapter()
+  : () => null;
 
 import { store } from '@/store';
 import { queryClient } from '@/services/queryClient';
@@ -59,15 +64,21 @@ function RootLayout() {
           <ThemeProvider>
             <QueryClientProvider client={queryClient}>
               <I18nextProvider i18n={i18n}>
-                <OfflineProvider config={{
-                  storageType: 'realm',
-                  storage: getRealmAdapter(),
-                  syncMode: 'manual',
-                }}>
+                {Platform.OS !== 'web' ? (
+                  <OfflineProvider config={{
+                    storageType: 'realm',
+                    storage: getRealmAdapter(),
+                    syncMode: 'manual',
+                  }}>
+                    <AppErrorBoundary>
+                      {fontsLoaded ? <AuthProvider /> : null}
+                    </AppErrorBoundary>
+                  </OfflineProvider>
+                ) : (
                   <AppErrorBoundary>
                     {fontsLoaded ? <AuthProvider /> : null}
                   </AppErrorBoundary>
-                </OfflineProvider>
+                )}
               </I18nextProvider>
             </QueryClientProvider>
           </ThemeProvider>

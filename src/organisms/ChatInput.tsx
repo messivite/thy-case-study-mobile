@@ -50,8 +50,9 @@ const MAX_LINES = 4;
 const MAX_INPUT_HEIGHT = LINE_HEIGHT * MAX_LINES;
 const MAX_CHARS = 600;
 const CHAR_WARN_THRESHOLD = 100; // bu kadar kala counter görünür
-const SIZE = scaleSize(42);
-const ICON_SIZE = SIZE - scaleSize(10);
+const IS_WEB = Platform.OS === 'web';
+const SIZE = IS_WEB ? 42 : scaleSize(42);
+const ICON_SIZE = IS_WEB ? 32 : SIZE - scaleSize(10);
 
 // ---------------------------------------------------------------------------
 // SendButton — memo ile izole edildi; kendi shared value'ları var,
@@ -139,7 +140,7 @@ const SendButton = memo<SendButtonProps>(({ canSend, isStreaming, onSend, onStop
           style={[StyleSheet.absoluteFill, centerStyle]}
         >
           <Animated.View style={stopIconSlideStyle}>
-            <Ionicons name="stop" size={scaleSize(20)} color={palette.white} />
+            <Ionicons name="stop" size={IS_WEB ? 20 : scaleSize(20)} color={palette.white} />
           </Animated.View>
         </LinearGradient>
       </Animated.View>
@@ -191,7 +192,7 @@ const ModelChip = memo<ModelChipProps>(({ modelName, modelColor, onPress, isDark
         <Animated.Text numberOfLines={1} style={[chipStyles.label, { color: isDark ? '#fff' : '#111' }]}>
           {modelName}
         </Animated.Text>
-        <Ionicons name="chevron-down" size={scaleSize(11)} color={isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.3)'} />
+        <Ionicons name="chevron-down" size={cs(11)} color={isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.3)'} />
       </BlurView>
     ) : (
       <View style={[chipStyles.chip, { backgroundColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.06)' }]}>
@@ -199,15 +200,17 @@ const ModelChip = memo<ModelChipProps>(({ modelName, modelColor, onPress, isDark
         <Animated.Text numberOfLines={1} style={[chipStyles.label, { color: isDark ? '#fff' : '#111' }]}>
           {modelName}
         </Animated.Text>
-        <Ionicons name="chevron-down" size={scaleSize(11)} color={isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.3)'} />
+        <Ionicons name="chevron-down" size={cs(11)} color={isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.3)'} />
       </View>
     )}
   </TouchableOpacity>
 ));
 
+const cs = IS_WEB ? (n: number) => n : scaleSize;
+
 const chipStyles = StyleSheet.create({
   wrap: {
-    borderRadius: scaleSize(20),
+    borderRadius: cs(20),
     overflow: 'hidden',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(128,128,128,0.25)',
@@ -215,20 +218,20 @@ const chipStyles = StyleSheet.create({
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: scaleSize(5),
-    paddingHorizontal: scaleSize(10),
-    paddingVertical: scaleSize(5),
-    maxWidth: scaleSize(130),
+    gap: cs(5),
+    paddingHorizontal: cs(10),
+    paddingVertical: cs(5),
+    maxWidth: cs(130),
   },
   colorDot: {
-    width: scaleSize(7),
-    height: scaleSize(7),
-    borderRadius: scaleSize(4),
+    width: cs(7),
+    height: cs(7),
+    borderRadius: cs(4),
     flexShrink: 0,
   },
   label: {
     fontFamily: fontFamily.medium,
-    fontSize: scaleSize(11),
+    fontSize: cs(11),
     letterSpacing: 0.1,
     flexShrink: 1,
   },
@@ -605,7 +608,7 @@ const ChatInputInner: React.FC<Props> = ({
               onPress={handleExpandPress}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Ionicons name="expand-outline" size={scaleSize(18)} color={colors.textSecondary} />
+              <Ionicons name="expand-outline" size={cs(18)} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
         </View>
