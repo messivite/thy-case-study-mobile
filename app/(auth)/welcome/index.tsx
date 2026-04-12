@@ -5,6 +5,7 @@
  * Form mantığı `WelcomeAuthForm` içinde — her tuşta gradient/hero yeniden çizilmez.
  */
 
+import Head from 'expo-router/head';
 import React, { useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import {
   View,
@@ -171,6 +172,7 @@ export default function WelcomeScreen() {
 
   return (
     <View style={screenWrapStyle}>
+      <Head><title>{t('meta.welcome')} | {t('meta.suffix')}</title></Head>
       <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
       <LinearGradient
         colors={gradientColors}

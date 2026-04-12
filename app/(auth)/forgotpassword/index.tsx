@@ -2,6 +2,7 @@
  * Şifremi unuttum — register ile aynı kabuk; tek e-posta, gönder aksiyonu sonra bağlanacak.
  */
 
+import Head from 'expo-router/head';
 import React, { useEffect, useMemo, useRef, type ComponentType } from 'react';
 import {
   View,
@@ -142,6 +143,7 @@ export default function ForgotPasswordScreen() {
 
   return (
     <View style={screenWrapStyle}>
+      <Head><title>{t('meta.forgotPassword')} | {t('meta.suffix')}</title></Head>
       <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
       <LinearGradient
         colors={gradientColors}

@@ -1,3 +1,4 @@
+import Head from 'expo-router/head';
 import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { TouchableOpacity, StyleSheet, View, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -187,6 +188,7 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.root}>
+      <Head><title>{t('meta.home')} | {t('meta.suffix')}</title></Head>
       <StatusBar style="light" />
       <ChatLayout
         header={header}
