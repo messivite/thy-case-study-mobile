@@ -1,6 +1,9 @@
 import React from 'react';
 import { View, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
+import { DESIGN_BASE_WIDTH } from '@/lib/responsive';
+
+const IS_WEB = Platform.OS === 'web';
 
 type Props = {
   header: React.ReactNode;
@@ -19,10 +22,10 @@ const ChatLayoutInner: React.FC<Props> = ({ header, children, input }) => {
       {header}
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.kav}
+        style={IS_WEB ? styles.kavWeb : styles.kav}
       >
-        <View style={styles.content}>{children}</View>
-        <View style={inputAreaStyle}>
+        <View style={IS_WEB ? styles.contentWeb : styles.content}>{children}</View>
+        <View style={[inputAreaStyle, IS_WEB && styles.inputAreaWeb]}>
           {input}
         </View>
       </KeyboardAvoidingView>
@@ -35,6 +38,18 @@ export const ChatLayout = React.memo(ChatLayoutInner);
 const styles = StyleSheet.create({
   root: { flex: 1 },
   kav: { flex: 1 },
+  kavWeb: {
+    flex: 1,
+    maxWidth: DESIGN_BASE_WIDTH,
+    width: '100%',
+    alignSelf: 'center',
+  },
   content: { flex: 1 },
+  contentWeb: { flex: 1 },
   inputArea: {},
+  inputAreaWeb: {
+    maxWidth: DESIGN_BASE_WIDTH,
+    width: '100%',
+    alignSelf: 'center',
+  },
 });

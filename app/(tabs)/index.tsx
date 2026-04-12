@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useRef } from 'react';
-import { TouchableOpacity, StyleSheet, View } from 'react-native';
+import { TouchableOpacity, StyleSheet, View, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,6 +20,7 @@ import { ModelPickerSheet } from '@/organisms/ModelPickerSheet';
 import { WelcomeQuickAction } from '@/organisms/HomeWelcomePanel';
 import { ScrollToBottomButton } from '@/molecules/ScrollToBottomButton';
 import { NetworkConnectivitySheets } from '@/organisms/NetworkConnectivitySheets';
+import { ServerUnavailableSheet } from '@/organisms/ServerUnavailableSheet';
 
 export default function HomeScreen() {
   const { user, isGuest } = useAuth();
@@ -174,8 +175,8 @@ export default function HomeScreen() {
         >
           <Avatar
             uri={resolvedAvatarUri}
-            width={moderateScale(38)}
-            height={moderateScale(38)}
+            width={Platform.OS === 'web' ? 38 : moderateScale(38)}
+            height={Platform.OS === 'web' ? 38 : moderateScale(38)}
           />
         </TouchableOpacity>
       }
@@ -241,6 +242,7 @@ export default function HomeScreen() {
       />
 
       <NetworkConnectivitySheets promptOnMount />
+      <ServerUnavailableSheet />
     </View>
   );
 }

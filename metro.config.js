@@ -17,7 +17,22 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
       filePath: path.resolve(__dirname, 'node_modules/tslib/tslib.es6.mjs'),
     };
   }
-if (originalResolveRequest) {
+
+  // Web'de Realm ve offline-queue realm adapter'ı stub'la
+  if (platform === 'web') {
+    if (
+      moduleName === 'realm' ||
+      moduleName === '#realm.node' ||
+      moduleName.startsWith('realm/')
+    ) {
+      return {
+        type: 'sourceFile',
+        filePath: path.resolve(__dirname, 'src/lib/realmWebStub.js'),
+      };
+    }
+  }
+
+  if (originalResolveRequest) {
     return originalResolveRequest(context, moduleName, platform);
   }
   return context.resolveRequest(context, moduleName, platform);
