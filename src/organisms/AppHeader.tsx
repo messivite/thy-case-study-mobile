@@ -190,9 +190,9 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
   },
   sideSlot: {
+    minWidth: scale(60),
     height: HEADER_ROW_HEIGHT,
     justifyContent: 'center',
   },
