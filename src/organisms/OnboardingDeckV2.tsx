@@ -637,7 +637,7 @@ export const OnboardingDeckV2: React.FC<OnboardingDeckV2Props> = ({
         {/* Header: logo absolute ortada, skip sağda */}
         <View style={mainStyles.header}>
           {/* Logo tam ortada — absolute */}
-          <View style={mainStyles.logoAbsolute} pointerEvents="none">
+          <View style={[mainStyles.logoAbsolute, Platform.OS === 'android' && { marginTop: insets.top * 0.67 }]} pointerEvents="none">
             <View style={mainStyles.logoBox}>
               <Logo width={deckScale(100)} />
             </View>
@@ -833,7 +833,6 @@ const mainStyles = StyleSheet.create({
     bottom: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: Platform.OS === 'android' ? insets.top * 0.67 : 0,
   },
   logoCenter: {
     position: 'absolute',
