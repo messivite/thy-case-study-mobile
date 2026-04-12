@@ -13,8 +13,12 @@ export const USAGE_QUERY_KEYS = {
  * Kullanım:
  *   const { data, isLoading } = useGetUsageQuery();
  */
+const THIRTY_SECONDS_MS = 30 * 1000;
+
 export const useGetUsageQuery = () =>
   useQuery<UsageResponse, Error>({
     queryKey: USAGE_QUERY_KEYS.usage,
     queryFn: getUsage,
+    staleTime: THIRTY_SECONDS_MS,
+    gcTime: THIRTY_SECONDS_MS * 2,
   });

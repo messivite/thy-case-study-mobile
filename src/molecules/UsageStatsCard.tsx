@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
+import { ActivityThyLoading } from '@/atoms/ActivityThyLoading';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   Easing,
@@ -14,12 +15,14 @@ import { useI18n } from '@/hooks/useI18n';
 import { palette } from '@/constants/colors';
 import { radius, spacing } from '@/constants/spacing';
 import { fontFamily } from '@/constants/typography';
+import { scale } from '@/lib/responsive';
 
 type Props = {
   dailyUsed: number;
   dailyLimit: number;
   weeklyUsed: number;
   weeklyLimit: number;
+  isLoading?: boolean;
 };
 
 type ProgressRowProps = {
@@ -28,6 +31,11 @@ type ProgressRowProps = {
   limit: number;
   remainingLabel: string;
   delayMs?: number;
+};
+
+const formatK = (n: number): string => {
+  if (n >= 1000) return `${parseFloat((n / 1000).toFixed(1))}K`;
+  return String(n);
 };
 
 const ProgressRow: React.FC<ProgressRowProps> = ({ label, used, limit, remainingLabel, delayMs = 0 }) => {
@@ -58,7 +66,7 @@ const ProgressRow: React.FC<ProgressRowProps> = ({ label, used, limit, remaining
           {label}
         </Text>
         <Text variant="micro" color="rgba(255,255,255,0.88)">
-          {used}/{limit} · %{percent}
+          {formatK(used)}/{formatK(limit)} · %{percent}
         </Text>
       </View>
 
@@ -74,7 +82,7 @@ const ProgressRow: React.FC<ProgressRowProps> = ({ label, used, limit, remaining
       </View>
 
       <Text variant="micro" color="rgba(255,255,255,0.8)" style={styles.remainingText}>
-        {remainingLabel} {remaining}
+        {remainingLabel} {formatK(remaining)}
       </Text>
     </View>
   );
@@ -85,6 +93,7 @@ export const UsageStatsCard: React.FC<Props> = ({
   dailyLimit,
   weeklyUsed,
   weeklyLimit,
+  isLoading = false,
 }) => {
   const { isDark } = useTheme();
   const { t } = useI18n();
@@ -128,13 +137,21 @@ export const UsageStatsCard: React.FC<Props> = ({
             {t('settings.usageRemaining')}
           </Text>
           <Text variant="label" color={palette.white} style={styles.remainingValue}>
-            {totalRemaining}
+            {formatK(totalRemaining)}
           </Text>
         </View>
       </View>
 
-      <ProgressRow label={t('settings.usageDaily')} used={dailyUsed} limit={dailyLimit} remainingLabel={t('settings.usageRemainingLabel')} delayMs={0} />
-      <ProgressRow label={t('settings.usageWeekly')} used={weeklyUsed} limit={weeklyLimit} remainingLabel={t('settings.usageRemainingLabel')} delayMs={120} />
+      {isLoading ? (
+        <View style={styles.loadingOuter}>
+          <ActivityThyLoading mode="float" size={44} />
+        </View>
+      ) : (
+        <>
+          <ProgressRow label={t('settings.usageDaily')} used={dailyUsed} limit={dailyLimit} remainingLabel={t('settings.usageRemainingLabel')} delayMs={0} />
+          <ProgressRow label={t('settings.usageWeekly')} used={weeklyUsed} limit={weeklyLimit} remainingLabel={t('settings.usageRemainingLabel')} delayMs={120} />
+        </>
+      )}
     </LinearGradient>
   );
 };
@@ -194,6 +211,11 @@ const styles = StyleSheet.create({
   remainingValue: {
     fontFamily: fontFamily.semiBold,
     textAlign: 'center',
+  },
+  loadingOuter: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing[2],
   },
   rowWrap: {
     gap: spacing[2],

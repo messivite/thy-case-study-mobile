@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons'; // checkmark için
 import { LiquidBottomSheet } from '@/molecules/LiquidBottomSheet';
 import { Text } from '@/atoms/Text';
 import { useI18n } from '@/hooks/useI18n';
+import i18n from '@/i18n';
 import { useTheme } from '@/hooks/useTheme';
 import { useUpdateMeMutation } from '@/hooks/api/useUpdateMe';
 import { useHaptics } from '@/hooks/useHaptics';
@@ -64,11 +65,13 @@ export function LanguagePickerSheet({ open, onClose }: Props) {
       haptics.selection();
       // i18n + Redux
       void changeLanguage(lang.code);
+      // Seçilen dilin t() fonksiyonunu al — hook henüz güncellenmemiş olabilir
+      const tNext = i18n.getFixedT(lang.code);
       // Backend sync
       updateMe(
         { locale: lang.code },
         {
-          onSuccess: () => toast.info(t('toast.settingsSaved')),
+          onSuccess: () => toast.info(tNext('toast.settingsSaved')),
           onError: () => {
             // Hata olsa bile UI değişimi kalır — locale kritik değil
           },

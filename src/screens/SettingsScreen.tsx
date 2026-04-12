@@ -204,7 +204,7 @@ export default function SettingsScreen() {
   const appVersion = Constants.expoConfig?.version ?? '1.0.0';
 
 
-  const { data: usageData } = useGetUsageQuery();
+  const { data: usageData, isLoading: usageLoading } = useGetUsageQuery();
 
   return (
     <>
@@ -328,6 +328,7 @@ export default function SettingsScreen() {
           transition={{ type: 'timing', duration: 350, delay: 40 }}
         >
           <UsageStatsCard
+            isLoading={usageLoading && !usageData}
             dailyUsed={usageData?.daily.usedTokens ?? 0}
             dailyLimit={usageData?.daily.limitTokens ?? 0}
             weeklyUsed={usageData?.weekly.usedTokens ?? 0}
