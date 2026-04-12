@@ -10,7 +10,6 @@ import { Ionicons } from '@expo/vector-icons';
 import {
   useNetworkStatus,
   useOfflineQueue,
-  useOfflineSyncInterceptor,
   useSyncProgress,
 } from '@mustafaaksoy41/react-native-offline-queue';
 import { LiquidBottomSheet } from '@/molecules/LiquidBottomSheet';
@@ -146,25 +145,31 @@ export function NetworkConnectivitySheets({ enabled = true, promptOnMount = fals
     }
   }, [forceOpen, enabled, chatId]);
 
-  useOfflineSyncInterceptor({
-    onPromptNeeded: useCallback(() => {
-      if (!enabled || !chatId) return;
-      if (_dismissedChatIds.has(chatId)) return;
-      setOfflineOpen(false);
-      setOnlineOpen(true);
-    }, [enabled, chatId]),
-  });
-
+  // Offline→online geçişini ve offline detection'ı manuel izle.
+  // useOfflineSyncInterceptor kullanmıyoruz — paketin local hasPrompted state'i
+  // component remount'ta sıfırlanıyor ve sheet tekrar açılıyor.
   useEffect(() => {
     if (!enabled || preview != null) return;
     if (isOnline == null) return;
+
+    const prev = prevOnlineRef.current;
+
     if (!isOnline) {
-      console.log('[NetworkSheets] setting offlineOpen=true');
+      // Online → offline
       setOfflineOpen(true);
       setOnlineOpen(false);
+    } else if (prev === false && isOnline) {
+      // Offline → online geçişi: pending varsa ve dismiss edilmediyse sheet aç
+      if (pendingCountRef.current > 0) {
+        if (!chatId || !_dismissedChatIds.has(chatId)) {
+          setOfflineOpen(false);
+          setOnlineOpen(true);
+        }
+      }
     }
+
     prevOnlineRef.current = isOnline;
-  }, [isOnline, enabled, preview]);
+  }, [isOnline, enabled, preview, chatId]);
 
   const closeOffline = useCallback(() => setOfflineOpen(false), []);
   const closeOnline = useCallback(() => {
