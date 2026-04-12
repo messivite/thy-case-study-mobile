@@ -1,5 +1,4 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import { ColorSchemeName } from 'react-native';
 import { mmkvStorage, STORAGE_KEYS } from '@/lib/mmkv';
 
 type ThemeMode = 'light' | 'dark' | 'system';

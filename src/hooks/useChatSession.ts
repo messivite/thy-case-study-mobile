@@ -214,10 +214,6 @@ export const useChatSession = () => {
           });
         } else {
           await sendMessageApi(cid, { provider, model, messages: [{ role: 'user', content }] });
-          unstable_batchedUpdates(() => {
-            setIsNonStreamPending(false);
-            setOptimisticUserMsg(null);
-          });
           queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.messages(cid) });
           queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
         }
@@ -245,6 +241,12 @@ export const useChatSession = () => {
         if (activeChatIdRef.current) {
           queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.messages(activeChatIdRef.current) });
           queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
+        }
+        if (!streamingEnabledRef.current) {
+          unstable_batchedUpdates(() => {
+            setIsNonStreamPending(false);
+            setOptimisticUserMsg(null);
+          });
         }
       },
       onError: () => {

@@ -381,7 +381,14 @@ export const MessageList: React.FC<Props> = ({
         keyExtractor={(item) => item.id}
         inverted
         contentContainerStyle={styles.listContent}
-        ListHeaderComponent={null}
+        ListHeaderComponent={
+          (isTyping && !isStreamingActive) ? (
+            <View style={styles.typingIndicator}>
+              <ActivityThyLoading mode="pulse" size={20} />
+              <Text variant="caption" color={colors.textSecondary}>Yanıt bekleniyor...</Text>
+            </View>
+          ) : null
+        }
         ListFooterComponent={
           isLoadingMore ? (
             <View style={styles.loadingMore}>
@@ -447,6 +454,14 @@ const styles = StyleSheet.create({
   loadingMore: {
     paddingVertical: spacing[4],
     alignItems: 'center',
+  },
+  typingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+    paddingVertical: spacing[2],
+    marginVertical: spacing[1],
+    marginHorizontal: spacing[4],
   },
   emptySubtitle: {
     marginTop: spacing[1],
