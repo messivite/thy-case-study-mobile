@@ -114,7 +114,7 @@ export function ForgotPasswordAuthForm({ webScaled, footer }: Props) {
             accessibilityState={{ disabled: !isValid || isSubmitting }}
           >
             {isSubmitting ? (
-              <View style={styles.submitBtnRow}>
+              <View style={styles.submitBtn}>
                 <Ionicons name="reload-outline" size={scale(16)} color={palette.white} />
                 <Text style={[styles.submitBtnText, webScaled?.submitBtnText]}>
                   {t('auth.sending')}

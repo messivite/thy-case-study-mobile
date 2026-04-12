@@ -17,7 +17,7 @@ export const useChat = () => {
       id: `msg_${Date.now()}_user`,
       role: 'user',
       content,
-      modelId: selectedModel,
+      model: selectedModel,
       timestamp: Date.now(),
       attachments: attachments.length > 0 ? attachments : undefined,
     };
