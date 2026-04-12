@@ -132,7 +132,7 @@ const SlideCard = memo<{
 }>(({ slide, index, scrollX, slideWidth, inactiveTranslateY }) => {
   const { t } = useI18n();
 
-  /** Web: ilk layout’ta slideWidth 0 → scrollX/0 NaN, kart görünmez/bozuk */
+  /** Web: ilk layout'ta slideWidth 0 → scrollX/0 NaN, kart görünmez/bozuk */
   const slideW = useSharedValue(Math.max(slideWidth, 1));
   useEffect(() => {
     slideW.value = Math.max(slideWidth, 1);
@@ -492,7 +492,7 @@ export interface OnboardingDeckV2Props {
   onComplete: () => void;
   onSkip: () => Promise<void>;
   variant?: OnboardingBackgroundVariant;
-  /** Slayt değişince (ör. ağ sheet’i sadece 1. slaytta) */
+  /** Slayt değişince (ör. ağ sheet'i sadece 1. slaytta) */
   onActiveIndexChange?: (index: number) => void;
 }
 
@@ -510,7 +510,7 @@ export const OnboardingDeckV2: React.FC<OnboardingDeckV2Props> = ({
       ? Math.max(1, Math.min(effectiveWinW, DESIGN_BASE_WIDTH))
       : Math.max(windowWidth, 1);
 
-  /** Web’de ilk frame’de 0 olabiliyor */
+  /** Web'de ilk frame'de 0 olabiliyor */
   const viewportH = windowHeight > 0 ? windowHeight : 800;
 
   const webCardAreaMinHeight = useMemo(
@@ -564,7 +564,7 @@ export const OnboardingDeckV2: React.FC<OnboardingDeckV2Props> = ({
       /**
        * Web: `animated: true` + programatik scroll sonrası çoğu zaman
        * `onMomentumScrollEnd` tetiklenmez → activeIndex sadece oradan güncellenince akış kitlenir.
-       * Ayrıca Reanimated onScroll bazen eksik kalır; scrollX aynı tick’te senkronlanır.
+       * Ayrıca Reanimated onScroll bazen eksik kalır; scrollX aynı tick'te senkronlanır.
        */
       scrollRef.current?.scrollTo({
         x,
@@ -615,10 +615,11 @@ export const OnboardingDeckV2: React.FC<OnboardingDeckV2Props> = ({
         },
       ];
     }
-    return mainStyles.safe;
+    // iOS: insets.top notch yüksekliği; Android: status bar yüksekliği
+    return [mainStyles.safe, { paddingTop: insets.top }];
   }, [insets.top]);
 
-  const MainColumn = Platform.OS === 'web' ? View : View;
+  const MainColumn = View;
 
   return (
     <View style={[mainStyles.root, rootWebLayout]}>
@@ -633,25 +634,25 @@ export const OnboardingDeckV2: React.FC<OnboardingDeckV2Props> = ({
       <BgCircles deckScale={deckScale} />
 
       <MainColumn style={safeAreaStyle}>
-        {/* Header tam genişlik — web’de gradient / arka plan yanlara yayılır */}
+        {/* Header: logo absolute ortada, skip sağda */}
         <View style={mainStyles.header}>
-          <View style={[mainStyles.logoCenter, { top: insets.top }]}>
+          {/* Logo tam ortada — absolute */}
+          <View style={mainStyles.logoAbsolute} pointerEvents="none">
             <View style={mainStyles.logoBox}>
               <Logo width={deckScale(100)} />
             </View>
           </View>
-          <View style={mainStyles.headerRight}>
-            <TextButton
-              title="SKIP"
-              color="rgba(255,255,255,0.95)"
-              onPress={onSkip}
-              hapticType="selection"
-              textStyle={mainStyles.skipText}
-            />
-          </View>
+          {/* Skip sağa yaslanmış */}
+          <TextButton
+            title="SKIP"
+            color="rgba(255,255,255,0.95)"
+            onPress={onSkip}
+            hapticType="selection"
+            textStyle={mainStyles.skipText}
+          />
         </View>
 
-        {/* Sadece deck + alt CTA dar sütunda (mobil genişliği); native’de %100 */}
+        {/* Sadece deck + alt CTA dar sütunda (mobil genişliği); native'de %100 */}
         <View style={[mainStyles.deckOuter, Platform.OS === 'web' && mainStyles.deckOuterWeb]}>
           <View style={[mainStyles.deckInner, Platform.OS === 'web' && mainStyles.deckInnerWeb]}>
             <View
@@ -748,7 +749,7 @@ const mainStyles = StyleSheet.create({
     flex: 1,
     width: '100%',
   },
-  /** alignItems:center kullanma — web’de çocuklar shrink-to-fit olup flex zinciri kırılıyor */
+  /** alignItems:center kullanma — web'de çocuklar shrink-to-fit olup flex zinciri kırılıyor */
   deckOuterWeb: {
     minHeight: 0,
   },
@@ -807,10 +808,17 @@ const mainStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-end',
     paddingHorizontal: spacing[5],
-    paddingTop: spacing[3],
+    paddingTop: Platform.OS === 'android' ? spacing[5] : spacing[3],
     paddingBottom: spacing[2],
   },
-  /** Web: yatay ScrollView + flex-end kombinasyonu kartı/overlay’ı bozabiliyor */
+  headerSide: {
+    flex: 1,
+  },
+  headerCenter: {
+    flex: 0,
+    alignItems: 'center',
+  },
+  /** Web: yatay ScrollView + flex-end kombinasyonu kartı/overlay'ı bozabiliyor */
   slideWrapperWeb: {
     justifyContent: 'center',
   },
@@ -818,9 +826,14 @@ const mainStyles = StyleSheet.create({
     alignItems: 'stretch',
   },
   logoAbsolute: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: Platform.OS === 'android' ? insets.top * 0.67 : 0,
   },
   logoCenter: {
     position: 'absolute',
@@ -831,7 +844,7 @@ const mainStyles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerRight: {
-    zIndex: 1,
+    alignItems: 'flex-end',
   },
   skipText: {
     fontFamily: 'Inter_700Bold',

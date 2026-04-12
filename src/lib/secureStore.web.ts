@@ -1,8 +1,8 @@
 /**
- * Web: Expo SecureStore’un Keychain/Keystore karşılığı yok.
- * Bu katman `sessionStorage` kullanır (sekme kapanınca silinir; localStorage’dan biraz daha dar yüzey).
- * XSS’e karşı native kadar güvenli değildir. Üretim web’de ideal çözüm: refresh token’ı
- * httpOnly + Secure cookie ile backend’in yönetmesi (BFF / session proxy).
+ * Web: Expo SecureStore'un Keychain/Keystore karşılığı yok.
+ * Bu katman `sessionStorage` kullanır (sekme kapanınca silinir; localStorage'dan biraz daha dar yüzey).
+ * XSS'e karşı native kadar güvenli değildir. Üretim web'de ideal çözüm: refresh token'ı
+ * httpOnly + Secure cookie ile backend'in yönetmesi (BFF / session proxy).
  */
 import { SECURE_KEYS } from '@/lib/secureStore.keys';
 

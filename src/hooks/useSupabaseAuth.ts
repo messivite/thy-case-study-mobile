@@ -6,7 +6,7 @@
  * Sorumlulukları:
  *  1. App açılışında mevcut session'ı restore et
  *  2. Supabase onAuthStateChange listener'ı → RTK dispatch
- *     (SIGNED_OUT: sadece Redux’ta gerçekten oturum varken reset/nav — açılış gürültüsünde atla)
+ *     (SIGNED_OUT: sadece Redux'ta gerçekten oturum varken reset/nav — açılış gürültüsünde atla)
  *  3. Token süresi dolduysa proaktif refresh (background interval)
  *  4. 401 interceptor sinyalini dinle → refresh → retry
  *  5. Login / register / logout / Google OAuth methodlarını dışa aç

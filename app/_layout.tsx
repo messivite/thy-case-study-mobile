@@ -54,11 +54,7 @@ function RootLayout() {
     <GestureHandlerRootView
       style={[styles.root, Platform.OS === 'web' && styles.rootWeb]}
     >
-      <KeyboardProvider
-        statusBarTranslucent={Platform.OS === 'android'}
-        navigationBarTranslucent={Platform.OS === 'android'}
-        preserveEdgeToEdge={Platform.OS === 'android'}
-      >
+      <KeyboardProvider>
       <SafeAreaProvider>
         <Provider store={store}>
           <ThemeProvider>

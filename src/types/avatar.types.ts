@@ -12,13 +12,13 @@ export type AvatarSizePreset = 'sm' | 'md' | 'lg' | 'xl';
 export type AvatarFallbackMode = 'icon' | 'initials' | 'placeholder';
 
 export type AvatarProps = {
-  /** Uzak görsel URL’i; boş / null ise fallback devreye girer. */
+  /** Uzak görsel URL'i; boş / null ise fallback devreye girer. */
   uri?: string | null;
   /** `fallback="initials"` için; ayrıca erişilebilirlik etiketi. */
   name?: string;
   /** Preset boyut — `width` / `height` yoksa kullanılır. */
   size?: AvatarSizePreset;
-  /** Özel genişlik (preset’i geçersiz kılar). */
+  /** Özel genişlik (preset'i geçersiz kılar). */
   width?: number;
   /** Özel yükseklik (verilmezse `width` ile kare kabul edilir). */
   height?: number;

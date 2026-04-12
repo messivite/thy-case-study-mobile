@@ -1,7 +1,7 @@
 /**
  * useAuth — ekranların kullandığı lightweight selector hook.
  *
- * State okuma + dispatch için. Supabase çağrıları useSupabaseAuth / authService’te.
+ * State okuma + dispatch için. Supabase çağrıları useSupabaseAuth / authService'te.
  * Çıkış: useSupabaseAuth.logout (optimistic + interval durdurma).
  */
 

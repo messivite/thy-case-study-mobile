@@ -4,6 +4,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { DESIGN_BASE_WIDTH } from '@/lib/responsive';
 
 const IS_WEB = Platform.OS === 'web';
+const IS_ANDROID = Platform.OS === 'android';
 
 type Props = {
   header: React.ReactNode;
@@ -17,18 +18,33 @@ const ChatLayoutInner: React.FC<Props> = ({ header, children, input }) => {
   const rootStyle = React.useMemo(() => [styles.root, { backgroundColor: colors.background }], [colors.background]);
   const inputAreaStyle = React.useMemo(() => [styles.inputArea, { backgroundColor: colors.background }], [colors.background]);
 
+  // Android: softwareKeyboardLayoutMode="pan" tüm ekranı yukarı kaydırır,
+  // KAV ayrıca yüksekliği kısaltınca boş alan kalır — Android'de KAV'ı devre dışı bırak
+  const inner = (
+    <>
+      <View style={IS_WEB ? styles.contentWeb : styles.content}>{children}</View>
+      <View style={[inputAreaStyle, IS_WEB && styles.inputAreaWeb]}>
+        {input}
+      </View>
+    </>
+  );
+
   return (
     <View style={rootStyle}>
-      {header}
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={IS_WEB ? styles.kavWeb : styles.kav}
-      >
-        <View style={IS_WEB ? styles.contentWeb : styles.content}>{children}</View>
-        <View style={[inputAreaStyle, IS_WEB && styles.inputAreaWeb]}>
-          {input}
-        </View>
-      </KeyboardAvoidingView>
+      {IS_ANDROID ? (
+        <>
+          {header}
+          <View style={styles.kav}>{inner}</View>
+        </>
+      ) : (
+        <KeyboardAvoidingView
+          behavior={IS_WEB ? undefined : 'padding'}
+          style={IS_WEB ? styles.kavWeb : styles.kav}
+        >
+          {header}
+          {inner}
+        </KeyboardAvoidingView>
+      )}
     </View>
   );
 };

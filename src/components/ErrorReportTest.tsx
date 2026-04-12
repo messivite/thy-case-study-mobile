@@ -3,7 +3,7 @@
  * Tıklanınca render aşamasında hata fırlatır → AppErrorBoundary devreye girer.
  *
  * Kullanım: Herhangi bir ekranda <ErrorReportTest /> (varsayılan sadece __DEV__)
- * Production build’de de denemek için: <ErrorReportTest enabled />
+ * Production build'de de denemek için: <ErrorReportTest enabled />
  */
 
 import React, { useState } from 'react';
