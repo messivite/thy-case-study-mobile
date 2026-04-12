@@ -2,6 +2,7 @@
 
 # Agent / editor — yerel; repoda tutulmaz
 CLAUDE.md
+.idea/
 
 # dependencies
 node_modules/
