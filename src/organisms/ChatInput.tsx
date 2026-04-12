@@ -50,9 +50,8 @@ const MAX_LINES = 4;
 const MAX_INPUT_HEIGHT = LINE_HEIGHT * MAX_LINES;
 const MAX_CHARS = 600;
 const CHAR_WARN_THRESHOLD = 100; // bu kadar kala counter görünür
-const IS_WEB = Platform.OS === 'web';
-const SIZE = IS_WEB ? 42 : scaleSize(42);
-const ICON_SIZE = IS_WEB ? 32 : SIZE - scaleSize(10);
+const SIZE = scaleSize(42);
+const ICON_SIZE = SIZE - scaleSize(10);
 
 // ---------------------------------------------------------------------------
 // SendButton — memo ile izole edildi; kendi shared value'ları var,
@@ -140,7 +139,7 @@ const SendButton = memo<SendButtonProps>(({ canSend, isStreaming, onSend, onStop
           style={[StyleSheet.absoluteFill, centerStyle]}
         >
           <Animated.View style={stopIconSlideStyle}>
-            <Ionicons name="stop" size={IS_WEB ? 20 : scaleSize(20)} color={palette.white} />
+            <Ionicons name="stop" size={scaleSize(20)} color={palette.white} />
           </Animated.View>
         </LinearGradient>
       </Animated.View>
@@ -206,7 +205,7 @@ const ModelChip = memo<ModelChipProps>(({ modelName, modelColor, onPress, isDark
   </TouchableOpacity>
 ));
 
-const cs = IS_WEB ? (n: number) => n : scaleSize;
+const cs = scaleSize;
 
 const chipStyles = StyleSheet.create({
   wrap: {

@@ -76,6 +76,9 @@ import { toast } from '@/lib/toast';
 import { palette } from '@/constants/colors';
 import { radius, shadow, spacing } from '@/constants/spacing';
 import { scale, verticalScale, moderateScale } from '@/lib/responsive';
+
+const IS_WEB = Platform.OS === 'web';
+const WEB_DRAWER_WIDTH = 320;
 import { fontFamily } from '@/constants/typography';
 
 // ---------------------------------------------------------------------------
@@ -539,7 +542,7 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
 
-  const DRAWER_WIDTH = windowWidth * 0.85;
+  const DRAWER_WIDTH = IS_WEB ? WEB_DRAWER_WIDTH : windowWidth * 0.85;
 
   // Reanimated
   const translateX = useSharedValue(-DRAWER_WIDTH);
