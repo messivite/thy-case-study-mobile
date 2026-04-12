@@ -1,5 +1,12 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState, memo } from 'react';
 import { View, StyleSheet } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withSpring,
+  Easing,
+} from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import {
   useNetworkStatus,
@@ -21,40 +28,125 @@ import { useHaptics } from '@/hooks/useHaptics';
 import { toast } from '@/lib/toast';
 import { ActivityThyLoading } from '@/atoms/ActivityThyLoading';
 
+// ---------------------------------------------------------------------------
+// AnimatedProgressBar — UI thread animasyonu, JS re-render yok
+// ---------------------------------------------------------------------------
+
+const AnimatedProgressBar = memo(({ percentage, done }: { percentage: number; done?: boolean }) => {
+  const width = useSharedValue(0);
+  const colorProgress = useSharedValue(0);
+
+  useEffect(() => {
+    width.value = withTiming(percentage, {
+      duration: percentage === 100 ? 300 : 400,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [percentage]);
+
+  useEffect(() => {
+    colorProgress.value = withTiming(done ? 1 : 0, { duration: 400 });
+  }, [done]);
+
+  const fillStyle = useAnimatedStyle(() => ({
+    width: `${width.value}%` as `${number}%`,
+    backgroundColor: done ? palette.success : palette.primary,
+  }));
+
+  return (
+    <View style={styles.progressTrack}>
+      <View style={styles.progressBg} />
+      <Animated.View style={[styles.progressFill, fillStyle]} />
+    </View>
+  );
+});
+
+// ---------------------------------------------------------------------------
+// SyncBreakdownRow — memo ile izole, sadece değer değişince render
+// ---------------------------------------------------------------------------
+
+const SyncBreakdownRow = memo(({
+  icon,
+  label,
+}: {
+  icon: React.ComponentProps<typeof Ionicons>['name'];
+  label: string;
+}) => {
+  const { colors } = useTheme();
+  return (
+    <View style={styles.breakdownItem}>
+      <Ionicons name={icon} size={14} color={colors.textSecondary} />
+      <Text variant="caption" color={colors.textSecondary}>{label}</Text>
+    </View>
+  );
+});
+
+// ---------------------------------------------------------------------------
+// NetworkConnectivitySheets
+// ---------------------------------------------------------------------------
+
 type NetworkConnectivitySheetsProps = {
   enabled?: boolean;
-  /** Home ekranına gelince kuyrukta bekleyen mesaj varsa sync sheet'i aç */
   promptOnMount?: boolean;
+  forceOpen?: number;
+  chatId?: string | null;
 };
 
-export function NetworkConnectivitySheets({ enabled = true, promptOnMount = false }: NetworkConnectivitySheetsProps) {
+// Module scope — kapatılan chat ID'lerini tut, aynı chat için tekrar açılmasın
+const _dismissedChatIds = new Set<string>();
+
+export function NetworkConnectivitySheets({ enabled = true, promptOnMount = false, forceOpen, chatId }: NetworkConnectivitySheetsProps) {
   const { t } = useI18n();
   const { colors } = useTheme();
   const haptics = useHaptics();
   const preview = devConfig.networkSheetPreview;
 
-  // Paketin state'leri
   const { isOnline } = useNetworkStatus();
-  const { pendingCount, isSyncing, syncNow } = useOfflineQueue();
+  const { queue, pendingCount, isSyncing, syncNow } = useOfflineQueue();
   const { percentage, completedCount, totalCount, failedCount, items } = useSyncProgress();
 
+  // items filtresi — her render'da yeniden hesaplanmasın
   const pendingMessages = items.filter((i) => i.action.actionName === 'SEND_MESSAGE').length;
   const pendingLikes = items.filter((i) => i.action.actionName === 'LIKE_MESSAGE').length;
 
-  // Sheet görünürlük state'leri — paketin isOnline'ından türetilir
   const [offlineOpen, setOfflineOpen] = useState(() => enabled && preview === 'offline');
   const [onlineOpen, setOnlineOpen] = useState(() => enabled && preview === 'online');
+  const [syncDone, setSyncDone] = useState(false);
 
-  // Home ekranına ilk gelişte kuyrukta bekleyen mesaj varsa sync sheet'i göster
-  const hasPromptedOnMount = useRef(false);
+  // Module-level flag kullan — useRef remount'ta sıfırlanır
+  // const hasPromptedOnMount = useRef(false);
+  const prevOnlineRef = useRef<boolean | null>(null);
+  const wasSyncingRef = useRef(false);
+  const syncSnapshotRef = useRef({ messages: 0, likes: 0 });
+  const isOnlineRef = useRef(isOnline);
+  const pendingCountRef = useRef(pendingCount);
+  useEffect(() => { isOnlineRef.current = isOnline; }, [isOnline]);
+  useEffect(() => { pendingCountRef.current = pendingCount; }, [pendingCount]);
+
+  // Sync başlarken snapshot al — isSyncing true'ya geçince items henüz dolu
   useEffect(() => {
-    if (!promptOnMount || !enabled || hasPromptedOnMount.current) return;
+    if (isSyncing && !wasSyncingRef.current) {
+      syncSnapshotRef.current = { messages: pendingMessages, likes: pendingLikes };
+    }
+  }, [isSyncing, pendingMessages, pendingLikes]);
+
+  useEffect(() => {
+    if (!promptOnMount || !enabled) return;
+    if (!chatId || _dismissedChatIds.has(chatId)) return;
     if (isOnline && pendingCount > 0) {
-      hasPromptedOnMount.current = true;
       setOnlineOpen(true);
     }
-  }, [promptOnMount, enabled, isOnline, pendingCount]);
-  // Online restore → online sheet
+  }, [promptOnMount, enabled, chatId, isOnline, pendingCount]);
+
+  useEffect(() => {
+    if (forceOpen && forceOpen > 0 && enabled) {
+      // Kullanıcı bilinçli bastı — dismiss flag'i temizle, sheet'i aç
+      if (chatId) _dismissedChatIds.delete(chatId);
+      // onlineOpen zaten true olabilir — false→true cycle ile LiquidBottomSheet effect'ini zorla tetikle
+      setOnlineOpen(false);
+      requestAnimationFrame(() => setOnlineOpen(true));
+    }
+  }, [forceOpen, enabled, chatId]);
+
   useOfflineSyncInterceptor({
     onPromptNeeded: useCallback(() => {
       if (!enabled) return;
@@ -63,26 +155,35 @@ export function NetworkConnectivitySheets({ enabled = true, promptOnMount = fals
     }, [enabled]),
   });
 
-  // Offline algılama → offline sheet
-  const prevOnlineRef = useRef<boolean | null>(null);
   useEffect(() => {
     if (!enabled || preview != null) return;
     if (isOnline == null) return;
-
     if (!isOnline) {
       setOfflineOpen(true);
       setOnlineOpen(false);
     }
-
     prevOnlineRef.current = isOnline;
   }, [isOnline, enabled, preview]);
 
   const closeOffline = useCallback(() => setOfflineOpen(false), []);
-  const closeOnline = useCallback(() => setOnlineOpen(false), []);
+  const closeOnline = useCallback(() => {
+    if (chatId) _dismissedChatIds.add(chatId);
+    setOnlineOpen(false);
+  }, [chatId]);
+
+  // Sync tamamlanınca: syncDone → true → 2sn sonra kapat
+  useEffect(() => {
+    if (isSyncing) {
+      wasSyncingRef.current = true;
+      setSyncDone(false);
+    } else if (wasSyncingRef.current) {
+      wasSyncingRef.current = false;
+      setSyncDone(true);
+    }
+  }, [isSyncing, onlineOpen]);
 
   const onSyncPress = useCallback(async () => {
     haptics.success();
-    setOnlineOpen(false);
     try {
       await syncNow();
       toast.success(t('network.syncSuccess'));
@@ -91,8 +192,18 @@ export function NetworkConnectivitySheets({ enabled = true, promptOnMount = fals
     }
   }, [haptics, t, syncNow]);
 
+  // Sync sırasında / sonrasında sayaç değerleri
+  const snap = syncSnapshotRef.current;
+  const syncedMessages = Math.min(completedCount, snap.messages);
+  const syncedLikes = Math.max(0, completedCount - snap.messages);
+
+  const showBreakdown = (isSyncing || syncDone)
+    ? (snap.messages > 0 || snap.likes > 0)
+    : (pendingMessages > 0 || pendingLikes > 0);
+
   return (
     <>
+      {/* Offline sheet */}
       <LiquidBottomSheet
         open={offlineOpen}
         onClose={closeOffline}
@@ -114,6 +225,7 @@ export function NetworkConnectivitySheets({ enabled = true, promptOnMount = fals
         </View>
       </LiquidBottomSheet>
 
+      {/* Online / Sync sheet */}
       <LiquidBottomSheet
         open={onlineOpen}
         onClose={closeOnline}
@@ -122,57 +234,93 @@ export function NetworkConnectivitySheets({ enabled = true, promptOnMount = fals
         variant="glass"
       >
         <View style={styles.body}>
-          <View style={[styles.iconRing, { backgroundColor: isSyncing ? `${palette.primary}22` : `${palette.success}22` }]}>
+          {/* İkon ring */}
+          <View style={[
+            styles.iconRing,
+            {
+              backgroundColor: isSyncing
+                ? `${palette.primary}18`
+                : syncDone
+                  ? `${palette.success}18`
+                  : `${palette.success}18`,
+            },
+          ]}>
             {isSyncing
               ? <ActivityThyLoading mode="pulse" size={36} />
               : <Ionicons name="cloud-done-outline" size={36} color={palette.success} />
             }
           </View>
+
+          {/* Başlık */}
           <Text variant="h4" style={styles.title} color={colors.text}>
-            {isSyncing ? t('network.syncingTitle') : t('network.onlineTitle')}
-          </Text>
-          <Text variant="body" color={colors.textSecondary} style={styles.message}>
             {isSyncing
-              ? t('network.syncingMessage', { completed: completedCount, total: totalCount })
-              : pendingCount > 0
-                ? t('network.onlineMessagePending', { count: pendingCount })
-                : t('network.onlineMessage')}
+              ? t('network.syncingTitle')
+              : syncDone
+                ? t('network.syncSuccess')
+                : t('network.onlineTitle')}
           </Text>
 
-          {!isSyncing && pendingCount > 0 && (pendingMessages > 0 || pendingLikes > 0) && (
+          {/* Açıklama */}
+          {syncDone ? (
+            <Text style={styles.syncDoneSubtitle} color={palette.success}>
+              {t('network.syncDoneSubtitle')}
+            </Text>
+          ) : (
+            <Text variant="body" color={colors.textSecondary} style={styles.message}>
+              {isSyncing
+                ? t('network.syncingMessage', { completed: completedCount, total: totalCount })
+                : pendingCount > 0
+                  ? t('network.onlineMessagePending', { count: pendingCount })
+                  : t('network.onlineMessage')}
+            </Text>
+          )}
+
+          {/* Breakdown: mesaj / beğeni sayaçları */}
+          {showBreakdown && (
             <View style={styles.breakdown}>
-              {pendingMessages > 0 && (
-                <View style={styles.breakdownItem}>
-                  <Ionicons name="chatbubble-outline" size={14} color={colors.textSecondary} />
-                  <Text variant="caption" color={colors.textSecondary}>
-                    {t('network.syncPendingMessages', { count: pendingMessages })}
-                  </Text>
-                </View>
+              {(isSyncing || syncDone ? snap.messages : pendingMessages) > 0 && (
+                <SyncBreakdownRow
+                  icon="chatbubble-outline"
+                  label={(isSyncing || syncDone)
+                    ? `${syncedMessages} / ${snap.messages} mesaj`
+                    : t('network.syncPendingMessages', { count: pendingMessages })}
+                />
               )}
-              {pendingLikes > 0 && (
-                <View style={styles.breakdownItem}>
-                  <Ionicons name="thumbs-up-outline" size={14} color={colors.textSecondary} />
-                  <Text variant="caption" color={colors.textSecondary}>
-                    {t('network.syncPendingLikes', { count: pendingLikes })}
-                  </Text>
-                </View>
+              {(isSyncing || syncDone ? snap.likes : pendingLikes) > 0 && (
+                <SyncBreakdownRow
+                  icon="thumbs-up-outline"
+                  label={(isSyncing || syncDone)
+                    ? `${syncedLikes} / ${snap.likes} beğeni`
+                    : t('network.syncPendingLikes', { count: pendingLikes })}
+                />
               )}
             </View>
           )}
 
-          {isSyncing && (
-            <View style={styles.progressBar}>
-              <View style={[styles.progressFill, { width: `${percentage}%`, backgroundColor: palette.primary }]} />
-            </View>
+          {/* Animated progress bar — sync sırasında ve bitti sonrası %100 yeşil */}
+          {(isSyncing || syncDone) && (
+            <AnimatedProgressBar percentage={syncDone ? 100 : percentage} done={syncDone} />
           )}
 
+          {/* Hata sayacı */}
           {failedCount > 0 && !isSyncing && (
-            <Text variant="caption" color={palette.error} style={{ textAlign: 'center' }}>
+            <Text variant="caption" color={palette.error} style={styles.failedText}>
               {t('network.syncFailed', { count: failedCount })}
             </Text>
           )}
 
-          {!isSyncing && (
+          {/* Butonlar */}
+          {(isSyncing || syncDone) ? (
+            /* Sync sırasında disabled, bitti sonrası aktif Tamam */
+            <Button
+              title={t('common.ok')}
+              onPress={closeOnline}
+              fullWidth
+              disabled={isSyncing}
+              icon={<Ionicons name="checkmark-outline" size={20} color={palette.white} />}
+            />
+          ) : (
+            /* Sync bekleniyor */
             <>
               <Button
                 title={t('network.onlineSync')}
@@ -196,6 +344,10 @@ export function NetworkConnectivitySheets({ enabled = true, promptOnMount = fals
   );
 }
 
+// ---------------------------------------------------------------------------
+// Styles
+// ---------------------------------------------------------------------------
+
 const styles = StyleSheet.create({
   body: {
     alignItems: 'center',
@@ -217,7 +369,47 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 22,
     fontSize: fontSize.base,
-    marginBottom: spacing[2],
+    marginBottom: spacing[1],
+  },
+  breakdown: {
+    flexDirection: 'row',
+    gap: spacing[4],
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+  },
+  breakdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[1],
+  },
+  progressTrack: {
+    width: '100%',
+    height: 8,
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginTop: spacing[1],
+  },
+  progressBg: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.07)',
+    borderRadius: 4,
+  },
+  progressFill: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: palette.primary,
+    borderRadius: 4,
+  },
+  failedText: {
+    textAlign: 'center',
+  },
+  syncDoneSubtitle: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: fontSize.lg,
+    textAlign: 'center',
+    marginBottom: spacing[1],
   },
   laterBtn: {
     marginTop: spacing[1],
@@ -227,27 +419,5 @@ const styles = StyleSheet.create({
   laterText: {
     fontFamily: fontFamily.medium,
     fontSize: fontSize.sm,
-  },
-  breakdown: {
-    flexDirection: 'row',
-    gap: spacing[3],
-    justifyContent: 'center',
-    flexWrap: 'wrap',
-  },
-  breakdownItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[1],
-  },
-  progressBar: {
-    width: '100%',
-    height: 6,
-    backgroundColor: 'rgba(0,0,0,0.08)',
-    borderRadius: 3,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    borderRadius: 3,
   },
 });

@@ -37,6 +37,7 @@ type Props = {
   onSpeakToggle?: () => void;
   hideFooter?: boolean;
   hideModelLabel?: boolean;
+  onQueuedPress?: () => void;
 };
 
 // Basit Pressable — SharedValue yok, scale animasyonu yok.
@@ -74,6 +75,7 @@ const MessageBubbleInner: React.FC<Props> = ({
   onSpeakToggle,
   hideFooter = false,
   hideModelLabel = false,
+  onQueuedPress,
 }) => {
   const haptics = useHaptics();
   const { t } = useTranslation();
@@ -273,12 +275,9 @@ const MessageBubbleInner: React.FC<Props> = ({
       {isUser ? (
         <View style={[styles.bubbleRow, styles.bubbleRowUser]}>
           {message.queued && (
-            <Ionicons
-              name="warning"
-              size={16}
-              color={palette.error}
-              style={styles.queuedIcon}
-            />
+            <Pressable onPress={onQueuedPress} hitSlop={8} style={styles.queuedIcon}>
+              <Ionicons name="warning" size={scale(22)} color={palette.error} />
+            </Pressable>
           )}
           {bubbleContent}
           <UserTail color={colors.primary} />
@@ -313,6 +312,7 @@ export const MessageBubble = React.memo(MessageBubbleInner, (prev, next) => {
   if (prev.onRegenerate !== next.onRegenerate) return false;
   if (prev.hideFooter !== next.hideFooter) return false;
   if (prev.hideModelLabel !== next.hideModelLabel) return false;
+  if (prev.onQueuedPress !== next.onQueuedPress) return false;
   if (prev.colors !== next.colors) return false;
   return true;
 });

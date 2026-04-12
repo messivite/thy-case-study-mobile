@@ -74,6 +74,8 @@ export default function HomeScreen() {
 
   const [modelPickerVisible, setModelPickerVisible] = useState(false);
   const [drawerVisible, setDrawerVisible] = useState(false);
+  const [syncTrigger, setSyncTrigger] = useState(0);
+  const handleQueuedPress = useCallback(() => setSyncTrigger((n) => n + 1), []);
   const closeModelPicker = useCallback(() => setModelPickerVisible(false), []);
   const openModelPicker = useCallback(() => setModelPickerVisible(true), []);
 
@@ -195,6 +197,7 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.root}>
+      <StatusBar style="light" />
       <ChatLayout
         header={header}
         input={chatInput}
@@ -224,6 +227,7 @@ export default function HomeScreen() {
           onQuickActionPress={handleQuickActionPress}
           onScrollStateChange={handleScrollStateChange}
           onScrollToLatestRef={scrollToLatestRef}
+          onQueuedPress={handleQueuedPress}
         />
 
       </ChatLayout>
@@ -252,7 +256,13 @@ export default function HomeScreen() {
         />
       )}
 
-      <NetworkConnectivitySheets promptOnMount />
+      {!!chatId && (
+        <NetworkConnectivitySheets
+          promptOnMount
+          chatId={chatId}
+          forceOpen={syncTrigger}
+        />
+      )}
       <ServerUnavailableSheet />
     </View>
   );

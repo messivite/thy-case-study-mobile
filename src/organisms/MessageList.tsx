@@ -44,6 +44,7 @@ type Props = {
   onQuickActionPress?: (action: WelcomeQuickAction) => void;
   onScrollStateChange?: (scrolledUp: boolean, unreadCount: number) => void;
   onScrollToLatestRef?: React.RefObject<(() => void) | null>;
+  onQueuedPress?: () => void;
 };
 
 export const MessageList: React.FC<Props> = ({
@@ -72,6 +73,7 @@ export const MessageList: React.FC<Props> = ({
   onQuickActionPress,
   onScrollStateChange,
   onScrollToLatestRef,
+  onQueuedPress,
 }) => {
   const { colors } = useTheme();
   const listRef = useRef<FlatList<Message>>(null);
@@ -263,6 +265,7 @@ export const MessageList: React.FC<Props> = ({
         isSpeaking={speakingMessageId === item.id}
         hideFooter={isStreamingItem}
         hideModelLabel={isLastMessage}
+        onQueuedPress={item.queued ? onQueuedPress : undefined}
         onSpeakToggle={
           item.role === 'assistant' && item.content.trim().length > 0
             ? () => handleSpeakToggleRef.current(item.id, item.content)
@@ -279,6 +282,7 @@ export const MessageList: React.FC<Props> = ({
     onStreamingComplete,
     onLike,
     onRegenerate,
+    onQueuedPress,
     colors,
     speakingMessageId,
   ]);
