@@ -11,7 +11,7 @@ import {
   CHAT_QUERY_KEYS,
 } from '@/hooks/api/useChats';
 import { useQueryClient } from '@tanstack/react-query';
-import { streamChat, sendMessage as sendMessageApi } from '@/api/chat.api';
+import { streamChat, sendMessage as sendMessageApi, syncChat } from '@/api/chat.api';
 import { Attachment, Message } from '@/types/chat.types';
 import { ChatMessage } from '@/types/chat.api.types';
 import { realmService } from '@/services/realm';
@@ -29,6 +29,7 @@ type SendMessagePayload = {
   provider: string;
   model: string;
   optimisticMsg: Message;
+  sentAt: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -213,7 +214,19 @@ export const useChatSession = () => {
             ).catch(reject);
           });
         } else {
-          await sendMessageApi(cid, { provider, model, messages: [{ role: 'user', content }] });
+          const sentAt = payload.sentAt;
+          const isQueued = Date.now() - new Date(sentAt).getTime() > 5000;
+          if (isQueued) {
+            // Offline'da kuyruğa alınmış → sync API
+            await syncChat(cid, {
+              provider,
+              model,
+              messages: [{ content, sentAt }],
+            });
+          } else {
+            // Direkt gönderim
+            await sendMessageApi(cid, { provider, model, messages: [{ role: 'user', content }] });
+          }
           queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.messages(cid) });
           queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
         }
@@ -456,6 +469,7 @@ export const useChatSession = () => {
         provider,
         model,
         optimisticMsg: optimisticUser,
+        sentAt: new Date().toISOString(),
       });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps

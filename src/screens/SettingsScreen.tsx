@@ -21,10 +21,12 @@ import { useI18n } from '@/hooks/useI18n';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { useNotificationPermission } from '@/hooks/useNotificationPermission';
 import { canDeliverPushNotifications } from '@/lib/notificationPermission';
-import { setTheme, setStreaming } from '@/store/slices/settingsSlice';
+import { setStreaming } from '@/store/slices/settingsSlice';
 import { ModelPickerSheet } from '@/organisms/ModelPickerSheet';
 import { EditProfileSheet } from '@/organisms/EditProfileSheet';
-import { useUploadAvatar, getLocalAvatarUri } from '@/hooks/api/useUploadAvatar';
+import { LanguagePickerSheet } from '@/organisms/LanguagePickerSheet';
+import { ThemePickerSheet } from '@/organisms/ThemePickerSheet';
+import { useUploadAvatar } from '@/hooks/api/useUploadAvatar';
 import { spacing, radius } from '@/constants/spacing';
 import { palette } from '@/constants/colors';
 import { fontFamily } from '@/constants/typography';
@@ -37,7 +39,7 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const { isGuest, logout } = useAuth();
   const { displayName: profileDisplayName, email: profileEmail, avatarUrl, isAnonymous, profileReady } = useWhoIAm();
-  const { t, changeLanguage, currentLanguage } = useI18n();
+  const { t, currentLanguage } = useI18n();
   const dispatch = useAppDispatch();
   const { theme, streamingEnabled } = useAppSelector((s) => s.settings);
   const {
@@ -108,11 +110,7 @@ export default function SettingsScreen() {
         subtitle: currentLanguage === 'tr' ? t('settings.languageTR') : t('settings.languageEN'),
         icon: 'language-outline',
         iconColor: palette.geminiBlue,
-        onPress: () => {
-          const next = currentLanguage === 'tr' ? 'en' : 'tr';
-          changeLanguage(next);
-          toast.info(t('toast.settingsSaved'));
-        },
+        onPress: () => setLanguagePickerOpen(true),
       },
       {
         id: 'theme',
@@ -120,10 +118,7 @@ export default function SettingsScreen() {
         subtitle: themeSubtitle,
         icon: isDark ? 'moon-outline' : 'sunny-outline',
         iconColor: palette.claudeOrange,
-        onPress: () => {
-          const next = theme === 'system' ? 'light' : theme === 'light' ? 'dark' : 'system';
-          dispatch(setTheme(next));
-        },
+        onPress: () => setThemePickerOpen(true),
       },
     ];
 
@@ -149,10 +144,8 @@ export default function SettingsScreen() {
     [
       t,
       currentLanguage,
-      changeLanguage,
       themeSubtitle,
       isDark,
-      theme,
       dispatch,
       notificationPermissionLoading,
       notificationGranted,
@@ -162,6 +155,8 @@ export default function SettingsScreen() {
 
   const [modelPickerVisible, setModelPickerVisible] = useState(false);
   const [editProfileOpen, setEditProfileOpen] = useState(false);
+  const [languagePickerOpen, setLanguagePickerOpen] = useState(false);
+  const [themePickerOpen, setThemePickerOpen] = useState(false);
   const selectedAIModel = useAppSelector((s) => s.chat.selectedAIModel);
 
   const { optimisticUri, isUploading, pickAndUpload } = useUploadAvatar();
@@ -171,8 +166,7 @@ export default function SettingsScreen() {
       onError: () => toast.error(t('settings.avatarUpdateFailed')),
     });
   }, [pickAndUpload, t]);
-  const localAvatarUri = getLocalAvatarUri();
-  const resolvedAvatarUri = optimisticUri ?? localAvatarUri ?? avatarUrl;
+  const resolvedAvatarUri = optimisticUri ?? avatarUrl;
 
   const [shouldCrash, setShouldCrash] = useState(false);
   if (shouldCrash) {
@@ -197,10 +191,7 @@ export default function SettingsScreen() {
   const displayName = guestLike || !profileDisplayName ? t('settings.guest') : profileDisplayName;
   const displayEmail = guestLike ? t('settings.loginToSync') : (profileEmail || '');
   const appVersion = Constants.expoConfig?.version ?? '1.0.0';
-  const buildNumber =
-    Platform.OS === 'ios'
-      ? (Constants.expoConfig?.ios?.buildNumber ?? '—')
-      : String(Constants.expoConfig?.android?.versionCode ?? '—');
+
 
   // TODO: API entegresinde gerçek quota verisiyle değiştirilecek.
   const usageMock = {
@@ -399,13 +390,6 @@ export default function SettingsScreen() {
                 iconColor: palette.navyMid,
               },
               {
-                id: 'build',
-                label: t('settings.buildNumber'),
-                subtitle: buildNumber,
-                icon: 'construct-outline',
-                iconColor: palette.gray400,
-              },
-              {
                 id: 'support',
                 label: t('settings.support'),
                 icon: 'help-circle-outline',
@@ -534,6 +518,16 @@ export default function SettingsScreen() {
       <EditProfileSheet
         open={editProfileOpen}
         onClose={() => setEditProfileOpen(false)}
+      />
+
+      <LanguagePickerSheet
+        open={languagePickerOpen}
+        onClose={() => setLanguagePickerOpen(false)}
+      />
+
+      <ThemePickerSheet
+        open={themePickerOpen}
+        onClose={() => setThemePickerOpen(false)}
       />
     </>
   );

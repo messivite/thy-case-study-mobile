@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -17,7 +17,6 @@ import {
   Inter_700Bold,
 } from '@expo-google-fonts/inter';
 import { OfflineProvider, getRealmAdapter } from '@mustafaaksoy41/react-native-offline-queue';
-import type Realm from 'realm';
 
 import { store } from '@/store';
 import { queryClient } from '@/services/queryClient';
@@ -27,7 +26,7 @@ import { SupabaseAuthProvider } from '@/hooks/useSupabaseAuth';
 import { AppErrorBoundary } from '@/components/AppErrorBoundary';
 import { initErrorReporting } from '@/services/errorReporting';
 import { ensureWebViewportRootStyle } from '@/lib/webViewport';
-import { realmService, openRealm } from '@/services/realm';
+import { realmService } from '@/services/realm';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 
 // Sentry native köprüsü her build'de bir kez init (DSN yok / dev'de enabled:false)
@@ -45,12 +44,6 @@ function RootLayout() {
     Inter_700Bold,
   });
 
-  // Realm instance'ı async alınıyor — OfflineProvider'a geçmek için bekliyoruz.
-  // realmService.prefetch() zaten modül yüklenince başlattı, bu sadece hazır olunca state'e yazar.
-  const [realmInstance, setRealmInstance] = useState<Realm | null>(null);
-  useEffect(() => {
-    openRealm().then(setRealmInstance).catch(() => {});
-  }, []);
 
   return (
     <GestureHandlerRootView
@@ -67,8 +60,8 @@ function RootLayout() {
             <QueryClientProvider client={queryClient}>
               <I18nextProvider i18n={i18n}>
                 <OfflineProvider config={{
-                  storageType: realmInstance ? 'realm' : 'memory',
-                  storage: realmInstance ? getRealmAdapter({ realmInstance }) : undefined,
+                  storageType: 'realm',
+                  storage: getRealmAdapter(),
                   syncMode: 'manual',
                 }}>
                   <AppErrorBoundary>

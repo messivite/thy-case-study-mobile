@@ -14,19 +14,19 @@ import { useAuth } from '@/hooks/useAuth';
 import { useWhoIAm } from '@/hooks/useWhoIAm';
 import { useI18n } from '@/hooks/useI18n';
 import { palette } from '@/constants/colors';
+import { moderateScale } from '@/lib/responsive';
 import { ChatHistoryDrawer } from '@/organisms/ChatHistoryDrawer';
 import { ModelPickerSheet } from '@/organisms/ModelPickerSheet';
 import { WelcomeQuickAction } from '@/organisms/HomeWelcomePanel';
 import { ScrollToBottomButton } from '@/molecules/ScrollToBottomButton';
 import { NetworkConnectivitySheets } from '@/organisms/NetworkConnectivitySheets';
-import { getLocalAvatarUri } from '@/hooks/api/useUploadAvatar';
 
 export default function HomeScreen() {
   const { user, isGuest } = useAuth();
   const { displayName: profileDisplayName, profileReady, avatarUrl: profileAvatarUrl } = useWhoIAm();
   // Local disk'te kayıtlı avatar: remote'tan önce göster (hızlı + upload sonrası anında güncellenir)
-  const [localAvatarUri] = React.useState(() => getLocalAvatarUri());
-  const resolvedAvatarUri = localAvatarUri ?? profileAvatarUrl ?? user?.avatarUrl;
+  // profileAvatarUrl değişince (upload sonrası) MMKV'den tekrar oku
+  const resolvedAvatarUri = profileAvatarUrl ?? user?.avatarUrl;
   const { t } = useI18n();
   const {
     messages,
@@ -174,9 +174,8 @@ export default function HomeScreen() {
         >
           <Avatar
             uri={resolvedAvatarUri}
-            name={isGuest ? 'G' : (user?.name ?? 'U')}
-            width={30}
-            height={30}
+            width={moderateScale(38)}
+            height={moderateScale(38)}
           />
         </TouchableOpacity>
       }
@@ -241,7 +240,7 @@ export default function HomeScreen() {
         onSelectChat={handleSelectChat}
       />
 
-      <NetworkConnectivitySheets />
+      <NetworkConnectivitySheets promptOnMount />
     </View>
   );
 }

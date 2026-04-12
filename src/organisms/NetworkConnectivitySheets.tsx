@@ -5,6 +5,7 @@ import {
   useNetworkStatus,
   useOfflineQueue,
   useOfflineSyncInterceptor,
+  useSyncProgress,
 } from '@mustafaaksoy41/react-native-offline-queue';
 import { LiquidBottomSheet } from '@/molecules/LiquidBottomSheet';
 import { Text } from '@/atoms/Text';
@@ -18,12 +19,15 @@ import { palette } from '@/constants/colors';
 import { fontFamily, fontSize } from '@/constants/typography';
 import { useHaptics } from '@/hooks/useHaptics';
 import { toast } from '@/lib/toast';
+import { ActivityThyLoading } from '@/atoms/ActivityThyLoading';
 
 type NetworkConnectivitySheetsProps = {
   enabled?: boolean;
+  /** Home ekranına gelince kuyrukta bekleyen mesaj varsa sync sheet'i aç */
+  promptOnMount?: boolean;
 };
 
-export function NetworkConnectivitySheets({ enabled = true }: NetworkConnectivitySheetsProps) {
+export function NetworkConnectivitySheets({ enabled = true, promptOnMount = false }: NetworkConnectivitySheetsProps) {
   const { t } = useI18n();
   const { colors } = useTheme();
   const haptics = useHaptics();
@@ -31,11 +35,22 @@ export function NetworkConnectivitySheets({ enabled = true }: NetworkConnectivit
 
   // Paketin state'leri
   const { isOnline } = useNetworkStatus();
-  const { pendingCount, syncNow } = useOfflineQueue();
+  const { pendingCount, isSyncing, syncNow } = useOfflineQueue();
+  const { percentage, completedCount, totalCount, failedCount } = useSyncProgress();
 
   // Sheet görünürlük state'leri — paketin isOnline'ından türetilir
   const [offlineOpen, setOfflineOpen] = useState(() => enabled && preview === 'offline');
   const [onlineOpen, setOnlineOpen] = useState(() => enabled && preview === 'online');
+
+  // Home ekranına ilk gelişte kuyrukta bekleyen mesaj varsa sync sheet'i göster
+  const hasPromptedOnMount = useRef(false);
+  useEffect(() => {
+    if (!promptOnMount || !enabled || hasPromptedOnMount.current) return;
+    if (isOnline && pendingCount > 0) {
+      hasPromptedOnMount.current = true;
+      setOnlineOpen(true);
+    }
+  }, [promptOnMount, enabled, isOnline, pendingCount]);
   // Online restore → online sheet
   useOfflineSyncInterceptor({
     onPromptNeeded: useCallback(() => {
@@ -104,31 +119,53 @@ export function NetworkConnectivitySheets({ enabled = true }: NetworkConnectivit
         variant="glass"
       >
         <View style={styles.body}>
-          <View style={[styles.iconRing, { backgroundColor: `${palette.success}22` }]}>
-            <Ionicons name="cloud-done-outline" size={36} color={palette.success} />
+          <View style={[styles.iconRing, { backgroundColor: isSyncing ? `${palette.primary}22` : `${palette.success}22` }]}>
+            {isSyncing
+              ? <ActivityThyLoading mode="pulse" size={36} />
+              : <Ionicons name="cloud-done-outline" size={36} color={palette.success} />
+            }
           </View>
           <Text variant="h4" style={styles.title} color={colors.text}>
-            {t('network.onlineTitle')}
+            {isSyncing ? t('network.syncingTitle') : t('network.onlineTitle')}
           </Text>
           <Text variant="body" color={colors.textSecondary} style={styles.message}>
-            {pendingCount > 0
-              ? t('network.onlineMessagePending', { count: pendingCount })
-              : t('network.onlineMessage')}
+            {isSyncing
+              ? t('network.syncingMessage', { completed: completedCount, total: totalCount })
+              : pendingCount > 0
+                ? t('network.onlineMessagePending', { count: pendingCount })
+                : t('network.onlineMessage')}
           </Text>
-          <Button
-            title={t('network.onlineSync')}
-            onPress={onSyncPress}
-            fullWidth
-            icon={<Ionicons name="sync-outline" size={20} color={palette.white} />}
-          />
-          <TextButton
-            title={t('network.onlineLater')}
-            onPress={closeOnline}
-            color={colors.textSecondary}
-            hapticType="selection"
-            style={styles.laterBtn}
-            textStyle={styles.laterText}
-          />
+
+          {isSyncing && (
+            <View style={styles.progressBar}>
+              <View style={[styles.progressFill, { width: `${percentage}%`, backgroundColor: palette.primary }]} />
+            </View>
+          )}
+
+          {failedCount > 0 && !isSyncing && (
+            <Text variant="caption" color={palette.error} style={{ textAlign: 'center' }}>
+              {t('network.syncFailed', { count: failedCount })}
+            </Text>
+          )}
+
+          {!isSyncing && (
+            <>
+              <Button
+                title={t('network.onlineSync')}
+                onPress={onSyncPress}
+                fullWidth
+                icon={<Ionicons name="sync-outline" size={20} color={palette.white} />}
+              />
+              <TextButton
+                title={t('network.onlineLater')}
+                onPress={closeOnline}
+                color={colors.textSecondary}
+                hapticType="selection"
+                style={styles.laterBtn}
+                textStyle={styles.laterText}
+              />
+            </>
+          )}
         </View>
       </LiquidBottomSheet>
     </>
@@ -161,9 +198,21 @@ const styles = StyleSheet.create({
   laterBtn: {
     marginTop: spacing[1],
     paddingVertical: spacing[2],
+    alignSelf: 'center',
   },
   laterText: {
     fontFamily: fontFamily.medium,
     fontSize: fontSize.sm,
+  },
+  progressBar: {
+    width: '100%',
+    height: 6,
+    backgroundColor: 'rgba(0,0,0,0.08)',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 3,
   },
 });

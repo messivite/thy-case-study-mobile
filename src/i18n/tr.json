@@ -100,7 +100,10 @@
     "onlineSync": "Senkronize et",
     "onlineLater": "Sonra",
     "onlineMessagePending": "Çevrimdışıyken {{count}} mesaj kuyruğa alındı. Şimdi göndermek ister misiniz?",
-    "syncSuccess": "Mesajlar başarıyla senkronize edildi"
+    "syncSuccess": "Senkronize edildi, sohbet güncellendi",
+    "syncingTitle": "Senkronize ediliyor...",
+    "syncingMessage": "{{completed}} / {{total}} mesaj gönderildi",
+    "syncFailed": "{{count}} mesaj gönderilemedi"
   },
   "assistant": {
     "title": "Asistan",
