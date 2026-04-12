@@ -1,4 +1,4 @@
-# Kalite kapısı → GitHub Release + debug APK.
+# Kalite kapısı → GitHub Release + signed release APK.
 #
 # Tetikleme:
 # 1) Tag push: git tag v1.0.1 && git push origin v1.0.1
@@ -47,7 +47,7 @@ jobs:
           files: coverage/lcov.info
           fail_ci_if_error: false
 
-  android-debug-apk:
+  android-release-apk:
     needs: quality-gate
     runs-on: ubuntu-latest
     env:
@@ -90,18 +90,33 @@ jobs:
         env:
           CI: true
 
+      - name: Decode release keystore
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode \
+            > android/app/release.keystore
+
       - name: Generate native Android project
         run: npx expo prebuild --platform android --no-install
 
-      - name: Assemble debug APK
+      - name: Assemble release APK
         working-directory: android
-        run: chmod +x gradlew && ./gradlew assembleDebug --no-daemon
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon \
+            -Pandroid.injected.signing.store.file=$(pwd)/app/release.keystore \
+            -Pandroid.injected.signing.store.password=$KEYSTORE_PASSWORD \
+            -Pandroid.injected.signing.key.alias=$KEY_ALIAS \
+            -Pandroid.injected.signing.key.password=$KEY_PASSWORD
 
       - name: Stage APK for release
         run: |
           mkdir -p release-assets
-          cp android/app/build/outputs/apk/debug/app-debug.apk \
-            "release-assets/thy-assistant-${RELEASE_TAG}-debug.apk"
+          cp android/app/build/outputs/apk/release/app-release.apk \
+            "release-assets/thy-assistant-${RELEASE_TAG}.apk"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
