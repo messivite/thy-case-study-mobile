@@ -9,6 +9,7 @@ import Animated, {
   FadeIn,
 } from 'react-native-reanimated';
 import Svg, { Path } from 'react-native-svg';
+import Markdown from 'react-native-markdown-display';
 import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
 import { Message } from '@/types/chat.types';
@@ -17,7 +18,9 @@ import { AttachmentPreview } from '@/molecules/AttachmentPreview';
 import { ThemeColors } from '@/constants/colors';
 import { useHaptics } from '@/hooks/useHaptics';
 import { palette } from '@/constants/colors';
+import { fontFamily } from '@/constants/typography';
 import { radius, spacing } from '@/constants/spacing';
+import { scale } from '@/lib/responsive';
 import { toast } from '@/lib/toast';
 
 type Props = {
@@ -83,6 +86,47 @@ const MessageBubbleInner: React.FC<Props> = ({
     styles.bubble, styles.aiBubble, { backgroundColor: colors.surface, borderColor: colors.border }, styles.aiBubbleFull,
   ], [colors.surface, colors.border]);
 
+  const markdownStyles = useMemo(() => ({
+    body: { color: colors.text, fontFamily: fontFamily.regular, fontSize: 15, lineHeight: 22 },
+    strong: { fontFamily: fontFamily.semiBold, color: colors.text },
+    em: { fontFamily: fontFamily.regular, fontStyle: 'italic' as const, color: colors.text },
+    heading1: { fontFamily: fontFamily.bold, fontSize: 20, color: colors.text, marginVertical: 6 },
+    heading2: { fontFamily: fontFamily.bold, fontSize: 18, color: colors.text, marginVertical: 4 },
+    heading3: { fontFamily: fontFamily.semiBold, fontSize: 16, color: colors.text, marginVertical: 4 },
+    bullet_list: { marginVertical: 4 },
+    ordered_list: { marginVertical: 4 },
+    list_item: { marginVertical: 2 },
+    code_inline: {
+      fontFamily: 'monospace',
+      backgroundColor: colors.surfaceAlt,
+      color: colors.primary,
+      borderRadius: 4,
+      paddingHorizontal: 4,
+    },
+    fence: {
+      backgroundColor: colors.surfaceAlt,
+      borderRadius: radius.md,
+      padding: spacing[3],
+      marginVertical: spacing[2],
+    },
+    code_block: {
+      fontFamily: 'monospace',
+      backgroundColor: colors.surfaceAlt,
+      color: colors.text,
+      fontSize: 13,
+      lineHeight: 20,
+    },
+    blockquote: {
+      borderLeftWidth: 3,
+      borderLeftColor: colors.primary,
+      paddingLeft: spacing[3],
+      marginVertical: spacing[1],
+      opacity: 0.85,
+    },
+    hr: { backgroundColor: colors.border, height: 1, marginVertical: spacing[3] },
+    link: { color: colors.primary },
+  }), [colors]);
+
   const imageAttachments = message.attachments?.filter((a) => a.type === 'image') ?? [];
   const fileAttachments = message.attachments?.filter((a) => a.type !== 'image') ?? [];
   const hasAttachments = (message.attachments?.length ?? 0) > 0;
@@ -136,13 +180,19 @@ const MessageBubbleInner: React.FC<Props> = ({
       )}
 
       {message.content.length > 0 && (
-        <Text
-          variant="body"
-          color={isUser ? palette.white : colors.text}
-          style={[styles.content, hasAttachments && styles.contentWithAttach]}
-        >
-          {message.content}
-        </Text>
+        isUser ? (
+          <Text
+            variant="body"
+            color={palette.white}
+            style={[styles.content, hasAttachments && styles.contentWithAttach]}
+          >
+            {message.content}
+          </Text>
+        ) : (
+          <Markdown style={markdownStyles}>
+            {message.content}
+          </Markdown>
+        )
       )}
 
       {/* Footer: hideFooter ise layout'tan tamamen çıkar — opacity:0 layout kaymasına neden olur */}
@@ -251,7 +301,7 @@ export const MessageBubble = React.memo(MessageBubbleInner, (prev, next) => {
 
 const styles = StyleSheet.create({
   row: {
-    marginVertical: spacing[1],
+    marginVertical: scale(10),
     flexDirection: 'row',
   },
   rowLeft: {
