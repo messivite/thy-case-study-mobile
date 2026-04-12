@@ -109,8 +109,9 @@ api.interceptors.response.use(
   async (error: AxiosError) => {
     const originalConfig = error.config as RetryableConfig | undefined;
 
-    // 401 değilse veya zaten retry edilmişse → raporla + reddet
-    if (error.response?.status !== 401 || !originalConfig || originalConfig._retry) {
+    const status = error.response?.status;
+    // 401 veya 403 → token refresh dene (403: backend ErrUnauthorized, token eksik/geçersiz olabilir)
+    if ((status !== 401 && status !== 403) || !originalConfig || originalConfig._retry) {
       captureApiError(error);
       return Promise.reject(error);
     }

@@ -18,7 +18,7 @@ import { ChatMessage, PaginatedMessagesResponse } from '@/types/chat.api.types';
 import { realmService } from '@/services/realm';
 import { toast } from '@/lib/toast';
 import { useOfflineMutation, useNetworkStatus, useOfflineQueue } from '@mustafaaksoy41/react-native-offline-queue';
-import { OFFLINE_ACTIONS } from '@/lib/offlineQueue';
+import { OFFLINE_ACTIONS, withNoRetryOn4xx } from '@/lib/offlineQueue';
 
 // ---------------------------------------------------------------------------
 // Offline payload type
@@ -143,7 +143,7 @@ export const useChatSession = () => {
   const { mutateOffline } = useOfflineMutation<SendMessagePayload>(
     OFFLINE_ACTIONS.SEND_MESSAGE,
     {
-      handler: async (payload) => {
+      handler: (payload) => withNoRetryOn4xx(async () => {
         const { content, chatId: cid, provider, model } = payload;
 
         // Sync'ten geliyorsa (kuyruktaki mesaj işlenirken) optimistic bubble'ı restore et
@@ -262,7 +262,7 @@ export const useChatSession = () => {
           queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.messages(cid) });
           queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
         }
-      },
+      }),
       onOptimisticSuccess: (payload) => {
         if (!isOnlineRef.current) {
           // Sadece offline'da: optimistic bubble + toast
@@ -402,6 +402,8 @@ export const useChatSession = () => {
       }
     } else {
       await mutateOfflineRef.current(payload);
+      // mutateOffline 4xx alınca kuyruğa atar — kuyruğa atılanı hemen temizle
+      // (withNoRetryOn4xx flushQueue sırasında temizler ama bu path'te zaten temizlenmeli)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

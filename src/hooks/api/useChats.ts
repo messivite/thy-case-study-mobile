@@ -41,7 +41,7 @@ import {
 } from '@/types/chat.api.types';
 import { realmService } from '@/services/realm';
 import { useOfflineMutation } from '@mustafaaksoy41/react-native-offline-queue';
-import { OFFLINE_ACTIONS } from '@/lib/offlineQueue';
+import { OFFLINE_ACTIONS, withNoRetryOn4xx } from '@/lib/offlineQueue';
 
 export const CHAT_QUERY_KEYS = {
   chats: ['chats'] as const,
@@ -346,9 +346,9 @@ export const useLikeMessageMutation = (chatId: string) => {
   return useOfflineMutation<LikeMessagePayload>(
     OFFLINE_ACTIONS.LIKE_MESSAGE,
     {
-      handler: async (payload) => {
+      handler: (payload) => withNoRetryOn4xx(async () => {
         await likeMessage(payload.chatId, payload.messageId, { action: payload.action });
-      },
+      }),
       onOptimisticSuccess: applyOptimistic,
       onError: (_err: Error, _payload: LikeMessagePayload) => {
         void queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.messages(chatId) });
