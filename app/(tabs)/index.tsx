@@ -22,6 +22,7 @@ import { WelcomeQuickAction } from '@/organisms/HomeWelcomePanel';
 import { ScrollToBottomButton } from '@/molecules/ScrollToBottomButton';
 import { NetworkConnectivitySheets } from '@/organisms/NetworkConnectivitySheets';
 import { ServerUnavailableSheet } from '@/organisms/ServerUnavailableSheet';
+import { toast } from '@/lib/toast';
 
 export default function HomeScreen() {
   const { user, isGuest } = useAuth();
@@ -74,8 +75,8 @@ export default function HomeScreen() {
 
   const [modelPickerVisible, setModelPickerVisible] = useState(false);
   const [drawerVisible, setDrawerVisible] = useState(false);
-  const [syncTrigger, setSyncTrigger] = useState(0);
-  const handleQueuedPress = useCallback(() => setSyncTrigger((n) => n + 1), []);
+  const syncSheetOpenRef = useRef<(() => void) | null>(null);
+  const handleQueuedPress = useCallback(() => syncSheetOpenRef.current?.(), []);
   const closeModelPicker = useCallback(() => setModelPickerVisible(false), []);
   const openModelPicker = useCallback(() => setModelPickerVisible(true), []);
 
@@ -258,8 +259,7 @@ export default function HomeScreen() {
 
       <NetworkConnectivitySheets
         promptOnMount
-        chatId={chatId}
-        forceOpen={syncTrigger}
+        onOpenRef={syncSheetOpenRef}
       />
       <ServerUnavailableSheet />
     </View>

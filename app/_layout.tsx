@@ -62,7 +62,6 @@ function RootLayout() {
               <I18nextProvider i18n={i18n}>
                 {Platform.OS !== 'web' ? (
                   <OfflineProvider config={{
-                    storageType: 'realm',
                     storage: getRealmAdapter(),
                     syncMode: 'manual',
                   }}>

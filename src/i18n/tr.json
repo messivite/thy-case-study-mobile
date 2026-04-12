@@ -97,7 +97,8 @@
     "syncPendingMessages": "{{count}} mesaj",
     "syncPendingLikes": "{{count}} beğeni",
     "syncSuccess": "Senkronize edildi",
-    "syncDoneSubtitle": "Sohbet güncellendi",
+    "syncDoneSubtitle": "Tüm mesajlar gönderildi",
+    "syncPartialTitle": "Kısmen tamamlandı",
     "syncingTitle": "Senkronize ediliyor...",
     "syncingMessage": "{{completed}} / {{total}} işlem tamamlandı",
     "syncFailed": "{{count}} işlem gönderilemedi"

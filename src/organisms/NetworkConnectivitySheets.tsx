@@ -11,7 +11,9 @@ import {
   useNetworkStatus,
   useOfflineQueue,
   useSyncProgress,
+  OfflineManager,
 } from '@mustafaaksoy41/react-native-offline-queue';
+import { useQueryClient } from '@tanstack/react-query';
 import { LiquidBottomSheet } from '@/molecules/LiquidBottomSheet';
 import { Text } from '@/atoms/Text';
 import { Button } from '@/atoms/Button';
@@ -25,6 +27,7 @@ import { fontFamily, fontSize } from '@/constants/typography';
 import { useHaptics } from '@/hooks/useHaptics';
 import { toast } from '@/lib/toast';
 import { ActivityThyLoading } from '@/atoms/ActivityThyLoading';
+import { CHAT_QUERY_KEYS } from '@/hooks/api/useChats';
 
 // ---------------------------------------------------------------------------
 // AnimatedProgressBar — UI thread animasyonu, JS re-render yok
@@ -85,24 +88,20 @@ const SyncBreakdownRow = memo(({
 type NetworkConnectivitySheetsProps = {
   enabled?: boolean;
   promptOnMount?: boolean;
-  forceOpen?: number;
-  chatId?: string | null;
+  onOpenRef?: React.RefObject<(() => void) | null>;
 };
 
-// Module scope — kapatılan chat ID'lerini tut, aynı chat için tekrar açılmasın
-const _dismissedChatIds = new Set<string>();
-
-export function NetworkConnectivitySheets({ enabled = true, promptOnMount = false, forceOpen, chatId }: NetworkConnectivitySheetsProps) {
+export function NetworkConnectivitySheets({ enabled = true, promptOnMount = false, onOpenRef }: NetworkConnectivitySheetsProps) {
   const { t } = useI18n();
   const { colors } = useTheme();
   const haptics = useHaptics();
+  const queryClient = useQueryClient();
   const preview = devConfig.networkSheetPreview;
 
   const { isOnline } = useNetworkStatus();
   const { pendingCount, isSyncing, syncNow } = useOfflineQueue();
   const { percentage, completedCount, totalCount, failedCount, items } = useSyncProgress();
 
-  // items filtresi — her render'da yeniden hesaplanmasın
   const pendingMessages = items.filter((i) => i.action.actionName === 'SEND_MESSAGE').length;
   const pendingLikes = items.filter((i) => i.action.actionName === 'LIKE_MESSAGE').length;
 
@@ -110,72 +109,72 @@ export function NetworkConnectivitySheets({ enabled = true, promptOnMount = fals
   const [onlineOpen, setOnlineOpen] = useState(() => enabled && preview === 'online');
   const [syncDone, setSyncDone] = useState(false);
 
-  // Module-level flag kullan — useRef remount'ta sıfırlanır
-  // const hasPromptedOnMount = useRef(false);
-  const prevOnlineRef = useRef<boolean | null>(null);
   const wasSyncingRef = useRef(false);
   const syncSnapshotRef = useRef({ messages: 0, likes: 0 });
   const isOnlineRef = useRef(isOnline);
-  const pendingCountRef = useRef(pendingCount);
   useEffect(() => { isOnlineRef.current = isOnline; }, [isOnline]);
-  useEffect(() => { pendingCountRef.current = pendingCount; }, [pendingCount]);
 
-  // Sync başlarken snapshot al — isSyncing true'ya geçince items henüz dolu
+  // Sync başlarken snapshot al
   useEffect(() => {
     if (isSyncing && !wasSyncingRef.current) {
       syncSnapshotRef.current = { messages: pendingMessages, likes: pendingLikes };
     }
   }, [isSyncing, pendingMessages, pendingLikes]);
 
-  useEffect(() => {
-    if (!promptOnMount || !enabled) return;
-    if (!chatId || _dismissedChatIds.has(chatId)) return;
-    if (isOnline && pendingCount > 0) {
-      setOnlineOpen(true);
-    }
-  }, [promptOnMount, enabled, chatId, isOnline, pendingCount]);
-
-  useEffect(() => {
-    if (forceOpen && forceOpen > 0 && enabled) {
-      // Kullanıcı bilinçli bastı — dismiss flag'i temizle, sheet'i aç
-      if (chatId) _dismissedChatIds.delete(chatId);
-      // onlineOpen zaten true olabilir — false→true cycle ile LiquidBottomSheet effect'ini zorla tetikle
-      setOnlineOpen(false);
-      requestAnimationFrame(() => setOnlineOpen(true));
-    }
-  }, [forceOpen, enabled, chatId]);
-
-  // Offline→online geçişini ve offline detection'ı manuel izle.
-  // useOfflineSyncInterceptor kullanmıyoruz — paketin local hasPrompted state'i
-  // component remount'ta sıfırlanıyor ve sheet tekrar açılıyor.
+  // Offline sheet: isOnline false olunca aç
   useEffect(() => {
     if (!enabled || preview != null) return;
     if (isOnline == null) return;
-
-    const prev = prevOnlineRef.current;
-
     if (!isOnline) {
-      // Online → offline
       setOfflineOpen(true);
       setOnlineOpen(false);
-    } else if (prev === false && isOnline) {
-      // Offline → online geçişi: pending varsa ve dismiss edilmediyse sheet aç
-      if (pendingCountRef.current > 0) {
-        if (!chatId || !_dismissedChatIds.has(chatId)) {
+    }
+  }, [isOnline, enabled, preview]);
+
+  // Online restore: OfflineManager'ın onOnlineRestore callback'ini kaydet
+  // Paket online'a dönünce bunu çağırır — pending varsa sheet aç
+  useEffect(() => {
+    if (!enabled) return;
+    OfflineManager.configure({
+      onOnlineRestore: ({ pendingCount: count }) => {
+        if (count > 0) {
           setOfflineOpen(false);
           setOnlineOpen(true);
         }
-      }
-    }
+      },
+    });
+  }, [enabled]);
 
-    prevOnlineRef.current = isOnline;
-  }, [isOnline, enabled, preview, chatId]);
+  // promptOnMount: home'a girilince pending var mı — paket queue'dan oku
+  useEffect(() => {
+    if (!promptOnMount || !enabled) return;
+    const queue = OfflineManager.getQueue();
+    if (queue.length > 0 && OfflineManager.isOnline) {
+      setOnlineOpen(true);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // onOpenRef: dışarıdan (MessageBubble warning badge) sheet'i açmak için
+  useEffect(() => {
+    if (!onOpenRef) return;
+    onOpenRef.current = () => {
+      if (!isOnlineRef.current) {
+        setOfflineOpen(true); // offline iken → bağlantı yok sheet'i aç
+        return;
+      }
+      setOnlineOpen(false);
+      requestAnimationFrame(() => setOnlineOpen(true));
+    };
+    return () => { if (onOpenRef) onOpenRef.current = null; };
+  }, [onOpenRef]);
 
   const closeOffline = useCallback(() => setOfflineOpen(false), []);
   const closeOnline = useCallback(() => {
-    if (chatId) _dismissedChatIds.add(chatId);
     setOnlineOpen(false);
-  }, [chatId]);
+    setSyncDone(false);
+    wasSyncingRef.current = false;
+  }, []);
 
   // Sync tamamlanınca: syncDone → true → 2sn sonra kapat
   useEffect(() => {
@@ -192,11 +191,12 @@ export function NetworkConnectivitySheets({ enabled = true, promptOnMount = fals
     haptics.success();
     try {
       await syncNow();
-      toast.success(t('network.syncSuccess'));
+      void queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
+      // Toast gösterme — sheet içinde syncDone UI'ı gösterecek
     } catch {
       toast.error(t('toast.unknownError'));
     }
-  }, [haptics, t, syncNow]);
+  }, [haptics, t, syncNow, queryClient]);
 
   // Sync sırasında / sonrasında sayaç değerleri
   const snap = syncSnapshotRef.current;
@@ -253,7 +253,9 @@ export function NetworkConnectivitySheets({ enabled = true, promptOnMount = fals
           ]}>
             {isSyncing
               ? <ActivityThyLoading mode="pulse" size={36} />
-              : <Ionicons name="cloud-done-outline" size={36} color={palette.success} />
+              : syncDone && failedCount > 0
+                ? <Ionicons name="warning-outline" size={36} color={palette.warning} />
+                : <Ionicons name="cloud-done-outline" size={36} color={palette.success} />
             }
           </View>
 
@@ -262,14 +264,18 @@ export function NetworkConnectivitySheets({ enabled = true, promptOnMount = fals
             {isSyncing
               ? t('network.syncingTitle')
               : syncDone
-                ? t('network.syncSuccess')
+                ? failedCount > 0
+                  ? t('network.syncPartialTitle')
+                  : t('network.syncSuccess')
                 : t('network.onlineTitle')}
           </Text>
 
           {/* Açıklama */}
           {syncDone ? (
-            <Text style={styles.syncDoneSubtitle} color={palette.success}>
-              {t('network.syncDoneSubtitle')}
+            <Text style={styles.syncDoneSubtitle} color={failedCount > 0 ? palette.warning : palette.success}>
+              {failedCount > 0
+                ? t('network.syncFailed', { count: failedCount })
+                : t('network.syncDoneSubtitle')}
             </Text>
           ) : (
             <Text variant="body" color={colors.textSecondary} style={styles.message}>
@@ -303,16 +309,9 @@ export function NetworkConnectivitySheets({ enabled = true, promptOnMount = fals
             </View>
           )}
 
-          {/* Animated progress bar — sync sırasında ve bitti sonrası %100 yeşil */}
+          {/* Animated progress bar — sync sırasında ve bitti sonrası */}
           {(isSyncing || syncDone) && (
-            <AnimatedProgressBar percentage={syncDone ? 100 : percentage} done={syncDone} />
-          )}
-
-          {/* Hata sayacı */}
-          {failedCount > 0 && !isSyncing && (
-            <Text variant="caption" color={palette.error} style={styles.failedText}>
-              {t('network.syncFailed', { count: failedCount })}
-            </Text>
+            <AnimatedProgressBar percentage={syncDone ? 100 : percentage} done={syncDone && failedCount === 0} />
           )}
 
           {/* Butonlar */}
