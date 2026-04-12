@@ -19,3 +19,7 @@ export function stripTextForSpeech(raw: string): string {
 export function speechLocaleForAppLang(lang: string): string {
   return lang.startsWith('tr') ? 'tr-TR' : 'en-US';
 }
+
+export function detectSpeechLocale(text: string): string {
+  return /[çğıöşüÇĞİÖŞÜ]/.test(text) ? 'tr-TR' : 'en-US';
+}

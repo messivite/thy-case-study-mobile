@@ -17,12 +17,6 @@
     "version": "Versiyon"
   },
   "onboarding": {
-    "slide1Title": "AI Destekli Asistan",
-    "slide1Desc": "Sorularınızı anında yanıtlayan, akıllı yapay zeka asistanınız her an yanınızda.",
-    "slide2Title": "Kişiselleştirilmiş Deneyim",
-    "slide2Desc": "Gemini, ChatGPT, Claude ve daha fazlasını tek bir uygulamadan kullanın.",
-    "slide3Title": "Her Zaman Yanınızda",
-    "slide3Desc": "Çevrimdışı mod ve hızlı yanıtlarla kesintisiz bir deneyim yaşayın.",
     "skip": "Atla",
     "skipAndContinue": "Atla ve Devam Et",
     "next": "İleri",
