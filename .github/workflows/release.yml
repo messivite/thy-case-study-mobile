@@ -90,13 +90,13 @@ jobs:
         env:
           CI: true
 
+      - name: Generate native Android project
+        run: npx expo prebuild --platform android --no-install
+
       - name: Decode release keystore
         run: |
           echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode \
             > android/app/release.keystore
-
-      - name: Generate native Android project
-        run: npx expo prebuild --platform android --no-install
 
       - name: Assemble release APK
         working-directory: android
