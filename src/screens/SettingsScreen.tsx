@@ -177,6 +177,13 @@ export default function SettingsScreen() {
   }
 
   const handleLogout = () => {
+    if (Platform.OS === 'web') {
+      if (window.confirm(t('settings.logoutConfirm'))) {
+        logout();
+        toast.success(t('toast.logoutSuccess'));
+      }
+      return;
+    }
     Alert.alert(t('settings.logout'), t('settings.logoutConfirm'), [
       { text: t('common.cancel'), style: 'cancel' },
       {

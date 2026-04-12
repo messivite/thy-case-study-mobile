@@ -226,7 +226,10 @@ export function WelcomeAuthForm({
                 <Text style={[styles.loginBtnText, webScaled?.loginBtnText]}>{t('auth.loggingIn')}</Text>
               </View>
             ) : (
-              <Text style={[styles.loginBtnText, webScaled?.loginBtnText]}>{t('auth.login')}</Text>
+              <View style={styles.loginBtnRow}>
+                <Ionicons name="log-in-outline" size={contentScale(18)} color={palette.white} />
+                <Text style={[styles.loginBtnText, webScaled?.loginBtnText]}>{t('auth.login')}</Text>
+              </View>
             )}
           </TouchableOpacity>
 
@@ -238,26 +241,17 @@ export function WelcomeAuthForm({
 
           <TouchableOpacity
             style={[styles.googleBtn, webScaled?.googleBtn]}
-            onPress={handleGoogle}
+            onPress={handleGuest}
             activeOpacity={0.85}
             disabled={anyPending}
             accessibilityState={{ disabled: anyPending }}
           >
-            <Ionicons name="logo-google" size={contentScale(18)} color="#4285F4" />
-            <Text style={[styles.googleBtnText, webScaled?.googleBtnText]}>{t('auth.loginWithGoogle')}</Text>
+            <Ionicons name="person" size={contentScale(18)} color="#4285F4" />
+            <Text style={[styles.googleBtnText, webScaled?.googleBtnText]}>{t('auth.continueAsGuest')}</Text>
           </TouchableOpacity>
         </View>
 
         <View style={styles.footer}>
-          <TouchableOpacity
-            onPress={handleGuest}
-            hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
-            disabled={anyPending}
-            accessibilityState={{ disabled: anyPending }}
-          >
-            <Text style={[styles.footerLink, webScaled?.footerLink]}>{t('auth.continueAsGuest')}</Text>
-          </TouchableOpacity>
-          <View style={styles.footerDot} />
           <TouchableOpacity
             onPress={handleRegister}
             hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
