@@ -44,7 +44,7 @@ describe('chatSlice', () => {
     id: 'm1',
     role: 'user',
     content: 'hi',
-    modelId: 'gpt',
+    model: 'gpt',
     timestamp: 1,
     ...overrides,
   });

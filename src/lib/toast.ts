@@ -1,5 +1,7 @@
-import { toast as sonnerToast, type ToastOptions } from 'sonner-native';
+import { toast as sonnerToast, type ToastProps } from 'sonner-native';
 import { toastConfig } from '@/config/toastConfig';
+
+type ToastOptions = Partial<Omit<ToastProps, 'id' | 'title' | 'variant'>>;
 
 export const toast = {
   success: (message: string, options?: ToastOptions) =>

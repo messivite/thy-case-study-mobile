@@ -205,7 +205,7 @@ export async function signOut(): Promise<AuthResult> {
  */
 export async function getCurrentSession(): Promise<AuthResult<AppSession | null>> {
   const { data, error } = await supabase.auth.getSession();
-  if (error) return { ok: false, error: mapAuthError(error) };
+  if (error) return { ok: false, error: mapAuthError(error).message };
   if (!data.session) return { ok: true, data: null };
   return { ok: true, data: mapSession(data.session) };
 }
@@ -226,7 +226,7 @@ export async function refreshSession(): Promise<AuthResult<AppSession>> {
 
   if (error || !data.session) {
     await clearSession();
-    return { ok: false, error: mapAuthError(error), code: 'REFRESH_FAILED' };
+    return { ok: false, error: mapAuthError(error).message, code: 'REFRESH_FAILED' };
   }
 
   const session = mapSession(data.session);
