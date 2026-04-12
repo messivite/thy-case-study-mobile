@@ -7,7 +7,6 @@ import { shallowEqual } from 'react-redux';
 import { setSessionId, clearMessages } from '@/store/slices/chatSlice';
 import {
   useCreateChatMutation,
-  useInfiniteChatsQuery,
   useInfiniteMessagesQuery,
   useLikeMessageMutation,
   CHAT_QUERY_KEYS,
@@ -55,7 +54,9 @@ const toLocalMessage = (msg: ChatMessage): Message => ({
 export const useChatSession = () => {
   const dispatch = useAppDispatch();
   const queryClient = useQueryClient();
-  const { isOnline } = useNetworkStatus();
+  const { isOnline: _isOnline } = useNetworkStatus();
+  // Web'de OfflineProvider mount edilmediğinden isOnline null gelir — web'de her zaman online say
+  const isOnline = Platform.OS === 'web' ? true : _isOnline;
   const isOnlineRef = useRef(isOnline);
   useEffect(() => { isOnlineRef.current = isOnline; }, [isOnline]);
 
@@ -63,11 +64,10 @@ export const useChatSession = () => {
 
   // Tek subscription — 4 ayrı useAppSelector yerine bir kez Redux store'u dinle.
   // Her biri ayrı subscription açsaydı, birisi değişince 4 ayrı re-render tetiklerdi.
-  const { selectedAIModel, sessionId, streamingEnabled, isGuest } = useAppSelector((s) => ({
+  const { selectedAIModel, sessionId, streamingEnabled } = useAppSelector((s) => ({
     selectedAIModel: s.chat.selectedAIModel,
     sessionId: s.chat.sessionId,
     streamingEnabled: s.settings.streamingEnabled,
-    isGuest: s.auth.status === 'guest',
   }), shallowEqual);
 
   // Ref: sendMessage/stream closure'ları stale değer tutmasın
@@ -370,10 +370,6 @@ export const useChatSession = () => {
                 abortCtrlRef.current = null;
                 streamDoneRef.current = true;
                 resolve();
-                if (activeChatIdRef.current) {
-                  queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.messages(activeChatIdRef.current) });
-                  queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
-                }
               },
               onError: (err) => {
                 streamCancelledRef.current = true;
@@ -567,7 +563,6 @@ if (!chatId) return;
     });
 
     if (cid) {
-      // Sadece chatlist — mesajlar setQueryData ile güncellendi, API fetch'e gerek yok
       queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -699,7 +694,6 @@ if (!chatId) return;
     setStreamingMsgIdState('streaming');
     lastStreamTextRef.current = '';
     optimisticUserMsgRef.current = null;
-    const prevChatId = activeChatIdRef.current;
     activeChatIdRef.current = null;
     setIsStreamingActive(false);
     setOptimisticUserMsg(null);
@@ -761,18 +755,19 @@ if (!chatId) return;
 
   const isTyping = streamingEnabled ? isStreamingActive : isNonStreamPending;
 
-  const { data: chatsData } = useInfiniteChatsQuery(isGuest);
-  // sessionTitle: chatsData her invalidate'de yeni referans üretir.
-  // useState ile stabil tut — gerçek string değişince setState, yoksa re-render yok.
+  // sessionTitle: yeni subscriber açmadan cache'den oku — chatId veya invalidate sonrası güncellenir
   const [sessionTitle, setSessionTitle] = useState<string | null>(null);
   useEffect(() => {
-    if (!chatId || !chatsData) { setSessionTitle(null); return; }
-    for (const page of chatsData.pages) {
+    if (!chatId) { setSessionTitle(null); return; }
+    const cached = queryClient.getQueryData<InfiniteData<{ items: { id: string; title: string }[] }>>(
+      CHAT_QUERY_KEYS.chatsList,
+    );
+    if (!cached) return;
+    for (const page of cached.pages) {
       const found = page.items?.find((s) => s.id === chatId);
       if (found) { setSessionTitle((prev) => prev === found.title ? prev : found.title); return; }
     }
-    setSessionTitle(null);
-  }, [chatId, chatsData]);
+  }, [chatId, queryClient]);
 
   // streamingMessageId: isStreamingActive olduğu sürece gerçek assistant mesaj ID'sini
   // (ya da henüz meta gelmemişse sabit sentinel) döndür.

@@ -32,7 +32,9 @@
         "backgroundColor": "#FFFFFF"
       },
       "package": "com.thy.assistant",
-      "permissions": ["android.permission.ACCESS_NETWORK_STATE"],
+      "permissions": [
+        "android.permission.ACCESS_NETWORK_STATE"
+      ],
       "softwareKeyboardLayoutMode": "resize",
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
@@ -74,6 +76,12 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "4e05efd3-b3c8-4671-9fa5-d495bbd9ab27"
+      }
     }
   }
 }

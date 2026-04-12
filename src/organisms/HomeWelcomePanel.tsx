@@ -37,9 +37,9 @@ type Props = {
 const ENTRY_STAGGER = 60;
 const ENTRY_DURATION = 400;
 
-// Exit: çok hızlı, mesaj gönderilince anında kaybolsun
-const EXIT_DURATION = 120;
-const EXIT_STAGGER = 20;
+// Exit: anlık kaybol — mesaj gönderilince optimistic UI ile çakışmasın
+const EXIT_DURATION = 60;
+const EXIT_STAGGER = 0;
 
 // Toplam item sayısı: greeting + question + chips
 const TOTAL_STATIC = 2;

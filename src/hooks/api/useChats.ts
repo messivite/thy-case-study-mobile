@@ -97,7 +97,7 @@ export const useSyncChatMutation = (chatId: string) =>
  * Realm sync : API'den dönen tum sessionlar bu hook'un useEffect'iyle Realm'e yazilir.
  * Guest guard: isAnonymous = true ise API cagrisi yapilmaz.
  */
-export const useInfiniteChatsQuery = (isAnonymous = false) => {
+export const useInfiniteChatsQuery = () => {
   const cached = useMemo(() => realmService.getSessions(), []);
 
   const query = useInfiniteQuery<PaginatedChatsResponse, Error>({
@@ -121,16 +121,16 @@ export const useInfiniteChatsQuery = (isAnonymous = false) => {
           }
         : undefined,
     initialDataUpdatedAt: cached.syncedAt,
-    staleTime: 2 * 60_000,
+    staleTime: 5 * 60_000,
     gcTime: 10 * 60_000,
-    enabled: !isAnonymous,
+    enabled: true,
   });
 
   // API'den gelen sessionlari Realm'e yaz — sadece yeni fetch oldugunda (dataUpdatedAt degisince)
   const lastSyncedAt = useRef(0);
   useEffect(() => {
     if (!query.data || !query.dataUpdatedAt) return;
-    if (query.dataUpdatedAt <= lastSyncedAt.current) return; // ayni veri, yazma
+    if (query.dataUpdatedAt <= lastSyncedAt.current) return;
     lastSyncedAt.current = query.dataUpdatedAt;
     const allItems = query.data.pages.flatMap((p) => p.items);
     if (allItems.length > 0) {

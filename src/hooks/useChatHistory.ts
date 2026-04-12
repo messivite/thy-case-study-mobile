@@ -62,7 +62,7 @@ export function useChatHistory(searchQuery: string): ChatHistoryData {
 
   // ── Session listesi ─────────────────────────────────────────────────────
 
-  const chatsQuery = useInfiniteChatsQuery(isAnonymous);
+  const chatsQuery = useInfiniteChatsQuery();
 
   const sessions = useMemo(
     () => chatsQuery.data?.pages.flatMap((p) => p.items) ?? [],

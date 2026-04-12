@@ -543,6 +543,7 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
   onNewChat,
   activeChatId,
   onDeleteActiveChat,
+  chatHistory: chatHistoryProp,
 }) => {
   const { colors, isDark } = useTheme();
   const { t } = useI18n();

@@ -47,7 +47,7 @@ type Props = {
   onQueuedPress?: () => void;
 };
 
-export const MessageList: React.FC<Props> = ({
+const MessageListInner: React.FC<Props> = ({
   chatId,
   messages,
   optimisticUserMsg,
@@ -104,12 +104,12 @@ export const MessageList: React.FC<Props> = ({
   // showWelcome: panel gösterilmişse ve exit tamamlanmadıysa mount'ta tut
   const showWelcome = canShowWelcome || isWelcomeExitingRef.current;
 
-  // canShowWelcome false olunca exit animasyonunu başlat
-  // (render fonksiyonu içinde setState yasak — useEffect zorunlu)
+  // canShowWelcome false olunca paneli hemen kaldır — exit animasyonu optimistic UI ile çakışıyor
   useEffect(() => {
     if (!canShowWelcome && welcomeShownRef.current && !isWelcomeExitingRef.current) {
-      isWelcomeExitingRef.current = true;
-      setIsWelcomeExiting(true);
+      welcomeShownRef.current = false;
+      isWelcomeExitingRef.current = false;
+      setIsWelcomeExiting(false);
     }
   }, [canShowWelcome]);
 
@@ -441,6 +441,8 @@ export const MessageList: React.FC<Props> = ({
     </View>
   );
 };
+
+export const MessageList = React.memo(MessageListInner);
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
