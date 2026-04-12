@@ -255,11 +255,54 @@ export const useChatSession = () => {
               model,
               messages: [{ content, sentAt: payload.sentAt }],
             });
+            queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.messages(cid) });
           } else {
-            // Direkt gönderim
-            await sendMessageApi(cid, { provider, model, messages: [{ role: 'user', content }] });
+            // Direkt gönderim — cevabı hemen cache'e yaz, flash olmaz
+            const response = await sendMessageApi(cid, { provider, model, messages: [{ role: 'user', content }] });
+            const userMsg = optimisticUserMsgRef.current;
+            const now = new Date().toISOString();
+            const userChatMsg: import('@/types/chat.api.types').ChatMessage | null = userMsg ? {
+              id: `user_${Date.now()}`,
+              role: 'user',
+              content: userMsg.content,
+              createdAt: now,
+              provider,
+              model,
+            } : null;
+            const assistantChatMsg: import('@/types/chat.api.types').ChatMessage = {
+              id: response.assistantMessage.id ?? `assistant_${Date.now()}`,
+              role: 'assistant',
+              content: response.assistantMessage.content ?? '',
+              createdAt: response.assistantMessage.createdAt ?? now,
+              provider: response.assistantMessage.provider ?? provider,
+              model: response.assistantMessage.model ?? model,
+            };
+            queryClient.setQueryData<import('@tanstack/react-query').InfiniteData<import('@/types/chat.api.types').PaginatedMessagesResponse>>(
+              CHAT_QUERY_KEYS.messages(cid),
+              (old) => {
+                const basePage = { messages: [], nextCursor: null, hasMore: false };
+                const existing = old ?? { pages: [basePage], pageParams: [undefined] };
+                const lastPageIdx = existing.pages.length - 1;
+                const lastPage = existing.pages[lastPageIdx];
+                const filtered = (lastPage?.messages ?? []).filter(
+                  (m) => m.id !== userMsg?.id,
+                );
+                const newMessages = [
+                  ...filtered,
+                  ...(userChatMsg ? [userChatMsg] : []),
+                  assistantChatMsg,
+                ];
+                const newPages = existing.pages.map((p, i) =>
+                  i === lastPageIdx ? { ...p, messages: newMessages } : p,
+                );
+                return { ...existing, pages: newPages };
+              },
+            );
+            realmService.saveMessages(cid, [
+              ...(userChatMsg ? [userChatMsg] : []),
+              assistantChatMsg,
+            ]);
           }
-          queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.messages(cid) });
           queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
         }
       }),
@@ -283,9 +326,12 @@ export const useChatSession = () => {
         }
       },
       onSuccess: (payload) => {
-        // payload.chatId — sync sırasında activeChatIdRef başka session'a işaret edebilir
+        // Non-stream: cache handler'da zaten güncellendi, sadece state temizle
+        // Stream: invalidate gerekli (handleStreamingComplete cache'e yazdı ama chatsList sync'i için)
         const cid = payload.chatId;
-        queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.messages(cid) });
+        if (streamingEnabledRef.current) {
+          queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.messages(cid) });
+        }
         queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
         if (!streamingEnabledRef.current) {
           unstable_batchedUpdates(() => {
@@ -390,8 +436,51 @@ export const useChatSession = () => {
           ).catch(reject);
         });
       } else {
-        await sendMessageApi(cid, { provider, model, messages: [{ role: 'user', content }] });
-        queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.messages(cid) });
+        // Cevabı hemen cache'e yaz — optimistic'le aynı render'da değişsin, flash olmaz
+        const response = await sendMessageApi(cid, { provider, model, messages: [{ role: 'user', content }] });
+        const userMsg = optimisticUserMsgRef.current;
+        const now = new Date().toISOString();
+        const userChatMsg: import('@/types/chat.api.types').ChatMessage | null = userMsg ? {
+          id: `user_${Date.now()}`,
+          role: 'user',
+          content: userMsg.content,
+          createdAt: now,
+          provider,
+          model,
+        } : null;
+        const assistantChatMsg: import('@/types/chat.api.types').ChatMessage = {
+          id: response.assistantMessage.id ?? `assistant_${Date.now()}`,
+          role: 'assistant',
+          content: response.assistantMessage.content ?? '',
+          createdAt: response.assistantMessage.createdAt ?? now,
+          provider: response.assistantMessage.provider ?? provider,
+          model: response.assistantMessage.model ?? model,
+        };
+        queryClient.setQueryData<import('@tanstack/react-query').InfiniteData<import('@/types/chat.api.types').PaginatedMessagesResponse>>(
+          CHAT_QUERY_KEYS.messages(cid),
+          (old) => {
+            const basePage = { messages: [], nextCursor: null, hasMore: false };
+            const existing = old ?? { pages: [basePage], pageParams: [undefined] };
+            const lastPageIdx = existing.pages.length - 1;
+            const lastPage = existing.pages[lastPageIdx];
+            const filtered = (lastPage?.messages ?? []).filter(
+              (m) => m.id !== userMsg?.id,
+            );
+            const newMessages = [
+              ...filtered,
+              ...(userChatMsg ? [userChatMsg] : []),
+              assistantChatMsg,
+            ];
+            const newPages = existing.pages.map((p, i) =>
+              i === lastPageIdx ? { ...p, messages: newMessages } : p,
+            );
+            return { ...existing, pages: newPages };
+          },
+        );
+        realmService.saveMessages(cid, [
+          ...(userChatMsg ? [userChatMsg] : []),
+          assistantChatMsg,
+        ]);
         queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
       }
       if (!streamingEnabledRef.current) {

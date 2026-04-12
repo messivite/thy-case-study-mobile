@@ -133,6 +133,7 @@ export const useInfiniteChatsQuery = () => {
     if (query.dataUpdatedAt <= lastSyncedAt.current) return;
     lastSyncedAt.current = query.dataUpdatedAt;
     const allItems = query.data.pages.flatMap((p) => p.items);
+    console.log('[Realm sync] pages:', query.data.pages.length, 'allItems:', allItems.length, 'dataUpdatedAt:', query.dataUpdatedAt);
     if (allItems.length > 0) {
       realmService.saveSessions(allItems);
     }
