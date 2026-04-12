@@ -20,6 +20,7 @@ import { ModelPickerSheet } from '@/organisms/ModelPickerSheet';
 import { WelcomeQuickAction } from '@/organisms/HomeWelcomePanel';
 import { ScrollToBottomButton } from '@/molecules/ScrollToBottomButton';
 import { NetworkConnectivitySheets } from '@/organisms/NetworkConnectivitySheets';
+import { ServerUnavailableSheet } from '@/organisms/ServerUnavailableSheet';
 
 export default function HomeScreen() {
   const { user, isGuest } = useAuth();
@@ -241,6 +242,7 @@ export default function HomeScreen() {
       />
 
       <NetworkConnectivitySheets promptOnMount />
+      <ServerUnavailableSheet />
     </View>
   );
 }

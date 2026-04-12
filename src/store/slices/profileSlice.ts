@@ -4,11 +4,13 @@ import { MeResponse, UpdateMeProfileRequest } from '@/types/user.api.types';
 type ProfileState = {
   data: MeResponse | null;
   status: 'idle' | 'loading' | 'success' | 'error';
+  serverUnavailable: boolean;
 };
 
 const initialState: ProfileState = {
   data: null,
   status: 'idle',
+  serverUnavailable: false,
 };
 
 const profileSlice = createSlice({
@@ -34,9 +36,13 @@ const profileSlice = createSlice({
     },
     setProfileError(state) {
       state.status = 'error';
+      state.serverUnavailable = true;
+    },
+    clearServerUnavailable(state) {
+      state.serverUnavailable = false;
     },
   },
 });
 
-export const { setProfile, patchProfile, setProfileLoading, setProfileError } = profileSlice.actions;
+export const { setProfile, patchProfile, setProfileLoading, setProfileError, clearServerUnavailable } = profileSlice.actions;
 export default profileSlice.reducer;
