@@ -29,7 +29,7 @@ export default function OnboardingScreen() {
     router.replace('/(auth)/welcome');
   }, []);
 
-  const handleSkip = useCallback(() => {
+  const handleSkip = useCallback(async () => {
     mmkvStorage.setBoolean(STORAGE_KEYS.ONBOARDING_DONE, true);
     router.replace('/(auth)/welcome');
   }, []);

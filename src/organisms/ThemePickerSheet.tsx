@@ -21,9 +21,10 @@ import { spacing, radius } from '@/constants/spacing';
 import { palette } from '@/constants/colors';
 import { fontFamily, fontSize } from '@/constants/typography';
 import { scale } from '@/lib/responsive';
+import type { ThemeMode } from '@/types/settings.types';
 
 type ThemeOption = {
-  value: 'light' | 'dark' | 'system';
+  value: ThemeMode;
   icon: React.ComponentProps<typeof Ionicons>['name'];
   iconColor: string;
   labelKey: 'settings.themeLight' | 'settings.themeDark' | 'settings.themeSystem';
