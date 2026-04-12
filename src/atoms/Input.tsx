@@ -102,13 +102,12 @@ export const Input: FC<Props> = ({
         )}
         {rightIcon && !secure && <View style={styles.iconRight}>{rightIcon}</View>}
       </View>
-      {hasError ? (
-        <RNText
-          style={[styles.errorText, { color: colors.error, fontFamily: fontFamily.regular, fontSize: fontSize.xs }]}
-        >
-          {error}
-        </RNText>
-      ) : null}
+      <RNText
+        style={[styles.errorText, { color: hasError ? colors.error : 'transparent', fontFamily: fontFamily.regular, fontSize: fontSize.xs }]}
+        numberOfLines={1}
+      >
+        {hasError ? error : ' '}
+      </RNText>
     </View>
   );
 };

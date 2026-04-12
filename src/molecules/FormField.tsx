@@ -25,8 +25,8 @@ export function FormField<T extends FieldValues>({
   ...inputProps
 }: Props<T>) {
   const renderField = useCallback(
-    ({ field: { onChange, onBlur, value }, fieldState: { error } }: any) => {
-      const errorMessage = error?.message?.trim() ? error.message : undefined;
+    ({ field: { onChange, onBlur, value }, fieldState: { error, isTouched } }: any) => {
+      const errorMessage = isTouched && error?.message?.trim() ? error.message : undefined;
       return (
         <View style={styles.wrapper}>
           {label ? (

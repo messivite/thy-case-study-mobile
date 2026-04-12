@@ -30,7 +30,8 @@ export const AUTH_NO_CREDENTIAL_EMAIL_PROPS: TextInputProps =
           autoComplete: 'off',
         };
 
-/** Şifre — secureTextEntry yine Keychain ipucu verir; mümkün olan ek nötrleştirme. */
+/** Şifre — secureTextEntry yine Keychain ipucu verir; mümkün olan ek nötrleştirme.
+ *  textContentType:'oneTimeCode' iOS'un password manager prompt'unu en güvenilir şekilde baskılar. */
 export const AUTH_NO_CREDENTIAL_PASSWORD_PROPS: TextInputProps =
   Platform.OS === 'ios'
     ? {
