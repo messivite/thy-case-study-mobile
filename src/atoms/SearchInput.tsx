@@ -64,12 +64,15 @@ export const SearchInput = forwardRef<SearchInputRef, Props>(({
   const haptics = useHaptics();
   const inputRef = useRef<TextInput>(null);
   const [isFocused, setIsFocused] = useState(false);
+  const [hasText, setHasText] = useState(false);
   const progress = useSharedValue(0);
 
   useImperativeHandle(ref, () => ({
     focus: () => inputRef.current?.focus(),
     blur: () => inputRef.current?.blur(),
     clear: () => {
+      inputRef.current?.clear();
+      setHasText(false);
       onChangeText?.('');
       onClear?.();
     },
@@ -89,6 +92,8 @@ export const SearchInput = forwardRef<SearchInputRef, Props>(({
 
   const handleCancel = useCallback(() => {
     haptics.light();
+    inputRef.current?.clear();
+    setHasText(false);
     onChangeText?.('');
     onClear?.();
     inputRef.current?.blur();
@@ -132,8 +137,11 @@ export const SearchInput = forwardRef<SearchInputRef, Props>(({
           placeholderTextColor={colors.textSecondary}
           onFocus={handleFocus}
           onBlur={handleBlur}
-          value={value}
-          onChangeText={onChangeText}
+          defaultValue={value}
+          onChangeText={(text) => {
+            setHasText(text.length > 0);
+            onChangeText?.(text);
+          }}
           returnKeyType="search"
           clearButtonMode="never"
           autoCorrect={false}
@@ -141,11 +149,17 @@ export const SearchInput = forwardRef<SearchInputRef, Props>(({
           {...props}
         />
 
-        {/* Clear button — value varsa göster */}
-        {!!value && (
+        {/* Clear button — hasText ile kontrol et, value prop'una bağlı değil */}
+        {hasText && (
           <TouchableOpacity
             style={styles.clearBtn}
-            onPress={() => { haptics.light(); onChangeText?.(''); onClear?.(); }}
+            onPress={() => {
+              haptics.light();
+              inputRef.current?.clear();
+              setHasText(false);
+              onChangeText?.('');
+              onClear?.();
+            }}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <Ionicons name="close-circle" size={scale(16)} color={colors.textSecondary} />

@@ -211,26 +211,25 @@ export default function SettingsScreen() {
   } as const;
 
   return (
-    <View style={[styles.safe, { backgroundColor: colors.background }]}>
+    <>
+      <AppHeader
+        title={t('settings.title')}
+        safeAreaTop={false}
+        rightIcons={[
+          {
+            name: 'close',
+            onPress: () => router.back(),
+            accessibilityLabel: t('common.close'),
+          },
+        ]}
+      />
       <ScrollView
         style={[styles.scrollView, { backgroundColor: colors.background }]}
         contentContainerStyle={[styles.scroll, { paddingBottom: Math.max(insets.bottom, 20) + spacing[10] }]}
         showsVerticalScrollIndicator={false}
         bounces
         alwaysBounceVertical
-        stickyHeaderIndices={[0]}
       >
-        <AppHeader
-          title={t('settings.title')}
-          safeAreaTop={false}
-          rightIcons={[
-            {
-              name: 'close',
-              onPress: () => router.back(),
-              accessibilityLabel: t('common.close'),
-            },
-          ]}
-        />
         <View style={styles.scrollContent}>
         {/* Profile Card */}
         <MotiView
@@ -536,15 +535,11 @@ export default function SettingsScreen() {
         open={editProfileOpen}
         onClose={() => setEditProfileOpen(false)}
       />
-    </View>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    height: '100%',
-  },
   scrollView: {
     flex: 1,
     height: '100%',

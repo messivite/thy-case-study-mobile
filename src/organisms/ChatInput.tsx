@@ -14,8 +14,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   Platform,
-  ScrollView,
-  Alert,
   Modal,
   KeyboardAvoidingView,
 } from 'react-native';
@@ -29,9 +27,6 @@ import Animated, {
   Extrapolation,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
-import { MotiView } from '@/lib/motiView';
-import * as ImagePicker from 'expo-image-picker';
-import * as DocumentPicker from 'expo-document-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
@@ -40,12 +35,11 @@ import { BlurView } from 'expo-blur';
 import { THYIcon } from '@/atoms/thy-icon';
 import { AI_MODELS, AIModelId } from '@/constants/models';
 import { Attachment } from '@/types/chat.types';
-import { AttachmentPreview } from '@/molecules/AttachmentPreview';
-import { AttachmentPickerSheet } from '@/molecules/AttachmentPickerSheet';
 import { radius, spacing } from '@/constants/spacing';
 import { fontFamily, fontSize } from '@/constants/typography';
 import { palette } from '@/constants/colors';
 import { scale as scaleSize } from '@/lib/responsive';
+import { Text } from '@/atoms/Text';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -240,10 +234,6 @@ const chipStyles = StyleSheet.create({
   },
 });
 
-// MotiView animation props — modül seviyesinde sabit, her render'da yeni object yaratılmaz
-const ATTACHMENT_MOTI_FROM = { opacity: 0, translateY: 8 } as const;
-const ATTACHMENT_MOTI_ANIMATE = { opacity: 1, translateY: 0 } as const;
-const ATTACHMENT_MOTI_TRANSITION = { type: 'timing' as const, duration: 200 };
 
 // Gemini-style soft shadow — no harsh border, depth comes from shadow
 const cardShadow = {
@@ -497,7 +487,7 @@ type Props = {
   onStop?: () => void;
   onModelSelectorPress: () => void;
   selectedModel?: AIModelId;
-  selectedAIModelName?: string; // API'den gelen dinamik model adı
+  selectedAIModelName?: string;
   disabled?: boolean;
   isStreaming?: boolean;
   placeholder?: string;
@@ -522,8 +512,6 @@ const ChatInputInner: React.FC<Props> = ({
 
   const growingInputRef = useRef<GrowingTextInputHandle>(null);
   const [hasText, setHasText] = useState(false);
-  const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [pickerVisible, setPickerVisible] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
   const focusProgress = useSharedValue(0);
@@ -538,114 +526,15 @@ const ChatInputInner: React.FC<Props> = ({
     ),
   }));
 
-  // --- Attachment helpers ---
-  // useCallback ile stable referans — simulateUpload'a stale closure geçmemek için
-  // updateAttachment'ı fonksiyonel updater (prev =>) olarak kullanıyoruz.
-
-  const addAttachment = useCallback((a: Attachment) => {
-    setAttachments((prev) => [...prev, a]);
-  }, []);
-
-  const updateAttachment = useCallback((id: string, updates: Partial<Attachment>) => {
-    setAttachments((prev) => prev.map((a) => (a.id === id ? { ...a, ...updates } : a)));
-  }, []);
-
-  const removeAttachment = useCallback((id: string) => {
-    setAttachments((prev) => prev.filter((a) => a.id !== id));
-  }, []);
-
-  // updateAttachment ref'i — interval callback'i her zaman güncel fonksiyonu çağırır
-  const updateAttachmentRef = useRef(updateAttachment);
-  useEffect(() => {
-    updateAttachmentRef.current = updateAttachment;
-  }, [updateAttachment]);
-
-  const simulateUpload = useCallback((id: string) => {
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += 0.15 + Math.random() * 0.1;
-      if (progress >= 1) {
-        clearInterval(interval);
-        updateAttachmentRef.current(id, { status: 'done', progress: 1, remoteUrl: 'https://placeholder.url' });
-      } else {
-        updateAttachmentRef.current(id, { status: 'uploading', progress });
-      }
-    }, 250);
-  }, []);
-
-  // --- Pickers ---
-
-  const handleCamera = useCallback(async () => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('İzin Gerekli', 'Kamera erişimi için izin vermeniz gerekiyor.');
-      return;
-    }
-    const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.85 });
-    if (result.canceled || !result.assets?.[0]) return;
-    const asset = result.assets[0];
-    const id = `att_${Date.now()}`;
-    addAttachment({
-      id, type: 'image',
-      name: asset.fileName ?? `photo_${Date.now()}.jpg`,
-      uri: asset.uri, mimeType: asset.mimeType ?? 'image/jpeg',
-      size: asset.fileSize, width: asset.width, height: asset.height,
-      status: 'uploading', progress: 0,
-    });
-    simulateUpload(id);
-  }, [addAttachment, simulateUpload]);
-
-  const handleGallery = useCallback(async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('İzin Gerekli', 'Galeri erişimi için izin vermeniz gerekiyor.');
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'], allowsMultipleSelection: true, quality: 0.85, selectionLimit: 5,
-    });
-    if (result.canceled || !result.assets?.length) return;
-    result.assets.forEach((asset) => {
-      const id = `att_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-      addAttachment({
-        id, type: 'image',
-        name: asset.fileName ?? `image_${Date.now()}.jpg`,
-        uri: asset.uri, mimeType: asset.mimeType ?? 'image/jpeg',
-        size: asset.fileSize, width: asset.width, height: asset.height,
-        status: 'uploading', progress: 0,
-      });
-      simulateUpload(id);
-    });
-  }, [addAttachment, simulateUpload]);
-
-  const handleDocument = useCallback(async () => {
-    const result = await DocumentPicker.getDocumentAsync({
-      type: ['application/pdf', '*/*'], multiple: false, copyToCacheDirectory: true,
-    });
-    if (result.canceled || !result.assets?.[0]) return;
-    const asset = result.assets[0];
-    const id = `att_${Date.now()}`;
-    const isPDF = asset.mimeType === 'application/pdf' || asset.name?.toLowerCase().endsWith('.pdf');
-    addAttachment({
-      id, type: isPDF ? 'pdf' : 'file',
-      name: asset.name ?? `file_${Date.now()}`,
-      uri: asset.uri, mimeType: asset.mimeType ?? 'application/octet-stream',
-      size: asset.size, status: 'uploading', progress: 0,
-    });
-    simulateUpload(id);
-  }, [addAttachment, simulateUpload]);
-
   // --- Send / Stop ---
 
   const handleSend = useCallback(() => {
     const trimmed = (growingInputRef.current?.getText() ?? '').trim();
-    if ((!trimmed && attachments.length === 0) || disabled) return;
-    if (attachments.some((a) => a.status === 'uploading')) return;
+    if (!trimmed || disabled) return;
     haptics.medium();
-    onSend(trimmed, attachments);
+    onSend(trimmed, []);
     growingInputRef.current?.clear();
-    setAttachments([]);
-  }, [attachments, disabled, onSend, haptics]);
+  }, [disabled, onSend, haptics]);
 
   const handleStop = useCallback(() => {
     haptics.medium();
@@ -654,25 +543,11 @@ const ChatInputInner: React.FC<Props> = ({
 
   // --- Derived state (memoized) ---
 
-  const canSend = useMemo(() =>
-    !disabled &&
-    (hasText || attachments.length > 0) &&
-    !attachments.some((a) => a.status === 'uploading'),
-  [disabled, hasText, attachments]);
+  const canSend = useMemo(() => !disabled && hasText, [disabled, hasText]);
 
   const model = useMemo(() =>
     AI_MODELS.find((m) => m.id === selectedModel),
   [selectedModel]);
-
-  const hasAttachments = attachments.length > 0;
-
-  const imageAttachments = useMemo(() =>
-    attachments.filter((a) => a.type === 'image'),
-  [attachments]);
-
-  const fileAttachments = useMemo(() =>
-    attachments.filter((a) => a.type !== 'image'),
-  [attachments]);
 
   // --- Stable callbacks for toolbar buttons ---
 
@@ -691,13 +566,6 @@ const ChatInputInner: React.FC<Props> = ({
 
   const handleExpandClose = useCallback(() => setExpanded(false), []);
 
-  const handlePickerClose = useCallback(() => setPickerVisible(false), []);
-
-  const handleAttachPress = useCallback(() => {
-    haptics.light();
-    setPickerVisible(true);
-  }, [haptics]);
-
   // --- Memoized styles ---
 
   const wrapperStyle = useMemo(() => ([
@@ -713,41 +581,6 @@ const ChatInputInner: React.FC<Props> = ({
 
   return (
     <View style={wrapperStyle}>
-      {/* Attachment previews */}
-      {hasAttachments && (
-        <MotiView
-          from={ATTACHMENT_MOTI_FROM}
-          animate={ATTACHMENT_MOTI_ANIMATE}
-          transition={ATTACHMENT_MOTI_TRANSITION}
-          style={styles.previewArea}
-        >
-          {imageAttachments.length > 0 && (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.imagePreviewRow}
-            >
-              {imageAttachments.map((att) => (
-                <AttachmentPreview
-                  key={att.id}
-                  attachment={att}
-                  isInput
-                  onRemove={() => removeAttachment(att.id)}
-                />
-              ))}
-            </ScrollView>
-          )}
-          {fileAttachments.map((att) => (
-            <AttachmentPreview
-              key={att.id}
-              attachment={att}
-              isInput
-              onRemove={() => removeAttachment(att.id)}
-            />
-          ))}
-        </MotiView>
-      )}
-
       {/* Main input card */}
       <Animated.View style={[cardStyle, containerBorderStyle]}>
         {/* Input row: text büyür, expand ikonu sağda sabit */}
@@ -780,26 +613,9 @@ const ChatInputInner: React.FC<Props> = ({
         {/* Bottom toolbar */}
         <View style={styles.toolbar}>
           <View style={styles.toolbarLeft}>
-            {/* Attach */}
-            <TouchableOpacity
-              style={styles.iconBtn}
-              onPress={handleAttachPress}
-              disabled={disabled}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Ionicons
-                name="add"
-                size={scaleSize(22)}
-                color={hasAttachments ? colors.primary : colors.textSecondary}
-              />
-              {hasAttachments && (
-                <View style={[styles.badge, { backgroundColor: colors.primary }]}>
-                  <Animated.Text style={styles.badgeText}>{attachments.length}</Animated.Text>
-                </View>
-              )}
-            </TouchableOpacity>
-
-            {/* Model chip */}
+            <Text variant="caption" color={colors.textSecondary} style={styles.modelLabel}>
+              Model Tercihi:
+            </Text>
             <ModelChip
               modelName={selectedAIModelName ?? model?.description ?? 'Model'}
               modelColor={model?.color ?? colors.primary}
@@ -818,14 +634,6 @@ const ChatInputInner: React.FC<Props> = ({
           </View>
         </View>
       </Animated.View>
-
-      <AttachmentPickerSheet
-        visible={pickerVisible}
-        onClose={handlePickerClose}
-        onCamera={handleCamera}
-        onGallery={handleGallery}
-        onDocument={handleDocument}
-      />
 
       <ExpandedInputModal
         visible={expanded}
@@ -860,12 +668,6 @@ const styles = StyleSheet.create({
     paddingBottom: 0,
     gap: spacing[2],
   },
-  previewArea: { gap: spacing[2] },
-  imagePreviewRow: {
-    flexDirection: 'row',
-    gap: spacing[2],
-    paddingVertical: spacing[1],
-  },
   card: {
     borderTopLeftRadius: radius['2xl'],
     borderTopRightRadius: radius['2xl'],
@@ -875,12 +677,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[4],
     paddingTop: spacing[3],
     position: 'relative',
-  },
-  expandBtn: {
-    position: 'absolute',
-    top: spacing[3],
-    right: spacing[5],
-    zIndex: 1,
   },
   input: {
     paddingTop: 0,
@@ -899,6 +695,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing[2],
   },
+  modelLabel: {
+    fontFamily: fontFamily.medium,
+  },
   toolbarRight: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -915,28 +714,6 @@ const styles = StyleSheet.create({
   },
   expandSide: {
     paddingBottom: spacing[2],
-  },
-  iconBtn: {
-    width: scaleSize(34),
-    height: scaleSize(34),
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  badge: {
-    position: 'absolute',
-    top: 2,
-    right: 2,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  badgeText: {
-    color: palette.white,
-    fontSize: 9,
-    fontFamily: fontFamily.bold,
   },
   // Expanded modal
   expandedSheet: {

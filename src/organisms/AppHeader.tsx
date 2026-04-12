@@ -196,6 +196,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[4],
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.12)',
+    minHeight: HEADER_ROW_HEIGHT,
   },
   row: {
     flexDirection: 'row',
@@ -203,7 +204,7 @@ const styles = StyleSheet.create({
   },
   sideSlot: {
     width: scale(72),
-    height: '100%',
+    height: HEADER_ROW_HEIGHT,
     justifyContent: 'center',
   },
   sideSlotLeft: {
