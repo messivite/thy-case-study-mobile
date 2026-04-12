@@ -209,6 +209,15 @@
       "claude-3-5-haiku":     "Fast and lightweight Claude. Quick responses."
     }
   },
+  "meta": {
+    "suffix": "THY Assistant",
+    "home": "Chat",
+    "settings": "Settings",
+    "welcome": "Sign In",
+    "register": "Create Account",
+    "forgotPassword": "Forgot Password",
+    "onboarding": "Welcome"
+  },
   "errorBoundary": {
     "title": "Something Went Wrong",
     "message": "An unexpected error occurred in our application. Our technical team has been notified and will work on a fix as soon as possible.",

@@ -209,6 +209,15 @@
       "claude-3-5-haiku":     "Hızlı ve hafif Claude. Anında yanıtlar."
     }
   },
+  "meta": {
+    "suffix": "THY Asistan",
+    "home": "Sohbet",
+    "settings": "Ayarlar",
+    "welcome": "Giriş Yap",
+    "register": "Hesap Oluştur",
+    "forgotPassword": "Şifremi Unuttum",
+    "onboarding": "Hoş Geldiniz"
+  },
   "errorBoundary": {
     "title": "Bir Sorun Oluştu",
     "message": "Uygulamamızda beklenmeyen bir hata meydana geldi. Teknik ekibimiz bilgilendirildi ve en kısa sürede çözüm üzerinde çalışacak.",

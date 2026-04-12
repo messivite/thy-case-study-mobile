@@ -1,3 +1,4 @@
+import Head from 'expo-router/head';
 import React, { useCallback, useMemo, useState, type ComponentProps } from 'react';
 import { ScrollView, View, StyleSheet, Alert, Platform, Pressable, Linking, ActivityIndicator } from 'react-native';
 import * as Notifications from 'expo-notifications';
@@ -208,6 +209,7 @@ export default function SettingsScreen() {
 
   return (
     <View style={{ flex: 1 }}>
+      <Head><title>{t('meta.settings')} | {t('meta.suffix')}</title></Head>
       <AppHeader
         title={t('settings.title')}
         safeAreaTop={false}

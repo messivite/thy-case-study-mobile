@@ -2,6 +2,7 @@
  * Kayıt ekranı — Welcome ile aynı gökyüzü gradient + hero; form `RegisterAuthForm` içinde.
  */
 
+import Head from 'expo-router/head';
 import React, { useEffect, useMemo, useRef, type ComponentType } from 'react';
 import {
   View,
@@ -142,6 +143,7 @@ export default function RegisterScreen() {
 
   return (
     <View style={screenWrapStyle}>
+      <Head><title>{t('meta.register')} | {t('meta.suffix')}</title></Head>
       <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
       <LinearGradient
         colors={gradientColors}
