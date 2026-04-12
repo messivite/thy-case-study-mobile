@@ -12,6 +12,7 @@ import {
   getChat,
   createChat,
   deleteChat,
+  likeMessage,
   sendMessage,
   streamChat,
   syncChat,
@@ -25,6 +26,9 @@ import {
   CreateChatResponse,
   GetChatsResponse,
   GetChatResponse,
+  LikeMessageRequest,
+  LikeMessageResponse,
+  MessageLikeAction,
   NonStreamChatRequest,
   NonStreamChatResponse,
   PaginatedChatsResponse,
@@ -35,6 +39,8 @@ import {
   SyncChatResponse,
 } from '@/types/chat.api.types';
 import { realmService } from '@/services/realm';
+import { useOfflineMutation } from '@mustafaaksoy41/react-native-offline-queue';
+import { OFFLINE_ACTIONS } from '@/lib/offlineQueue';
 
 export const CHAT_QUERY_KEYS = {
   chats: ['chats'] as const,
@@ -280,3 +286,63 @@ export const useSearchChatsQuery = (q: string, limit = 20) =>
     staleTime: 60_000,
     gcTime: 5 * 60_000,
   });
+
+// ---------------------------------------------------------------------------
+// Like / Unlike mutation
+// ---------------------------------------------------------------------------
+
+type LikeMessagePayload = {
+  chatId: string;
+  messageId: string;
+  action: MessageLikeAction;
+  liked: boolean | null;
+};
+
+/**
+ * POST /api/chats/:chatId/messages/:messageId/like
+ *
+ * - Optimistic update: mesajın `liked` alanını hemen günceller
+ * - Offline destekli: offline ise kuyruğa alınır, online olunca tekrar dener
+ * - Hata durumunda query invalidate edilir — sunucudan gerçek state gelir
+ * - Sync API ayrıca eklenecek (ileride)
+ */
+export const useLikeMessageMutation = (chatId: string) => {
+  const queryClient = useQueryClient();
+
+  const applyOptimistic = (payload: LikeMessagePayload) => {
+    const newLiked = payload.liked;
+    // React Query cache güncelle
+    queryClient.setQueryData<InfiniteData<PaginatedMessagesResponse>>(
+      CHAT_QUERY_KEYS.messages(chatId),
+      (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          pages: old.pages.map((page) => ({
+            ...page,
+            messages: page.messages.map((msg) =>
+              (msg as any).id === payload.messageId
+                ? { ...msg, liked: newLiked }
+                : msg,
+            ),
+          })),
+        };
+      },
+    );
+    // Realm'e de yaz — uygulama restart'ta like durumu korunsun
+    void realmService.updateMessageLiked(payload.messageId, newLiked);
+  };
+
+  return useOfflineMutation<LikeMessagePayload>(
+    OFFLINE_ACTIONS.LIKE_MESSAGE,
+    {
+      handler: async (payload) => {
+        await likeMessage(payload.chatId, payload.messageId, { action: payload.action });
+      },
+      onOptimisticSuccess: applyOptimistic,
+      onError: (_err: Error, _payload: LikeMessagePayload) => {
+        void queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.messages(chatId) });
+      },
+    },
+  );
+};

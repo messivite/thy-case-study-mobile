@@ -56,6 +56,25 @@ export type PaginatedChatsResponse = {
 export type ChatMessage = AIMessage & AIProviderInfo & {
   id?: string;
   createdAt?: string;
+  liked?: boolean | null;
+};
+
+// ---------------------------------------------------------------------------
+// POST /api/chats/:chatId/messages/:messageId/like — Like / Unlike
+// ---------------------------------------------------------------------------
+
+/** 1 = like, 2 = unlike */
+export type MessageLikeAction = 1 | 2;
+
+/** Like/unlike isteğinin body'si */
+export type LikeMessageRequest = {
+  action: MessageLikeAction;
+};
+
+/** Like/unlike response modeli */
+export type LikeMessageResponse = {
+  messageId: string;
+  liked: boolean | null;
 };
 
 /** Chat detay response modeli */

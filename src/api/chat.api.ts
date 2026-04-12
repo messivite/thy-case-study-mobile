@@ -9,6 +9,8 @@ import {
   GetChatsResponse,
   GetChatResponse,
   GetMessagesParams,
+  LikeMessageRequest,
+  LikeMessageResponse,
   NonStreamChatRequest,
   NonStreamChatResponse,
   PaginatedChatsResponse,
@@ -253,6 +255,22 @@ export const searchChats = async (params: ChatSearchParams): Promise<ChatSearchR
  */
 export const deleteChat = async (chatId: string): Promise<void> => {
   await privateApi.delete(`/api/chats/${chatId}`);
+};
+
+/**
+ * POST /api/chats/:chatId/messages/:messageId/like
+ * action: 1 = like, 2 = unlike
+ */
+export const likeMessage = async (
+  chatId: string,
+  messageId: string,
+  payload: LikeMessageRequest,
+): Promise<LikeMessageResponse> => {
+  const { data } = await privateApi.post<LikeMessageResponse>(
+    `/api/chats/${chatId}/messages/${messageId}/like`,
+    payload,
+  );
+  return data;
 };
 
 /**

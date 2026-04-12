@@ -7,6 +7,10 @@ import {
 } from 'react-native';
 import Animated, {
   FadeIn,
+  useSharedValue,
+  useAnimatedStyle,
+  withSequence,
+  withTiming,
 } from 'react-native-reanimated';
 import Svg, { Path } from 'react-native-svg';
 import Markdown from 'react-native-markdown-display';
@@ -71,6 +75,12 @@ const MessageBubbleInner: React.FC<Props> = ({
   hideModelLabel = false,
 }) => {
   const haptics = useHaptics();
+
+  const likeScale = useSharedValue(1);
+  const unlikeScale = useSharedValue(1);
+
+  const likeAnimStyle = useAnimatedStyle(() => ({ transform: [{ scale: likeScale.value }] }));
+  const unlikeAnimStyle = useAnimatedStyle(() => ({ transform: [{ scale: unlikeScale.value }] }));
 
   const isUser = message.role === 'user';
 
@@ -141,9 +151,11 @@ const MessageBubbleInner: React.FC<Props> = ({
   const handleLike = useCallback(
     (liked: boolean) => {
       haptics.light();
+      const sv = liked ? likeScale : unlikeScale;
+      sv.value = withSequence(withTiming(1.4, { duration: 120 }), withTiming(1, { duration: 100 }));
       onLike?.(message.id, message.liked === liked ? null : liked);
     },
-    [message.id, message.liked, onLike, haptics],
+    [message.id, message.liked, onLike, haptics, likeScale, unlikeScale],
   );
 
   const handleSpeak = useCallback(() => {
@@ -212,33 +224,37 @@ const MessageBubbleInner: React.FC<Props> = ({
                 >
                   <Ionicons
                     name={isSpeaking ? 'stop-circle-outline' : 'volume-high-outline'}
-                    size={14}
+                    size={18}
                     color={isSpeaking ? colors.primary : colors.textSecondary}
                   />
                 </ActionButton>
               )}
               {message.content.length > 0 && (
                 <ActionButton onPress={handleCopy}>
-                  <Ionicons name="copy-outline" size={14} color={colors.textSecondary} />
+                  <Ionicons name="copy-outline" size={18} color={colors.textSecondary} />
                 </ActionButton>
               )}
               <ActionButton onPress={() => handleLike(true)}>
-                <Ionicons
-                  name={message.liked === true ? 'thumbs-up' : 'thumbs-up-outline'}
-                  size={14}
-                  color={message.liked === true ? palette.success : colors.textSecondary}
-                />
+                <Animated.View style={likeAnimStyle}>
+                  <Ionicons
+                    name={message.liked === true ? 'thumbs-up' : 'thumbs-up-outline'}
+                    size={18}
+                    color={message.liked === true ? palette.success : colors.textSecondary}
+                  />
+                </Animated.View>
               </ActionButton>
               <ActionButton onPress={() => handleLike(false)}>
-                <Ionicons
-                  name={message.liked === false ? 'thumbs-down' : 'thumbs-down-outline'}
-                  size={14}
-                  color={message.liked === false ? palette.error : colors.textSecondary}
-                />
+                <Animated.View style={unlikeAnimStyle}>
+                  <Ionicons
+                    name={message.liked === false ? 'thumbs-down' : 'thumbs-down-outline'}
+                    size={18}
+                    color={message.liked === false ? palette.error : colors.textSecondary}
+                  />
+                </Animated.View>
               </ActionButton>
               {onRegenerate && (
                 <ActionButton onPress={() => onRegenerate(message.id)}>
-                  <Ionicons name="refresh-outline" size={14} color={colors.textSecondary} />
+                  <Ionicons name="refresh-outline" size={18} color={colors.textSecondary} />
                 </ActionButton>
               )}
             </View>
