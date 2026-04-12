@@ -65,7 +65,7 @@ Proje; onboarding, kimlik doğrulama, asistan sohbet akışı, ayarlar, çoklu d
 
 ```text
 app/
-  _layout.tsx          # Kök layout — SupabaseAuthProvider, Redux Provider
+  _layout.tsx          # Kök layout — QueryClientProvider, Redux Provider, OfflineProvider
   index.tsx            # Splash + başlangıç yönlendirme
   (onboarding)/        # Onboarding akışı (MMKV flag ile tek seferlik)
   (auth)/              # Login, Register, ForgotPassword, Welcome
@@ -73,52 +73,100 @@ app/
 
 src/
   atoms/               # Temel UI bileşenleri (Button, Input, Text, GlassView…)
-  molecules/           # Birleşik bileşenler (FormField, MessageBubble, LiquidBottomSheet…)
-  organisms/           # Özellik odaklı bileşenler (ChatInput, AppHeader, WelcomeAuthForm…)
+  molecules/           # Birleşik bileşenler (MessageBubble, LiquidBottomSheet, AttachmentPreview…)
+  organisms/           # Özellik odaklı bileşenler (ChatInput, MessageList, ModelPickerSheet,
+  |                    #   NetworkConnectivitySheets, EditProfileSheet…)
   templates/           # Sayfa iskeletleri (ChatLayout…)
-  screens/             # Tam ekran bileşenleri (SettingsScreen, ErrorBoundaryScreen…)
-  forms/               # Zod şemaları + form tipleri (auth/welcome, auth/register…)
+  screens/             # Tam ekran bileşenleri (SettingsScreen, AppSplashScreen…)
+  forms/               # Zod şemaları + form hook'ları (profile/…)
   hooks/
-    api/               # TanStack Query hook'ları (useModels, useUpdateMe…)
+    api/               # TanStack Query hook'ları
+    |  useChats.ts     #   Sohbet CRUD, infinite scroll, like/unlike mutation (offline destekli)
+    |  useModels.ts    #   AI model listesi (MMKV persister destekli)
+    |  useUpdateMe.ts  #   Profil güncelleme mutation
+    |  useUploadAvatar #   Avatar yükleme mutation
+    |  __tests__/      #   Query key ve payload semantik testleri
+    useChatSession.ts  # Streaming + mesaj yönetimi + like callback
     useSupabaseAuth    # Supabase auth işlemleri + token yenileme
     useI18n            # Dil değiştirme (AppLanguage tipli)
     useTheme           # Tema (ThemeMode tipli)
-    useChatSession     # Streaming + mesaj yönetimi
+    useHaptics         # Haptic feedback (HapticType tipli)
+    __tests__/         # toLocalMessage ve saf helper testleri
+  api/
+    chat.api.ts        # Axios chat endpoint'leri (stream, sync, like, syncLikes…)
+    models.api.ts      # Model listesi endpoint'i
+    user.api.ts        # Profil + avatar endpoint'leri
+    __tests__/         # likeMessage ve syncLikes kontrat testleri
   services/
     authService.ts     # Supabase auth wrap + AuthErrorCode mapper
     api.ts             # Axios instance (ngrok header desteği dahil)
     realm.ts           # Offline-first Realm ORM (native/.web shim)
+    realm.native.ts    # Realm şema (RealmSession, RealmMessage) + async open + writeQueue
+    realm.web.ts       # localStorage tabanlı web shim — aynı API yüzeyi
+    queryClient.ts     # TanStack QueryClient + MMKV persister
+    __tests__/         # realm.web localStorage mantık testleri
   store/
     slices/
       authSlice        # AuthStatus, AuthState
       settingsSlice    # ThemeMode, AppLanguage (settings.types'tan)
       profileSlice     # ProfileLoadStatus (settings.types'tan)
       chatSlice        # Aktif oturum + mesaj listesi
+      __tests__/       # Reducer ve selector testleri
   lib/
     mmkv.*             # Platforma göre storage shim (native/web)
     responsive.ts      # scale/verticalScale/moderateScale (web'de identity)
-    offlineQueue.ts    # Realm tabanlı offline mesaj kuyruğu
+    offlineQueue.ts    # OfflineManager re-export + OFFLINE_ACTIONS sabitleri
     batchedUpdates.*   # React 18 web uyumlu shim
+    chatSpeech.ts      # TTS locale yardımcısı
+    toast.ts           # Toast helper
   i18n/
-    en.json / tr.json  # Çeviri stringleri
-  constants/           # Renk, tipografi, spacing, sabitler
+    en.json / tr.json  # Çeviri stringleri (network, assistant, auth, profile…)
+  constants/           # Renk paleti, tipografi, spacing, radius
   config/
-    devConfig.ts       # Geliştirme önizleme bayrakları (tipli: OnboardingBackgroundVariant, NetworkPreview)
+    devConfig.ts       # Geliştirme önizleme bayrakları (OnboardingBackgroundVariant, NetworkPreview)
   types/
     auth.types.ts      # AuthStatus, AuthState, AuthErrorCode
-    chat.types.ts      # Message, MessageRole, AttachmentType, AttachmentStatus
-    chat.api.types.ts  # Stream event discriminated union'ları, arama tipleri
-    user.api.types.ts  # MeResponse, UpdateMeProfileRequest
+    chat.types.ts      # Message, MessageRole, Attachment, AttachmentStatus
+    chat.api.types.ts  # Stream event discriminated union, like/sync tipleri, arama tipleri
+    user.api.types.ts  # MeResponse, UpdateMeProfileRequest, UploadAvatarResponse
+    models.api.types.ts# AIModelRecord, GetModelsResponse
     ui.types.ts        # HapticType, NetworkPreview, OnboardingBackgroundVariant
     settings.types.ts  # AppLanguage, ThemeMode, ProfileLoadStatus
+    api.types.ts       # AIMessage, AIProviderInfo, AIUsage (paylaşılan API primitifleri)
 ```
 
 Kısa notlar:
 - `app/`: Expo Router route katmanı — `(auth)/_layout` auth yönlendirme kararlarını yönetir
 - `src/types/`: Tüm paylaşılan TypeScript tipleri; bileşen-lokal tipler kendi dosyasında kalır
-- `src/services/`: API/auth/Realm gibi saf servis katmanı (React bağımlılığı yok)
-- `src/lib/mmkv.*`: Platform bazlı storage shim — native `react-native-mmkv`, web `localStorage`
+- `src/services/realm.*`: Platform shim pattern — `realm.ts` platform'a göre `realm.native.ts` veya `realm.web.ts` export eder; Realm olmayan web ortamında localStorage kullanılır
+- `src/hooks/api/useChats.ts`: Chat listesi, mesajlar, like/unlike — Realm cache ile `initialData`, `staleTime` ile arka plan refetch, offline mutation desteği
+- `src/lib/offlineQueue.ts`: `@mustafaaksoy41/react-native-offline-queue` üzerinde çalışır; `SEND_MESSAGE` ve `LIKE_MESSAGE` action'ları Realm'de kuyruklanır, online olunca flush edilir
 - `src/store/`: Redux Toolkit slice'ları; slice-lokal tipler `src/types/settings.types.ts`'ten beslenir
+
+---
+
+## Testler
+
+Jest + `jest-expo` + `@testing-library/react-native` kullanılır.
+
+```bash
+# Tüm testleri çalıştır
+npm test
+
+# CI modunda (coverage dahil)
+npm run test:ci
+```
+
+Test dosyaları ilgili modülün yanındaki `__tests__/` klasöründe bulunur:
+
+| Klasör | Kapsam |
+|---|---|
+| `src/store/slices/__tests__/` | Redux reducer ve selector testleri (chatSlice, authSlice) |
+| `src/services/__tests__/` | `realm.web.ts` localStorage mantığı — saveSessions, saveMessages, updateMessageLiked |
+| `src/api/__tests__/` | `likeMessage`, `syncLikes` endpoint kontrat testleri |
+| `src/hooks/api/__tests__/` | `CHAT_QUERY_KEYS` stabilitesi, `LikeMessagePayload` semantiği |
+| `src/hooks/__tests__/` | `toLocalMessage` helper — liked mapping, role normalizasyon, fallback id |
+| `src/constants/__tests__/` | Model sabitleri |
 
 ---
 
