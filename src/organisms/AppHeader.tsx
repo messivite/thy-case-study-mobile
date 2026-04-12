@@ -157,7 +157,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
       style={[
         styles.gradientOuter,
         {
-          paddingTop: safeAreaTop ? (IS_WEB ? 0 : Platform.OS === 'ios' ? Math.max(0, insets.top - 20) : insets.top) : 0,
+          paddingTop: safeAreaTop ? (IS_WEB ? 0 : Platform.OS === 'ios' ? Math.max(0, insets.top - 10) : insets.top) : 0,
         },
         style,
       ]}
@@ -201,7 +201,7 @@ const styles = StyleSheet.create({
   },
   sideSlotRight: {
     alignItems: 'flex-end',
-    paddingRight: scale(15),
+    paddingRight: Platform.OS === 'web' ? 0 : scale(15),
   },
   rightRow: {
     flexDirection: 'row',
@@ -231,6 +231,7 @@ const styles = StyleSheet.create({
   backBtn: {
     alignItems: 'center',
     justifyContent: 'center',
+    marginLeft: scale(15),
   },
   backCircle: {
     width: scale(34),

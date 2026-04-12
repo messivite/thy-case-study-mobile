@@ -58,7 +58,7 @@ export function useWhoIAm(): WhoIAm {
       displayName: data.profile.displayName ?? '',
       email: data.user.email ?? '',
       role: data.profile.role,
-      appRoles: data.user.appMetadata?.roles ?? [],
+      appRoles: data.user.appMetadata?.roles ?? EMPTY.appRoles,
       isAnonymous: data.profile.isAnonymous,
       locale: data.profile.locale,
       onboardingCompleted: data.profile.onboardingCompleted,

@@ -32,6 +32,7 @@
         "backgroundColor": "#FFFFFF"
       },
       "package": "com.thy.assistant",
+      "permissions": ["android.permission.ACCESS_NETWORK_STATE"],
       "softwareKeyboardLayoutMode": "resize",
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false

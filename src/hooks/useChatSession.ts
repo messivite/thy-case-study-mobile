@@ -18,7 +18,7 @@ import { Attachment, Message } from '@/types/chat.types';
 import { ChatMessage, PaginatedMessagesResponse } from '@/types/chat.api.types';
 import { realmService } from '@/services/realm';
 import { toast } from '@/lib/toast';
-import { useOfflineMutation, useNetworkStatus } from '@mustafaaksoy41/react-native-offline-queue';
+import { useOfflineMutation, useNetworkStatus, useOfflineQueue } from '@mustafaaksoy41/react-native-offline-queue';
 import { OFFLINE_ACTIONS } from '@/lib/offlineQueue';
 
 // ---------------------------------------------------------------------------
@@ -58,6 +58,8 @@ export const useChatSession = () => {
   const { isOnline } = useNetworkStatus();
   const isOnlineRef = useRef(isOnline);
   useEffect(() => { isOnlineRef.current = isOnline; }, [isOnline]);
+
+  const { queue } = useOfflineQueue();
 
   // Tek subscription — 4 ayrı useAppSelector yerine bir kez Redux store'u dinle.
   // Her biri ayrı subscription açsaydı, birisi değişince 4 ayrı re-render tetiklerdi.
@@ -144,6 +146,27 @@ export const useChatSession = () => {
       handler: async (payload) => {
         const { content, chatId: cid, provider, model } = payload;
 
+        // Sync'ten geliyorsa (kuyruktaki mesaj işlenirken) optimistic bubble'ı restore et
+        const isQueued = Date.now() - new Date(payload.sentAt).getTime() > 5000;
+        if (isQueued) {
+          activeChatIdRef.current = cid;
+          streamCancelledRef.current = false;
+          streamingMsgIdRef.current = 'streaming';
+          setStreamingMsgIdState('streaming');
+          optimisticUserMsgRef.current = payload.optimisticMsg;
+          if (streamingEnabledRef.current) {
+            unstable_batchedUpdates(() => {
+              setOptimisticUserMsg(payload.optimisticMsg);
+              setIsStreamingActive(true);
+            });
+          } else {
+            unstable_batchedUpdates(() => {
+              setOptimisticUserMsg(payload.optimisticMsg);
+              setIsNonStreamPending(true);
+            });
+          }
+        }
+
         if (streamingEnabledRef.current) {
           await new Promise<void>((resolve, reject) => {
             const ctrl = new AbortController();
@@ -208,8 +231,15 @@ export const useChatSession = () => {
                   writtenLenRef.current = 0;
                   pendingStreamSV.value = '';
                   setIsStreamingActive(false);
-                  setOptimisticUserMsg(null);
                   abortCtrlRef.current = null;
+                  // Offline'da stream kesilince queued bubble bırak
+                  if (!isOnlineRef.current) {
+                    const queuedMsg = { ...payload.optimisticMsg, queued: true };
+                    optimisticUserMsgRef.current = queuedMsg;
+                    setOptimisticUserMsg(queuedMsg);
+                  } else {
+                    setOptimisticUserMsg(null);
+                  }
                   if (err !== 'aborted') reject(new Error(String(err)));
                   else resolve();
                 },
@@ -218,14 +248,12 @@ export const useChatSession = () => {
             ).catch(reject);
           });
         } else {
-          const sentAt = payload.sentAt;
-          const isQueued = Date.now() - new Date(sentAt).getTime() > 5000;
           if (isQueued) {
             // Offline'da kuyruğa alınmış → sync API
             await syncChat(cid, {
               provider,
               model,
-              messages: [{ content, sentAt }],
+              messages: [{ content, sentAt: payload.sentAt }],
             });
           } else {
             // Direkt gönderim
@@ -254,11 +282,11 @@ export const useChatSession = () => {
           toast.info('Çevrimdışı – mesaj kuyruğa alındı');
         }
       },
-      onSuccess: () => {
-        if (activeChatIdRef.current) {
-          queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.messages(activeChatIdRef.current) });
-          queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
-        }
+      onSuccess: (payload) => {
+        // payload.chatId — sync sırasında activeChatIdRef başka session'a işaret edebilir
+        const cid = payload.chatId;
+        queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.messages(cid) });
+        queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
         if (!streamingEnabledRef.current) {
           unstable_batchedUpdates(() => {
             setIsNonStreamPending(false);
@@ -266,13 +294,25 @@ export const useChatSession = () => {
           });
         }
       },
-      onError: () => {
-        unstable_batchedUpdates(() => {
-          setIsStreamingActive(false);
-          setIsNonStreamPending(false);
-          setOptimisticUserMsg(null);
-        });
-        toast.error('Mesaj gönderilemedi');
+      onError: (_err, payload) => {
+        if (!isOnlineRef.current) {
+          // Offline'da hata → queued bubble göster, toast yok
+          const queuedMsg = { ...payload.optimisticMsg, queued: true };
+          optimisticUserMsgRef.current = queuedMsg;
+          unstable_batchedUpdates(() => {
+            setIsStreamingActive(false);
+            setIsNonStreamPending(false);
+            setOptimisticUserMsg(queuedMsg);
+          });
+          toast.info('Çevrimdışı – mesaj kuyruğa alındı');
+        } else {
+          unstable_batchedUpdates(() => {
+            setIsStreamingActive(false);
+            setIsNonStreamPending(false);
+            setOptimisticUserMsg(null);
+          });
+          toast.error('Mesaj gönderilemedi');
+        }
       },
     },
   );
@@ -391,6 +431,31 @@ export const useChatSession = () => {
     }
     prevSessionIdRef.current = chatId;
   }, [chatId]);
+
+  // App açılınca veya session değişince: queue'da bu chat'e ait pending mesaj varsa
+  // queued bubble'ı restore et (en son kuyruğa alınan mesaj gösterilir)
+  // Kullanıcı bir chat açınca: queue'da o chat'e ait pending mesaj varsa bubble'ı restore et
+  useEffect(() => {
+if (!chatId) return;
+    const pending = queue.filter(
+      (item) => item.actionName === OFFLINE_ACTIONS.SEND_MESSAGE &&
+        (item.payload as SendMessagePayload).chatId === chatId,
+    );
+    if (pending.length === 0) {
+      // Bu chat'te pending yok — eğer önceden queued bubble set edildiyse temizle
+      if (optimisticUserMsgRef.current?.queued) {
+        optimisticUserMsgRef.current = null;
+        setOptimisticUserMsg(null);
+      }
+      return;
+    }
+    const last = pending[pending.length - 1];
+    const payload = last.payload as SendMessagePayload;
+    const queuedMsg = { ...payload.optimisticMsg, queued: true };
+    optimisticUserMsgRef.current = queuedMsg;
+    setOptimisticUserMsg(queuedMsg);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatId, queue]);
 
   // ---------------------------------------------------------------------------
   // Flatten paginated messages
@@ -520,6 +585,10 @@ export const useChatSession = () => {
       // Önce chat oluştur — hem online hem offline path için chatId gerekli
       let activeChatId = chatId;
       if (!activeChatId) {
+        if (!isOnlineRef.current) {
+          toast.info('Yeni sohbet başlatmak için internet bağlantısı gerekli');
+          return;
+        }
         try {
           const chat = await createChatMutateRef.current({
             title: content.slice(0, 50),
@@ -548,18 +617,21 @@ export const useChatSession = () => {
       lastStreamTextRef.current = '';
       streamCancelledRef.current = false;
 
-      // Online ise UI'ı hemen aktiflestir; offline ise onOptimisticSuccess halleder
-      if (streamingEnabledRef.current) {
-        unstable_batchedUpdates(() => {
-          setOptimisticUserMsg(optimisticUser);
-          setIsStreamingActive(true);
-        });
-      } else {
-        unstable_batchedUpdates(() => {
-          setOptimisticUserMsg(optimisticUser);
-          setIsNonStreamPending(true);
-        });
+      // Online ise streaming/pending UI; offline ise queued bubble (onOptimisticSuccess set eder)
+      if (isOnlineRef.current) {
+        if (streamingEnabledRef.current) {
+          unstable_batchedUpdates(() => {
+            setOptimisticUserMsg(optimisticUser);
+            setIsStreamingActive(true);
+          });
+        } else {
+          unstable_batchedUpdates(() => {
+            setOptimisticUserMsg(optimisticUser);
+            setIsNonStreamPending(true);
+          });
+        }
       }
+      // Offline: onOptimisticSuccess queued:true ile bubble'ı set eder
 
       await dispatchMessage({
         content,

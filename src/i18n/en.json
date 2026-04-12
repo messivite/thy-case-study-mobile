@@ -96,7 +96,9 @@
     "onlineMessagePending": "{{count}} action(s) queued while offline. Sync now to send them.",
     "syncPendingMessages": "{{count}} message(s)",
     "syncPendingLikes": "{{count}} like(s)",
-    "syncSuccess": "Synced successfully, chat updated",
+    "syncSuccess": "Synced successfully",
+    "syncDoneSubtitle": "All messages sent",
+    "syncPartialTitle": "Partially completed",
     "syncingTitle": "Syncing...",
     "syncingMessage": "{{completed}} / {{total}} actions completed",
     "syncFailed": "{{count}} action(s) failed to send"
