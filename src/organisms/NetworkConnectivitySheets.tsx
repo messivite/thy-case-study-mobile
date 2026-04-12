@@ -36,7 +36,10 @@ export function NetworkConnectivitySheets({ enabled = true, promptOnMount = fals
   // Paketin state'leri
   const { isOnline } = useNetworkStatus();
   const { pendingCount, isSyncing, syncNow } = useOfflineQueue();
-  const { percentage, completedCount, totalCount, failedCount } = useSyncProgress();
+  const { percentage, completedCount, totalCount, failedCount, items } = useSyncProgress();
+
+  const pendingMessages = items.filter((i) => i.action.actionName === 'SEND_MESSAGE').length;
+  const pendingLikes = items.filter((i) => i.action.actionName === 'LIKE_MESSAGE').length;
 
   // Sheet görünürlük state'leri — paketin isOnline'ından türetilir
   const [offlineOpen, setOfflineOpen] = useState(() => enabled && preview === 'offline');
@@ -136,6 +139,27 @@ export function NetworkConnectivitySheets({ enabled = true, promptOnMount = fals
                 : t('network.onlineMessage')}
           </Text>
 
+          {!isSyncing && pendingCount > 0 && (pendingMessages > 0 || pendingLikes > 0) && (
+            <View style={styles.breakdown}>
+              {pendingMessages > 0 && (
+                <View style={styles.breakdownItem}>
+                  <Ionicons name="chatbubble-outline" size={14} color={colors.textSecondary} />
+                  <Text variant="caption" color={colors.textSecondary}>
+                    {t('network.syncPendingMessages', { count: pendingMessages })}
+                  </Text>
+                </View>
+              )}
+              {pendingLikes > 0 && (
+                <View style={styles.breakdownItem}>
+                  <Ionicons name="thumbs-up-outline" size={14} color={colors.textSecondary} />
+                  <Text variant="caption" color={colors.textSecondary}>
+                    {t('network.syncPendingLikes', { count: pendingLikes })}
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+
           {isSyncing && (
             <View style={styles.progressBar}>
               <View style={[styles.progressFill, { width: `${percentage}%`, backgroundColor: palette.primary }]} />
@@ -203,6 +227,17 @@ const styles = StyleSheet.create({
   laterText: {
     fontFamily: fontFamily.medium,
     fontSize: fontSize.sm,
+  },
+  breakdown: {
+    flexDirection: 'row',
+    gap: spacing[3],
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+  },
+  breakdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[1],
   },
   progressBar: {
     width: '100%',

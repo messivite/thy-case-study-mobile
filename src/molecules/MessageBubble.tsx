@@ -21,6 +21,7 @@ import { Text } from '@/atoms/Text';
 import { AttachmentPreview } from '@/molecules/AttachmentPreview';
 import { ThemeColors } from '@/constants/colors';
 import { useHaptics } from '@/hooks/useHaptics';
+import { useTranslation } from 'react-i18next';
 import { palette } from '@/constants/colors';
 import { fontFamily } from '@/constants/typography';
 import { radius, spacing } from '@/constants/spacing';
@@ -75,6 +76,7 @@ const MessageBubbleInner: React.FC<Props> = ({
   hideModelLabel = false,
 }) => {
   const haptics = useHaptics();
+  const { t } = useTranslation();
 
   const likeScale = useSharedValue(1);
   const unlikeScale = useSharedValue(1);
@@ -289,7 +291,7 @@ const MessageBubbleInner: React.FC<Props> = ({
           {!hideFooter && !hideModelLabel && message.model && (
             <Animated.View entering={FadeIn.duration(200).delay(80)}>
               <Text variant="micro" color={colors.textSecondary} style={styles.modelLabel}>
-                {`Bu mesaj ${message.model} ile üretildi`}
+                {t('assistant.generatedBy', { model: message.model })}
               </Text>
             </Animated.View>
           )}
