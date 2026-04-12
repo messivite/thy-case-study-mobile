@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { unstable_batchedUpdates } from 'react-native';
+import { Platform } from 'react-native';
+import { unstable_batchedUpdates } from '@/lib/batchedUpdates';
 import { useSharedValue } from 'react-native-reanimated';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { shallowEqual } from 'react-redux';
@@ -273,6 +274,99 @@ export const useChatSession = () => {
     },
   );
 
+  // Web'de offline queue yoktur — handler'ı direkt çağır
+  const mutateOfflineRef = useRef(mutateOffline);
+  useEffect(() => { mutateOfflineRef.current = mutateOffline; }, [mutateOffline]);
+
+  const dispatchMessage = useCallback(async (payload: SendMessagePayload) => {
+    if (Platform.OS === 'web') {
+      // Web'de offline queue yok, handler'ı senkron çağır
+      const { content, chatId: cid, provider, model } = payload;
+      if (streamingEnabledRef.current) {
+        await new Promise<void>((resolve, reject) => {
+          const ctrl = new AbortController();
+          abortCtrlRef.current = ctrl;
+          streamDoneRef.current = false;
+          isStreamingDoneSV.value = false;
+          pendingBufferRef.current = '';
+          writtenLenRef.current = 0;
+          pendingStreamSV.value = '';
+          streamResetCountSV.value = streamResetCountSV.value + 1;
+          if (typewriterIntervalRef.current) clearInterval(typewriterIntervalRef.current);
+          typewriterIntervalRef.current = setInterval(() => {
+            const buf = pendingBufferRef.current;
+            const written = writtenLenRef.current;
+            if (written < buf.length) {
+              const next = Math.min(written + 6, buf.length);
+              writtenLenRef.current = next;
+              pendingStreamSV.value = buf.slice(0, next);
+            } else if (streamDoneRef.current) {
+              clearInterval(typewriterIntervalRef.current!);
+              typewriterIntervalRef.current = null;
+              isStreamingDoneSV.value = true;
+            }
+          }, 32);
+          streamChat(
+            cid,
+            { provider, model, messages: [{ role: 'user', content }] },
+            {
+              onMeta: (meta) => {
+                if (meta?.assistantMessageId && streamingMsgIdRef.current === 'streaming') {
+                  streamingMsgIdRef.current = meta.assistantMessageId;
+                  setStreamingMsgIdState(meta.assistantMessageId);
+                }
+                if (meta?.userMessageId && optimisticUserMsgRef.current && optimisticUserMsgRef.current.id !== meta.userMessageId) {
+                  optimisticUserMsgRef.current = { ...optimisticUserMsgRef.current, id: meta.userMessageId };
+                }
+                streamMetaRef.current = { provider: meta?.provider, model: meta?.model, userMessageId: meta?.userMessageId };
+              },
+              onDelta: (delta) => {
+                if (!streamCancelledRef.current) pendingBufferRef.current = pendingBufferRef.current + delta;
+              },
+              onDone: () => {
+                abortCtrlRef.current = null;
+                streamDoneRef.current = true;
+                resolve();
+                if (activeChatIdRef.current) {
+                  queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.messages(activeChatIdRef.current) });
+                  queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
+                }
+              },
+              onError: (err) => {
+                streamCancelledRef.current = true;
+                streamDoneRef.current = false;
+                if (typewriterIntervalRef.current) { clearInterval(typewriterIntervalRef.current); typewriterIntervalRef.current = null; }
+                isStreamingDoneSV.value = false;
+                pendingBufferRef.current = '';
+                writtenLenRef.current = 0;
+                pendingStreamSV.value = '';
+                setIsStreamingActive(false);
+                setOptimisticUserMsg(null);
+                abortCtrlRef.current = null;
+                if (err !== 'aborted') reject(new Error(String(err)));
+                else resolve();
+              },
+            },
+            ctrl.signal,
+          ).catch(reject);
+        });
+      } else {
+        await sendMessageApi(cid, { provider, model, messages: [{ role: 'user', content }] });
+        queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.messages(cid) });
+        queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
+      }
+      if (!streamingEnabledRef.current) {
+        unstable_batchedUpdates(() => {
+          setIsNonStreamPending(false);
+          setOptimisticUserMsg(null);
+        });
+      }
+    } else {
+      await mutateOfflineRef.current(payload);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // mutateAsync stable ref — sendMessage useCallback dep array'ini şişirmez
   const createChatMutateRef = useRef(createChatMutation.mutateAsync);
   useEffect(() => {
@@ -463,7 +557,7 @@ export const useChatSession = () => {
         });
       }
 
-      await mutateOffline({
+      await dispatchMessage({
         content,
         chatId: activeChatId,
         provider,
@@ -473,7 +567,7 @@ export const useChatSession = () => {
       });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [chatId, mutateOffline, dispatch],
+    [chatId, dispatchMessage, dispatch],
   );
 
   // ---------------------------------------------------------------------------
