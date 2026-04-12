@@ -211,9 +211,9 @@ export default function SettingsScreen() {
   } as const;
 
   return (
-    <View style={styles.safe}>
+    <View style={[styles.safe, { backgroundColor: colors.background }]}>
       <ScrollView
-        style={styles.scrollView}
+        style={[styles.scrollView, { backgroundColor: colors.background }]}
         contentContainerStyle={[styles.scroll, { paddingBottom: Math.max(insets.bottom, 20) + spacing[10] }]}
         showsVerticalScrollIndicator={false}
         bounces
@@ -266,7 +266,7 @@ export default function SettingsScreen() {
                 <View style={[styles.avatarUploadBadge, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                   {isUploading
                     ? <ActivityIndicator size={14} color={palette.primary} />
-                    : <Ionicons name="camera-outline" size={14} color={colors.textSecondary} />
+                    : <Ionicons name="camera-outline" size={25} color={colors.textSecondary} />
                   }
                 </View>
               )}
@@ -586,9 +586,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 0,
     right: 0,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 45,
+    height: 45,
+    borderRadius: 22.5,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,

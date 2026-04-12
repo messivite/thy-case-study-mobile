@@ -168,6 +168,7 @@
     "avatarUpdateFailed": "Failed to upload photo",
     "profileUpdated": "Profile saved",
     "profileUpdateFailed": "Failed to save profile",
+    "modelPreferenceUpdated": "Model preference updated",
     "displayName": "Display Name",
     "displayNamePlaceholder": "Your name",
     "displayNameMin": "Name must be at least 2 characters"
