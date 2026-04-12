@@ -31,6 +31,9 @@ import { spacing, radius } from '@/constants/spacing';
 import { palette } from '@/constants/colors';
 import { fontFamily } from '@/constants/typography';
 import { openExternalLink } from '@/lib/openExternalLink';
+import { DESIGN_BASE_WIDTH } from '@/lib/responsive';
+
+const IS_WEB = Platform.OS === 'web';
 
 type SettingsRowItem = ComponentProps<typeof SettingsSection>['items'][number];
 
@@ -174,6 +177,13 @@ export default function SettingsScreen() {
   }
 
   const handleLogout = () => {
+    if (Platform.OS === 'web') {
+      if (window.confirm(t('settings.logoutConfirm'))) {
+        logout();
+        toast.success(t('toast.logoutSuccess'));
+      }
+      return;
+    }
     Alert.alert(t('settings.logout'), t('settings.logoutConfirm'), [
       { text: t('common.cancel'), style: 'cancel' },
       {
@@ -544,6 +554,11 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: spacing[4],
     paddingTop: spacing[4],
+    ...(IS_WEB && {
+      maxWidth: DESIGN_BASE_WIDTH,
+      width: '100%',
+      alignSelf: 'center' as const,
+    }),
   },
   profileCard: {
     flexDirection: 'column',

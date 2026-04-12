@@ -21,7 +21,6 @@ export function useValidatedForm<T extends FieldValues>(
     resolver: zodResolver(schema, undefined, { mode: 'sync' }) as Resolver<T>,
     mode: 'onChange',
     reValidateMode: 'onChange',
-    /** anında hata temizliği / border senkronu */
     delayError: 0,
     shouldFocusError: false,
     ...options,

@@ -94,7 +94,10 @@ export const LiquidBottomSheet: React.FC<Props> = ({
     if (closeOnBackdropPress) { haptics.light(); onClose(); }
   };
 
-  const innerStyle = [styles.sheetInner, { paddingBottom: spacing[5] + insets.bottom }, contentStyle];
+  const IS_WEB = Platform.OS === 'web';
+  // Web'de safe area inset 0 gelir, sabit fallback ekle
+  const bottomPad = spacing[5] + (IS_WEB ? 16 : insets.bottom);
+  const innerStyle = [styles.sheetInner, { paddingBottom: bottomPad }, contentStyle];
 
   const sheetBody =
     variant === 'glass' ? (
@@ -145,7 +148,7 @@ export const LiquidBottomSheet: React.FC<Props> = ({
           pointerEvents="box-none"
         >
           <View style={styles.sheetMaxWidth} pointerEvents="box-none">
-            <View style={styles.sheetCard}>
+            <View style={[styles.sheetCard, IS_WEB && { overflow: 'visible' }]}>
               {showHandle && (
                 <View style={[styles.handle, { backgroundColor: colors.textSecondary }]} />
               )}
@@ -206,7 +209,6 @@ const styles = StyleSheet.create({
   },
   sheetCard: {
     position: 'relative',
-    overflow: 'hidden',
     borderTopLeftRadius: radius['2xl'],
     borderTopRightRadius: radius['2xl'],
   },
