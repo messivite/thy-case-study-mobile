@@ -27,6 +27,7 @@ import { EditProfileSheet } from '@/organisms/EditProfileSheet';
 import { LanguagePickerSheet } from '@/organisms/LanguagePickerSheet';
 import { ThemePickerSheet } from '@/organisms/ThemePickerSheet';
 import { useUploadAvatar } from '@/hooks/api/useUploadAvatar';
+import { useGetUsageQuery } from '@/hooks/api/useUsage';
 import { spacing, radius } from '@/constants/spacing';
 import { palette } from '@/constants/colors';
 import { fontFamily } from '@/constants/typography';
@@ -203,13 +204,7 @@ export default function SettingsScreen() {
   const appVersion = Constants.expoConfig?.version ?? '1.0.0';
 
 
-  // TODO: API entegresinde gerçek quota verisiyle değiştirilecek.
-  const usageMock = {
-    dailyUsed: 7,
-    dailyLimit: 20,
-    weeklyUsed: 32,
-    weeklyLimit: 90,
-  } as const;
+  const { data: usageData } = useGetUsageQuery();
 
   return (
     <>
@@ -333,10 +328,10 @@ export default function SettingsScreen() {
           transition={{ type: 'timing', duration: 350, delay: 40 }}
         >
           <UsageStatsCard
-            dailyUsed={usageMock.dailyUsed}
-            dailyLimit={usageMock.dailyLimit}
-            weeklyUsed={usageMock.weeklyUsed}
-            weeklyLimit={usageMock.weeklyLimit}
+            dailyUsed={usageData?.daily.usedTokens ?? 0}
+            dailyLimit={usageData?.daily.limitTokens ?? 0}
+            weeklyUsed={usageData?.weekly.usedTokens ?? 0}
+            weeklyLimit={usageData?.weekly.limitTokens ?? 0}
           />
         </MotiView>
 
