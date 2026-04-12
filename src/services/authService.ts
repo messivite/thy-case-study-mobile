@@ -8,6 +8,7 @@
 
 import { supabase } from '@/services/supabase';
 import { secureStorage, SECURE_KEYS } from '@/lib/secureStore';
+import type { AuthErrorCode } from '@/types/auth.types';
 import type { Session, User as SupabaseUser, AuthError } from '@supabase/supabase-js';
 
 // ---------------------------------------------------------------------------
@@ -245,14 +246,6 @@ export function isTokenExpired(expiresAt: number, bufferSeconds = 60): boolean {
 // ---------------------------------------------------------------------------
 // Error mapper
 // ---------------------------------------------------------------------------
-
-export type AuthErrorCode =
-  | 'INVALID_CREDENTIALS'
-  | 'EMAIL_NOT_CONFIRMED'
-  | 'USER_ALREADY_REGISTERED'
-  | 'PASSWORD_TOO_SHORT'
-  | 'RATE_LIMITED'
-  | 'UNKNOWN';
 
 function mapAuthError(error: AuthError | null | undefined): { message: string; code: AuthErrorCode } {
   if (!error) return { message: 'UNKNOWN', code: 'UNKNOWN' };

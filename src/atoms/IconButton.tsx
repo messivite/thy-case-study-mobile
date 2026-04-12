@@ -7,8 +7,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useHaptics } from '@/hooks/useHaptics';
 import { radius } from '@/constants/spacing';
-
-type HapticType = 'light' | 'medium' | 'heavy' | 'selection' | 'error' | 'success' | 'warning';
+import type { HapticType } from '@/types/ui.types';
 
 type Props = {
   onPress?: () => void;

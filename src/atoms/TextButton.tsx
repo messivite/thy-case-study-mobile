@@ -7,9 +7,9 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Text } from '@/atoms/Text';
 import { useHaptics } from '@/hooks/useHaptics';
+import type { HapticType } from '@/types/ui.types';
 
 type TextVariant = 'body' | 'bodyMedium' | 'label' | 'caption' | 'h4';
-type HapticType = 'light' | 'medium' | 'selection' | 'error' | 'success' | 'warning';
 
 type Props = {
   title: string;

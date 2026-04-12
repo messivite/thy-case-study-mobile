@@ -44,6 +44,7 @@ import { useHaptics } from '@/hooks/useHaptics';
 import { palette } from '@/constants/colors';
 import { spacing, radius } from '@/constants/spacing';
 import { DESIGN_BASE_WIDTH } from '@/lib/responsive';
+import type { OnboardingBackgroundVariant } from '@/types/ui.types';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -490,7 +491,7 @@ const bottomStyles = StyleSheet.create({
 export interface OnboardingDeckV2Props {
   onComplete: () => void;
   onSkip: () => Promise<void>;
-  variant?: 'red' | 'navy' | 'gradient';
+  variant?: OnboardingBackgroundVariant;
   /** Slayt değişince (ör. ağ sheet’i sadece 1. slaytta) */
   onActiveIndexChange?: (index: number) => void;
 }

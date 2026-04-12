@@ -1,16 +1,15 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import { mmkvStorage, STORAGE_KEYS } from '@/lib/mmkv';
-
-type ThemeMode = 'light' | 'dark' | 'system';
+import type { ThemeMode, AppLanguage } from '@/types/settings.types';
 
 type SettingsState = {
   theme: ThemeMode;
-  language: 'tr' | 'en';
+  language: AppLanguage;
   streamingEnabled: boolean;
 };
 
 const savedTheme = (mmkvStorage.getString(STORAGE_KEYS.THEME) as ThemeMode | undefined) ?? 'system';
-const savedLanguage = (mmkvStorage.getString(STORAGE_KEYS.LANGUAGE) as 'tr' | 'en' | undefined) ?? 'tr';
+const savedLanguage = (mmkvStorage.getString(STORAGE_KEYS.LANGUAGE) as AppLanguage | undefined) ?? 'tr';
 const savedStreaming = mmkvStorage.getString(STORAGE_KEYS.STREAMING);
 const initialState: SettingsState = {
   theme: savedTheme,
@@ -26,7 +25,7 @@ const settingsSlice = createSlice({
       state.theme = action.payload;
       mmkvStorage.setString(STORAGE_KEYS.THEME, action.payload);
     },
-    setLanguage(state, action: PayloadAction<'tr' | 'en'>) {
+    setLanguage(state, action: PayloadAction<AppLanguage>) {
       state.language = action.payload;
       mmkvStorage.setString(STORAGE_KEYS.LANGUAGE, action.payload);
     },
@@ -39,5 +38,3 @@ const settingsSlice = createSlice({
 
 export const { setTheme, setLanguage, setStreaming } = settingsSlice.actions;
 export default settingsSlice.reducer;
-
-export type { ThemeMode };

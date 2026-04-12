@@ -14,6 +14,14 @@ export type AuthStatus =
   | 'guest'       // misafir mod
   | 'unauthenticated'; // session yok, login gerekli
 
+export type AuthErrorCode =
+  | 'INVALID_CREDENTIALS'
+  | 'EMAIL_NOT_CONFIRMED'
+  | 'USER_ALREADY_REGISTERED'
+  | 'PASSWORD_TOO_SHORT'
+  | 'RATE_LIMITED'
+  | 'UNKNOWN';
+
 export type AuthState = {
   user: User | null;
   accessToken: string | null;

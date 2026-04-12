@@ -1,9 +1,10 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import { MeResponse, UpdateMeProfileRequest } from '@/types/user.api.types';
+import type { ProfileLoadStatus } from '@/types/settings.types';
 
 type ProfileState = {
   data: MeResponse | null;
-  status: 'idle' | 'loading' | 'success' | 'error';
+  status: ProfileLoadStatus;
   serverUnavailable: boolean;
 };
 
