@@ -455,23 +455,23 @@ export default function SettingsScreen() {
                 <Ionicons name="information-circle-outline" size={20} color={palette.warning} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text variant="bodyMedium" style={{ fontFamily: fontFamily.semiBold }}>
-                  Sentry Entegrasyonu
+                <Text variant="bodyMedium" color={colors.text} style={{ fontFamily: fontFamily.semiBold }}>
+                  {t('settings.sentryTitle')}
                 </Text>
                 <Text variant="caption" color={colors.textSecondary}>
-                  Error boundary akışını test et
+                  {t('settings.sentrySubtitle')}
                 </Text>
               </View>
               <View style={[styles.sentryBadge, { backgroundColor: palette.success + '20' }]}>
                 <View style={[styles.sentryDot, { backgroundColor: palette.success }]} />
                 <Text variant="caption" color={palette.success} style={{ fontFamily: fontFamily.semiBold }}>
-                  Aktif
+                  {t('settings.sentryActive')}
                 </Text>
               </View>
             </View>
 
             <Text variant="caption" color={colors.textSecondary} style={styles.sentryDesc}>
-              Butona basınca uygulama kasıtlı crash atar, Sentry hatayı yakalar ve Error Boundary devreye girer.
+              {t('settings.sentryDesc')}
             </Text>
 
             <Pressable
@@ -490,7 +490,7 @@ export default function SettingsScreen() {
                   color={palette.white}
                   style={{ fontFamily: fontFamily.semiBold }}
                 >
-                  Crash Test Başlat 💥
+                  {t('settings.sentryCrashTest')}
                 </Text>
               </LinearGradient>
             </Pressable>

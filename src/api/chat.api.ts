@@ -20,6 +20,8 @@ import {
   StreamEvent,
   SyncChatRequest,
   SyncChatResponse,
+  SyncLikesRequest,
+  SyncLikesResponse,
 } from '@/types/chat.api.types';
 
 
@@ -268,6 +270,21 @@ export const likeMessage = async (
 ): Promise<LikeMessageResponse> => {
   const { data } = await privateApi.post<LikeMessageResponse>(
     `/api/chats/${chatId}/messages/${messageId}/like`,
+    payload,
+  );
+  return data;
+};
+
+/**
+ * POST /api/chats/:chatId/likes/sync
+ * Toplu like/unlike sync — max 100 öğe
+ */
+export const syncLikes = async (
+  chatId: string,
+  payload: SyncLikesRequest,
+): Promise<SyncLikesResponse> => {
+  const { data } = await privateApi.post<SyncLikesResponse>(
+    `/api/chats/${chatId}/likes/sync`,
     payload,
   );
   return data;

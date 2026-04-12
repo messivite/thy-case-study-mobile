@@ -30,6 +30,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
+import { useI18n } from '@/hooks/useI18n';
 import { useHaptics } from '@/hooks/useHaptics';
 import { BlurView } from 'expo-blur';
 import { THYIcon } from '@/atoms/thy-icon';
@@ -506,6 +507,7 @@ const ChatInputInner: React.FC<Props> = ({
   placeholder = 'Mesajınızı yazın...',
 }) => {
   const { colors, isDark } = useTheme();
+  const { t } = useI18n();
   const haptics = useHaptics();
   const insets = useSafeAreaInsets();
   // insets.bottom keyboard açılınca değişmez — bir kez ref'e al, style recompute tetiklemesin
@@ -616,7 +618,7 @@ const ChatInputInner: React.FC<Props> = ({
         <View style={styles.toolbar}>
           <View style={styles.toolbarLeft}>
             <Text variant="caption" color={colors.textSecondary} style={styles.modelLabel}>
-              Model Tercihi:
+              {t('assistant.modelPreference')}:
             </Text>
             <ModelChip
               modelName={selectedAIModelName ?? model?.description ?? 'Model'}

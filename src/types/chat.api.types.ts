@@ -251,3 +251,31 @@ export type ChatSearchParams = {
   limit?: number;
   cursor?: string;
 };
+
+// ---------------------------------------------------------------------------
+// POST /api/chats/:chatId/likes/sync — Toplu like/unlike sync
+// ---------------------------------------------------------------------------
+
+/** Tek bir like/unlike sync kalemi */
+export type LikeSyncItem = {
+  messageId: string;
+  action: MessageLikeAction; // 1 = like, 2 = unlike
+};
+
+/** Sync isteğinin body'si — max 100 öğe */
+export type SyncLikesRequest = {
+  items: LikeSyncItem[];
+};
+
+/** Tek bir sync sonucu */
+export type LikeSyncResult = {
+  messageId: string;
+  ok: boolean;
+  state: 1 | 2; // 1 = liked, 2 = unliked
+  code?: string; // ok=false iken dolu
+};
+
+/** Sync endpoint response modeli */
+export type SyncLikesResponse = {
+  results: LikeSyncResult[];
+};

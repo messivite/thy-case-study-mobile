@@ -16,6 +16,7 @@ import {
   sendMessage,
   streamChat,
   syncChat,
+  syncLikes,
   getChatMessages,
   getPaginatedChats,
   searchChats,
