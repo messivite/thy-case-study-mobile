@@ -105,4 +105,23 @@ export const realmService = {
   async clearSessionMessages(sessionId: string): Promise<void> {
     localStorage.removeItem(MESSAGES_PREFIX + sessionId);
   },
+
+  async updateMessageLiked(messageId: string, liked: boolean | null): Promise<void> {
+    // Web'de hangi session'a ait olduğunu bilmiyoruz — tüm session key'lerini tara
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key?.startsWith(MESSAGES_PREFIX)) continue;
+        const stored = readJSON<StoredMessage[]>(key);
+        if (!stored) continue;
+        const idx = stored.findIndex((m) => m.id === messageId);
+        if (idx === -1) continue;
+        stored[idx] = { ...stored[idx], liked };
+        writeJSON(key, stored);
+        break;
+      }
+    } catch {
+      // sessizce geç
+    }
+  },
 };

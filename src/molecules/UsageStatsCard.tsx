@@ -10,6 +10,7 @@ import Animated, {
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/atoms/Text';
 import { useTheme } from '@/hooks/useTheme';
+import { useI18n } from '@/hooks/useI18n';
 import { palette } from '@/constants/colors';
 import { radius, spacing } from '@/constants/spacing';
 import { fontFamily } from '@/constants/typography';
@@ -25,10 +26,11 @@ type ProgressRowProps = {
   label: string;
   used: number;
   limit: number;
+  remainingLabel: string;
   delayMs?: number;
 };
 
-const ProgressRow: React.FC<ProgressRowProps> = ({ label, used, limit, delayMs = 0 }) => {
+const ProgressRow: React.FC<ProgressRowProps> = ({ label, used, limit, remainingLabel, delayMs = 0 }) => {
   const { colors } = useTheme();
   const progress = useSharedValue(0);
 
@@ -72,7 +74,7 @@ const ProgressRow: React.FC<ProgressRowProps> = ({ label, used, limit, delayMs =
       </View>
 
       <Text variant="micro" color="rgba(255,255,255,0.8)" style={styles.remainingText}>
-        Kalan: {remaining}
+        {remainingLabel} {remaining}
       </Text>
     </View>
   );
@@ -85,6 +87,7 @@ export const UsageStatsCard: React.FC<Props> = ({
   weeklyLimit,
 }) => {
   const { isDark } = useTheme();
+  const { t } = useI18n();
 
   const cardGradient = useMemo(
     () =>
@@ -112,17 +115,17 @@ export const UsageStatsCard: React.FC<Props> = ({
           </View>
           <View>
             <Text variant="h4" color={palette.white} style={styles.title}>
-              Kullanım Hakları
+              {t('settings.usageTitle')}
             </Text>
             <Text variant="caption" color="rgba(255,255,255,0.86)" style={styles.subtitle}>
-              Günlük / Haftalık kullanım özeti
+              {t('settings.usageSubtitle')}
             </Text>
           </View>
         </View>
 
         <View style={styles.remainingBadge}>
           <Text variant="micro" color={palette.white} style={styles.remainingLabel}>
-            Kalan
+            {t('settings.usageRemaining')}
           </Text>
           <Text variant="label" color={palette.white} style={styles.remainingValue}>
             {totalRemaining}
@@ -130,8 +133,8 @@ export const UsageStatsCard: React.FC<Props> = ({
         </View>
       </View>
 
-      <ProgressRow label="Günlük Hak" used={dailyUsed} limit={dailyLimit} delayMs={0} />
-      <ProgressRow label="Haftalık Hak" used={weeklyUsed} limit={weeklyLimit} delayMs={120} />
+      <ProgressRow label={t('settings.usageDaily')} used={dailyUsed} limit={dailyLimit} remainingLabel={t('settings.usageRemainingLabel')} delayMs={0} />
+      <ProgressRow label={t('settings.usageWeekly')} used={weeklyUsed} limit={weeklyLimit} remainingLabel={t('settings.usageRemainingLabel')} delayMs={120} />
     </LinearGradient>
   );
 };

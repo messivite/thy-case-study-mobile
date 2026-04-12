@@ -41,6 +41,7 @@ export class RealmMessage extends Realm.Object<RealmMessage> {
   syncedAt!: number;
   provider?: string;
   model?: string;
+  liked?: boolean | null;
 
   static schema: Realm.ObjectSchema = {
     name: 'RealmMessage',
@@ -54,6 +55,7 @@ export class RealmMessage extends Realm.Object<RealmMessage> {
       syncedAt: 'int',
       provider: 'string?',
       model: 'string?',
+      liked: 'bool?',
     },
   };
 }
@@ -79,7 +81,7 @@ export const openRealm = (): Promise<Realm> => {
 
   _realmPromise = Realm.open({
     schema: [RealmSession, RealmMessage],
-    schemaVersion: 8,
+    schemaVersion: 9,
     onMigration: (_oldRealm: Realm, newRealm: Realm) => {
       // v1 → v2: lastMessagePreview alani eklendi, mevcutlara bos string ver
       const sessions = newRealm.objects('RealmSession');
@@ -247,6 +249,7 @@ export const realmService = {
         provider: m.provider ?? '',
         model: m.model ?? '',
         createdAt: m.createdAt,
+        liked: m.liked ?? null,
       }));
 
       const syncedAt = Math.max(...arr.map((m) => m.syncedAt));
@@ -280,6 +283,7 @@ export const realmService = {
               syncedAt: now,
               provider: msg.provider ?? undefined,
               model: msg.model ?? undefined,
+              liked: msg.liked ?? null,
             },
             Realm.UpdateMode.Modified,
           );
@@ -312,6 +316,21 @@ export const realmService = {
       });
     } catch {
       // sessizce gec
+    }
+  },
+
+  /**
+   * Tek bir mesajın liked alanını günceller. Async.
+   */
+  async updateMessageLiked(messageId: string, liked: boolean | null): Promise<void> {
+    try {
+      const realm = await openRealm();
+      realm.write(() => {
+        const msg = realm.objectForPrimaryKey<RealmMessage>('RealmMessage', messageId);
+        if (msg) msg.liked = liked;
+      });
+    } catch {
+      // sessizce geç
     }
   },
 

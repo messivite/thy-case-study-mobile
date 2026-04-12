@@ -9,12 +9,13 @@ import {
   useCreateChatMutation,
   useInfiniteChatsQuery,
   useInfiniteMessagesQuery,
+  useLikeMessageMutation,
   CHAT_QUERY_KEYS,
 } from '@/hooks/api/useChats';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, InfiniteData } from '@tanstack/react-query';
 import { streamChat, sendMessage as sendMessageApi, syncChat } from '@/api/chat.api';
 import { Attachment, Message } from '@/types/chat.types';
-import { ChatMessage } from '@/types/chat.api.types';
+import { ChatMessage, PaginatedMessagesResponse } from '@/types/chat.api.types';
 import { realmService } from '@/services/realm';
 import { toast } from '@/lib/toast';
 import { useOfflineMutation, useNetworkStatus } from '@mustafaaksoy41/react-native-offline-queue';
@@ -44,6 +45,7 @@ const toLocalMessage = (msg: ChatMessage): Message => ({
   timestamp: msg.createdAt ? new Date(msg.createdAt).getTime() : Date.now(),
   provider: msg.provider,
   model: msg.model,
+  liked: msg.liked ?? null,
 });
 
 // ---------------------------------------------------------------------------
@@ -130,6 +132,7 @@ export const useChatSession = () => {
 
   // Mutations
   const createChatMutation = useCreateChatMutation();
+  const { mutateOffline: mutateOfflineLike } = useLikeMessageMutation(sessionId ?? '');
 
   // ---------------------------------------------------------------------------
   // Offline mutation — online ise handler anında çalışır, offline ise kuyruğa alır
@@ -656,10 +659,29 @@ export const useChatSession = () => {
     [sessionId, dispatch],
   );
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const likeMessage = useCallback((_id: string, _liked: boolean | null) => {
-    // TODO: API entegrasyonu
-  }, []);
+  const likeMessage = useCallback((messageId: string, liked: boolean | null) => {
+    if (!sessionId || !messageId) return;
+    const action = liked === true ? 1 : 2;
+
+    // Optimistic: React Query cache'i hemen güncelle — doğru sessionId ile
+    queryClient.setQueryData<InfiniteData<PaginatedMessagesResponse>>(
+      CHAT_QUERY_KEYS.messages(sessionId),
+      (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          pages: old.pages.map((page) => ({
+            ...page,
+            messages: page.messages.map((msg) =>
+              (msg as any).id === messageId ? { ...msg, liked } : msg,
+            ),
+          })),
+        };
+      },
+    );
+
+    void mutateOfflineLike({ chatId: sessionId, messageId, action, liked });
+  }, [sessionId, mutateOfflineLike, queryClient]);
 
   const isTyping = streamingEnabled ? isStreamingActive : isNonStreamPending;
 

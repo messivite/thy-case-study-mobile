@@ -7,8 +7,13 @@ import {
 } from 'react-native';
 import Animated, {
   FadeIn,
+  useSharedValue,
+  useAnimatedStyle,
+  withSequence,
+  withTiming,
 } from 'react-native-reanimated';
 import Svg, { Path } from 'react-native-svg';
+import Markdown from 'react-native-markdown-display';
 import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
 import { Message } from '@/types/chat.types';
@@ -16,8 +21,11 @@ import { Text } from '@/atoms/Text';
 import { AttachmentPreview } from '@/molecules/AttachmentPreview';
 import { ThemeColors } from '@/constants/colors';
 import { useHaptics } from '@/hooks/useHaptics';
+import { useTranslation } from 'react-i18next';
 import { palette } from '@/constants/colors';
+import { fontFamily } from '@/constants/typography';
 import { radius, spacing } from '@/constants/spacing';
+import { scale } from '@/lib/responsive';
 import { toast } from '@/lib/toast';
 
 type Props = {
@@ -68,6 +76,13 @@ const MessageBubbleInner: React.FC<Props> = ({
   hideModelLabel = false,
 }) => {
   const haptics = useHaptics();
+  const { t } = useTranslation();
+
+  const likeScale = useSharedValue(1);
+  const unlikeScale = useSharedValue(1);
+
+  const likeAnimStyle = useAnimatedStyle(() => ({ transform: [{ scale: likeScale.value }] }));
+  const unlikeAnimStyle = useAnimatedStyle(() => ({ transform: [{ scale: unlikeScale.value }] }));
 
   const isUser = message.role === 'user';
 
@@ -83,6 +98,47 @@ const MessageBubbleInner: React.FC<Props> = ({
     styles.bubble, styles.aiBubble, { backgroundColor: colors.surface, borderColor: colors.border }, styles.aiBubbleFull,
   ], [colors.surface, colors.border]);
 
+  const markdownStyles = useMemo(() => ({
+    body: { color: colors.text, fontFamily: fontFamily.regular, fontSize: 15, lineHeight: 22 },
+    strong: { fontFamily: fontFamily.semiBold, color: colors.text },
+    em: { fontFamily: fontFamily.regular, fontStyle: 'italic' as const, color: colors.text },
+    heading1: { fontFamily: fontFamily.bold, fontSize: 20, color: colors.text, marginVertical: 6 },
+    heading2: { fontFamily: fontFamily.bold, fontSize: 18, color: colors.text, marginVertical: 4 },
+    heading3: { fontFamily: fontFamily.semiBold, fontSize: 16, color: colors.text, marginVertical: 4 },
+    bullet_list: { marginVertical: 4 },
+    ordered_list: { marginVertical: 4 },
+    list_item: { marginVertical: 2 },
+    code_inline: {
+      fontFamily: 'monospace',
+      backgroundColor: colors.surfaceAlt,
+      color: colors.primary,
+      borderRadius: 4,
+      paddingHorizontal: 4,
+    },
+    fence: {
+      backgroundColor: colors.surfaceAlt,
+      borderRadius: radius.md,
+      padding: spacing[3],
+      marginVertical: spacing[2],
+    },
+    code_block: {
+      fontFamily: 'monospace',
+      backgroundColor: colors.surfaceAlt,
+      color: colors.text,
+      fontSize: 13,
+      lineHeight: 20,
+    },
+    blockquote: {
+      borderLeftWidth: 3,
+      borderLeftColor: colors.primary,
+      paddingLeft: spacing[3],
+      marginVertical: spacing[1],
+      opacity: 0.85,
+    },
+    hr: { backgroundColor: colors.border, height: 1, marginVertical: spacing[3] },
+    link: { color: colors.primary },
+  }), [colors]);
+
   const imageAttachments = message.attachments?.filter((a) => a.type === 'image') ?? [];
   const fileAttachments = message.attachments?.filter((a) => a.type !== 'image') ?? [];
   const hasAttachments = (message.attachments?.length ?? 0) > 0;
@@ -97,9 +153,11 @@ const MessageBubbleInner: React.FC<Props> = ({
   const handleLike = useCallback(
     (liked: boolean) => {
       haptics.light();
+      const sv = liked ? likeScale : unlikeScale;
+      sv.value = withSequence(withTiming(1.4, { duration: 120 }), withTiming(1, { duration: 100 }));
       onLike?.(message.id, message.liked === liked ? null : liked);
     },
-    [message.id, message.liked, onLike, haptics],
+    [message.id, message.liked, onLike, haptics, likeScale, unlikeScale],
   );
 
   const handleSpeak = useCallback(() => {
@@ -136,13 +194,19 @@ const MessageBubbleInner: React.FC<Props> = ({
       )}
 
       {message.content.length > 0 && (
-        <Text
-          variant="body"
-          color={isUser ? palette.white : colors.text}
-          style={[styles.content, hasAttachments && styles.contentWithAttach]}
-        >
-          {message.content}
-        </Text>
+        isUser ? (
+          <Text
+            variant="body"
+            color={palette.white}
+            style={[styles.content, hasAttachments && styles.contentWithAttach]}
+          >
+            {message.content}
+          </Text>
+        ) : (
+          <Markdown style={markdownStyles}>
+            {message.content}
+          </Markdown>
+        )
       )}
 
       {/* Footer: hideFooter ise layout'tan tamamen çıkar — opacity:0 layout kaymasına neden olur */}
@@ -162,33 +226,37 @@ const MessageBubbleInner: React.FC<Props> = ({
                 >
                   <Ionicons
                     name={isSpeaking ? 'stop-circle-outline' : 'volume-high-outline'}
-                    size={14}
+                    size={18}
                     color={isSpeaking ? colors.primary : colors.textSecondary}
                   />
                 </ActionButton>
               )}
               {message.content.length > 0 && (
                 <ActionButton onPress={handleCopy}>
-                  <Ionicons name="copy-outline" size={14} color={colors.textSecondary} />
+                  <Ionicons name="copy-outline" size={18} color={colors.textSecondary} />
                 </ActionButton>
               )}
               <ActionButton onPress={() => handleLike(true)}>
-                <Ionicons
-                  name={message.liked === true ? 'thumbs-up' : 'thumbs-up-outline'}
-                  size={14}
-                  color={message.liked === true ? palette.success : colors.textSecondary}
-                />
+                <Animated.View style={likeAnimStyle}>
+                  <Ionicons
+                    name={message.liked === true ? 'thumbs-up' : 'thumbs-up-outline'}
+                    size={18}
+                    color={message.liked === true ? palette.success : colors.textSecondary}
+                  />
+                </Animated.View>
               </ActionButton>
               <ActionButton onPress={() => handleLike(false)}>
-                <Ionicons
-                  name={message.liked === false ? 'thumbs-down' : 'thumbs-down-outline'}
-                  size={14}
-                  color={message.liked === false ? palette.error : colors.textSecondary}
-                />
+                <Animated.View style={unlikeAnimStyle}>
+                  <Ionicons
+                    name={message.liked === false ? 'thumbs-down' : 'thumbs-down-outline'}
+                    size={18}
+                    color={message.liked === false ? palette.error : colors.textSecondary}
+                  />
+                </Animated.View>
               </ActionButton>
               {onRegenerate && (
                 <ActionButton onPress={() => onRegenerate(message.id)}>
-                  <Ionicons name="refresh-outline" size={14} color={colors.textSecondary} />
+                  <Ionicons name="refresh-outline" size={18} color={colors.textSecondary} />
                 </ActionButton>
               )}
             </View>
@@ -223,7 +291,7 @@ const MessageBubbleInner: React.FC<Props> = ({
           {!hideFooter && !hideModelLabel && message.model && (
             <Animated.View entering={FadeIn.duration(200).delay(80)}>
               <Text variant="micro" color={colors.textSecondary} style={styles.modelLabel}>
-                {`Bu mesaj ${message.model} ile üretildi`}
+                {t('assistant.generatedBy', { model: message.model })}
               </Text>
             </Animated.View>
           )}
@@ -251,7 +319,7 @@ export const MessageBubble = React.memo(MessageBubbleInner, (prev, next) => {
 
 const styles = StyleSheet.create({
   row: {
-    marginVertical: spacing[1],
+    marginVertical: scale(10),
     flexDirection: 'row',
   },
   rowLeft: {

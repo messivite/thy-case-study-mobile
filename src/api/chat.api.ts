@@ -9,6 +9,8 @@ import {
   GetChatsResponse,
   GetChatResponse,
   GetMessagesParams,
+  LikeMessageRequest,
+  LikeMessageResponse,
   NonStreamChatRequest,
   NonStreamChatResponse,
   PaginatedChatsResponse,
@@ -18,6 +20,8 @@ import {
   StreamEvent,
   SyncChatRequest,
   SyncChatResponse,
+  SyncLikesRequest,
+  SyncLikesResponse,
 } from '@/types/chat.api.types';
 
 
@@ -253,6 +257,37 @@ export const searchChats = async (params: ChatSearchParams): Promise<ChatSearchR
  */
 export const deleteChat = async (chatId: string): Promise<void> => {
   await privateApi.delete(`/api/chats/${chatId}`);
+};
+
+/**
+ * POST /api/chats/:chatId/messages/:messageId/like
+ * action: 1 = like, 2 = unlike
+ */
+export const likeMessage = async (
+  chatId: string,
+  messageId: string,
+  payload: LikeMessageRequest,
+): Promise<LikeMessageResponse> => {
+  const { data } = await privateApi.post<LikeMessageResponse>(
+    `/api/chats/${chatId}/messages/${messageId}/like`,
+    payload,
+  );
+  return data;
+};
+
+/**
+ * POST /api/chats/:chatId/likes/sync
+ * Toplu like/unlike sync — max 100 öğe
+ */
+export const syncLikes = async (
+  chatId: string,
+  payload: SyncLikesRequest,
+): Promise<SyncLikesResponse> => {
+  const { data } = await privateApi.post<SyncLikesResponse>(
+    `/api/chats/${chatId}/likes/sync`,
+    payload,
+  );
+  return data;
 };
 
 /**
