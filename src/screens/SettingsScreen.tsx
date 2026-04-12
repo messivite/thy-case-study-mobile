@@ -43,7 +43,7 @@ export default function SettingsScreen() {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const { isGuest, logout } = useAuth();
-  const { displayName: profileDisplayName, email: profileEmail, avatarUrl, isAnonymous, profileReady } = useWhoIAm();
+  const { displayName: profileDisplayName, email: profileEmail, avatarUrl, profileReady } = useWhoIAm();
   const { t, currentLanguage } = useI18n();
   usePageTitle(`${t('meta.settings')} | ${t('meta.suffix')}`);
   const dispatch = useAppDispatch();
@@ -200,8 +200,10 @@ export default function SettingsScreen() {
     ]);
   };
 
-  const guestLike = isGuest || isAnonymous;
-  const displayName = guestLike || !profileDisplayName ? t('settings.guest') : profileDisplayName;
+  const guestLike = isGuest;
+  const displayName = guestLike
+    ? t('settings.guest')
+    : profileDisplayName || profileEmail?.split('@')[0] || t('settings.guest');
   const displayEmail = guestLike ? t('settings.loginToSync') : (profileEmail || '');
   const appVersion = Constants.expoConfig?.version ?? '1.0.0';
 
@@ -212,7 +214,7 @@ export default function SettingsScreen() {
     <View style={{ flex: 1 }}>
 <AppHeader
         title={t('settings.title')}
-        safeAreaTop={false}
+        safeAreaTop={Platform.OS !== 'ios'}
         rightIcons={[
           {
             name: 'close',

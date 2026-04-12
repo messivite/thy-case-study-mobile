@@ -128,12 +128,14 @@ export default function HomeScreen() {
 
   const displayName = useMemo(() => {
     if (isGuest) return t('settings.guest');
-    // me API'den gelen displayName once gelir, yoksa auth user.name'e fall back
-    if (profileReady && profileDisplayName) return profileDisplayName;
-    const raw = user?.name?.trim();
-    if (!raw) return t('settings.guest');
-    return raw.split(' ')[0];
-  }, [isGuest, profileReady, profileDisplayName, user?.name, t]);
+    if (profileReady) {
+      if (profileDisplayName) return profileDisplayName;
+      // displayName yoksa email prefix göster
+      const email = user?.email?.trim();
+      if (email) return email.split('@')[0];
+    }
+    return t('settings.guest');
+  }, [isGuest, profileReady, profileDisplayName, user?.email, t]);
 
   const handleQuickActionPress = useCallback(
     (action: WelcomeQuickAction) => {

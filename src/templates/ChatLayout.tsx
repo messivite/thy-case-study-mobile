@@ -18,8 +18,6 @@ const ChatLayoutInner: React.FC<Props> = ({ header, children, input }) => {
   const rootStyle = React.useMemo(() => [styles.root, { backgroundColor: colors.background }], [colors.background]);
   const inputAreaStyle = React.useMemo(() => [styles.inputArea, { backgroundColor: colors.background }], [colors.background]);
 
-  // Android: softwareKeyboardLayoutMode="pan" tüm ekranı yukarı kaydırır,
-  // KAV ayrıca yüksekliği kısaltınca boş alan kalır — Android'de KAV'ı devre dışı bırak
   const inner = (
     <>
       <View style={IS_WEB ? styles.contentWeb : styles.content}>{children}</View>
@@ -31,20 +29,13 @@ const ChatLayoutInner: React.FC<Props> = ({ header, children, input }) => {
 
   return (
     <View style={rootStyle}>
-      {IS_ANDROID ? (
-        <>
-          {header}
-          <View style={styles.kav}>{inner}</View>
-        </>
-      ) : (
-        <KeyboardAvoidingView
-          behavior={IS_WEB ? undefined : 'padding'}
-          style={IS_WEB ? styles.kavWeb : styles.kav}
-        >
-          {header}
-          {inner}
-        </KeyboardAvoidingView>
-      )}
+      <KeyboardAvoidingView
+        behavior={IS_WEB ? undefined : IS_ANDROID ? 'height' : 'padding'}
+        style={IS_WEB ? styles.kavWeb : styles.kav}
+      >
+        {header}
+        {inner}
+      </KeyboardAvoidingView>
     </View>
   );
 };
