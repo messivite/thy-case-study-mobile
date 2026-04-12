@@ -5,7 +5,6 @@
  * Form mantığı `WelcomeAuthForm` içinde — her tuşta gradient/hero yeniden çizilmez.
  */
 
-import Head from 'expo-router/head';
 import React, { useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import {
   View,
@@ -28,6 +27,7 @@ import { SurfaceIconPressable } from '@/atoms/SurfaceIconPressable';
 import { Text } from '@/atoms/Text';
 import { useAuth } from '@/hooks/useAuth';
 import { useI18n } from '@/hooks/useI18n';
+import { usePageTitle } from '@/hooks/usePageTitle';
 import { palette } from '@/constants/colors';
 import { spacing, radius } from '@/constants/spacing';
 import { WELCOME_GUEST_AUTH_FLOW } from '@/constants/welcomeGuestAuthFlow';
@@ -83,6 +83,7 @@ export default function WelcomeScreen() {
   }, [contentScale]);
 
   const { t } = useI18n();
+  usePageTitle(`${t('meta.welcome')} | ${t('meta.suffix')}`);
   const { status } = useAuth();
   const [guestAuthPending, setGuestAuthPending] = useState(false);
   const isLoginPending = status === 'loading';
@@ -172,8 +173,7 @@ export default function WelcomeScreen() {
 
   return (
     <View style={screenWrapStyle}>
-      <Head><title>{t('meta.welcome')} | {t('meta.suffix')}</title></Head>
-      <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
+<StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
       <LinearGradient
         colors={gradientColors}
         locations={gradientLocations}

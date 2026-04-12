@@ -302,9 +302,10 @@ export const realmService = {
 
   /**
    * Session'i ve tum mesajlarini Realm'den siler. Async.
+   * saveSessions ile ayni queue'da serialize edilir — delete'in uzerine yazilmasi onlenir.
    */
-  async deleteSession(sessionId: string): Promise<void> {
-    try {
+  deleteSession(sessionId: string): Promise<void> {
+    return enqueue('__sessions__', async () => {
       const realm = await openRealm();
       realm.write(() => {
         const session = realm.objectForPrimaryKey<RealmSession>('RealmSession', sessionId);
@@ -314,9 +315,7 @@ export const realmService = {
           .filtered('sessionId == $0', sessionId);
         realm.delete(msgs);
       });
-    } catch {
-      // sessizce gec
-    }
+    });
   },
 
   /**

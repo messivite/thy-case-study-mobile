@@ -4,6 +4,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { DESIGN_BASE_WIDTH } from '@/lib/responsive';
 
 const IS_WEB = Platform.OS === 'web';
+const IS_ANDROID = Platform.OS === 'android';
 
 type Props = {
   header: React.ReactNode;
@@ -17,17 +18,24 @@ const ChatLayoutInner: React.FC<Props> = ({ header, children, input }) => {
   const rootStyle = React.useMemo(() => [styles.root, { backgroundColor: colors.background }], [colors.background]);
   const inputAreaStyle = React.useMemo(() => [styles.inputArea, { backgroundColor: colors.background }], [colors.background]);
 
+  const inner = (
+    <>
+      <View style={IS_WEB ? styles.contentWeb : styles.content}>{children}</View>
+      <View style={[inputAreaStyle, IS_WEB && styles.inputAreaWeb]}>
+        {input}
+      </View>
+    </>
+  );
+
   return (
     <View style={rootStyle}>
-      {header}
+      {IS_WEB ? header : null}
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={IS_WEB ? undefined : IS_ANDROID ? 'height' : 'padding'}
         style={IS_WEB ? styles.kavWeb : styles.kav}
       >
-        <View style={IS_WEB ? styles.contentWeb : styles.content}>{children}</View>
-        <View style={[inputAreaStyle, IS_WEB && styles.inputAreaWeb]}>
-          {input}
-        </View>
+        {IS_WEB ? null : header}
+        {inner}
       </KeyboardAvoidingView>
     </View>
   );

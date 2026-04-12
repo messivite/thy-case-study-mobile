@@ -200,6 +200,7 @@ export default function WebViewModal() {
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [loadProgress, setLoadProgress] = useState(0);
+  const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [currentUrl, setCurrentUrl] = useState(url ?? '');
 
   const safeUrl = url ?? '';
@@ -232,7 +233,7 @@ export default function WebViewModal() {
   if (!safeUrl) {
     return (
       <View style={[styles.root, { paddingBottom: insets.bottom }]}>
-        <AppHeader title="Hata" isBack onBack={handleClose} safeAreaTop={false} />
+        <AppHeader title="Hata" isBack onBack={handleClose} safeAreaTop={Platform.OS !== 'ios'} />
         <View style={styles.centered}>
           <Text style={styles.errorText}>URL parametresi eksik.</Text>
         </View>
@@ -258,7 +259,7 @@ export default function WebViewModal() {
         title={headerTitle}
         subtitle={currentUrl !== safeUrl ? extractHost(currentUrl) : undefined}
         isBack
-        safeAreaTop={false}
+        safeAreaTop={Platform.OS !== 'ios'}
         onBack={handleClose}
         rightIcons={[
           {
@@ -278,10 +279,29 @@ export default function WebViewModal() {
           ref={webViewRef}
           source={{ uri: safeUrl }}
           style={[styles.webview, showLoadingOverlay && styles.webviewWhileLoading]}
-          onLoadStart={() => { setIsLoading(true); setHasError(false); }}
-          onLoadEnd={() => setIsLoading(false)}
-          onError={() => { setHasError(true); setIsLoading(false); }}
-          onLoadProgress={({ nativeEvent }) => setLoadProgress(nativeEvent.progress)}
+          onLoadStart={() => {
+            setIsLoading(true);
+            setHasError(false);
+            setLoadProgress(0);
+            if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
+            loadingTimeoutRef.current = setTimeout(() => setIsLoading(false), 8000);
+          }}
+          onLoadEnd={() => {
+            if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
+            setIsLoading(false);
+          }}
+          onError={() => {
+            if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
+            setHasError(true);
+            setIsLoading(false);
+          }}
+          onLoadProgress={({ nativeEvent }) => {
+            setLoadProgress(nativeEvent.progress);
+            if (nativeEvent.progress >= 1) {
+              if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
+              setIsLoading(false);
+            }
+          }}
           onNavigationStateChange={handleNavigationChange}
           allowsBackForwardNavigationGestures={Platform.OS === 'ios'}
           allowsInlineMediaPlayback

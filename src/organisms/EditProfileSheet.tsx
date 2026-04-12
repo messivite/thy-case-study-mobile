@@ -61,9 +61,12 @@ const EditProfileForm = memo(function EditProfileForm({ initialDisplayName, onCl
     const trimmed = valueRef.current.trim();
     const err = validate(trimmed);
     if (err) { setError(err); return; }
-    mutate({ displayName: trimmed });
-    toast.success(t('settings.profileUpdated'));
-    onClose();
+    mutate({ displayName: trimmed }, {
+      onSuccess: () => {
+        toast.success(t('settings.profileUpdated'));
+        onClose();
+      },
+    });
   };
 
   const borderColor = error

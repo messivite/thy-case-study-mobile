@@ -16,6 +16,7 @@ import {
   Platform,
   Modal,
   KeyboardAvoidingView,
+  Keyboard,
 } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -447,7 +448,9 @@ const GrowingTextInput = React.memo(React.forwardRef<GrowingTextInputHandle, Gro
           onChangeText={handleChangeText}
           onFocus={onFocus}
           onBlur={onBlur}
-          returnKeyType="default"
+          returnKeyType="done"
+          blurOnSubmit
+          onSubmitEditing={Keyboard.dismiss}
           editable={editable}
           textAlignVertical="top"
           scrollEnabled

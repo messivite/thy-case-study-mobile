@@ -1,8 +1,8 @@
-import Head from 'expo-router/head';
 import React, { useCallback, useMemo, useState, Suspense, lazy } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import { usePageTitle } from '@/hooks/usePageTitle';
 import { PostNavigationEnterFade } from '@/components/PostNavigationEnterFade';
 import { NetworkConnectivitySheets } from '@/organisms/NetworkConnectivitySheets';
 import { mmkvStorage, STORAGE_KEYS } from '@/lib/mmkv';
@@ -14,6 +14,7 @@ const OnboardingDeckV2Lazy = lazy(() =>
 
 export default function OnboardingScreen() {
   const { t } = useTranslation();
+  usePageTitle(`${t('meta.onboarding')} | ${t('meta.suffix')}`);
   const { colors } = useTheme();
   const [v2ActiveIndex, setV2ActiveIndex] = useState(0);
 
@@ -39,8 +40,7 @@ export default function OnboardingScreen() {
 
   return (
     <>
-      <Head><title>{t('meta.onboarding')} | {t('meta.suffix')}</title></Head>
-      <Suspense fallback={v2Fallback}>
+<Suspense fallback={v2Fallback}>
         <PostNavigationEnterFade>
           <OnboardingDeckV2Lazy
             onComplete={handleComplete}

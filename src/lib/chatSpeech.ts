@@ -1,5 +1,5 @@
 /**
- * Sohbet metnini cihaz TTS’i için sadeleştirir (markdown / kod bloku gürültüsünü azaltır).
+ * Sohbet metnini cihaz TTS'i için sadeleştirir (markdown / kod bloku gürültüsünü azaltır).
  */
 export function stripTextForSpeech(raw: string): string {
   let s = raw;

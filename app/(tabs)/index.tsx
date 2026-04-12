@@ -1,4 +1,3 @@
-import Head from 'expo-router/head';
 import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { TouchableOpacity, StyleSheet, View, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -14,6 +13,7 @@ import { useChatSession } from '@/hooks/useChatSession';
 import { useAuth } from '@/hooks/useAuth';
 import { useWhoIAm } from '@/hooks/useWhoIAm';
 import { useI18n } from '@/hooks/useI18n';
+import { usePageTitle } from '@/hooks/usePageTitle';
 import { palette } from '@/constants/colors';
 import { moderateScale } from '@/lib/responsive';
 import { ChatHistoryDrawer } from '@/organisms/ChatHistoryDrawer';
@@ -30,6 +30,7 @@ export default function HomeScreen() {
   // profileAvatarUrl değişince (upload sonrası) MMKV'den tekrar oku
   const resolvedAvatarUri = profileAvatarUrl ?? user?.avatarUrl;
   const { t } = useI18n();
+  usePageTitle(`${t('meta.home')} | ${t('meta.suffix')}`);
   const {
     messages,
     optimisticUserMsg,
@@ -82,9 +83,13 @@ export default function HomeScreen() {
 
   const openDrawer = useCallback(() => { setDrawerVisible(true); }, []);
   const closeDrawer = useCallback(() => setDrawerVisible(false), []);
-  const handleDrawerHidden = useCallback(() => {}, []);
+  const handleDrawerHidden = useCallback(() => { }, []);
+  const handleDeleteActiveChat = useCallback(() => {
+    startNewChat();
+    setDrawerVisible(false);
+  }, [startNewChat]);
   const handleSelectChat = useCallback((chat: import('@/types/chat.api.types').ChatListItem) => {
-    loadSession(chat.id);
+    loadSession(chat.id, chat.title);
     setDrawerVisible(false);
   }, [loadSession]);
 
@@ -127,12 +132,14 @@ export default function HomeScreen() {
 
   const displayName = useMemo(() => {
     if (isGuest) return t('settings.guest');
-    // me API'den gelen displayName once gelir, yoksa auth user.name'e fall back
-    if (profileReady && profileDisplayName) return profileDisplayName;
-    const raw = user?.name?.trim();
-    if (!raw) return t('settings.guest');
-    return raw.split(' ')[0];
-  }, [isGuest, profileReady, profileDisplayName, user?.name, t]);
+    if (profileReady) {
+      if (profileDisplayName) return profileDisplayName;
+      // displayName yoksa email prefix göster
+      const email = user?.email?.trim();
+      if (email) return email.split('@')[0];
+    }
+    return t('settings.guest');
+  }, [isGuest, profileReady, profileDisplayName, user?.email, t]);
 
   const handleQuickActionPress = useCallback(
     (action: WelcomeQuickAction) => {
@@ -183,13 +190,11 @@ export default function HomeScreen() {
       }
       subtitle={undefined}
     />
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   ), [sessionTitle, t, openDrawer, resolvedAvatarUri, user?.name, isGuest]);
 
   return (
     <View style={styles.root}>
-      <Head><title>{t('meta.home')} | {t('meta.suffix')}</title></Head>
-      <StatusBar style="light" />
       <ChatLayout
         header={header}
         input={chatInput}
@@ -235,13 +240,17 @@ export default function HomeScreen() {
         variant="liquidGlass"
       />
 
-      <ChatHistoryDrawer
-        visible={drawerVisible}
-        onClose={closeDrawer}
-        onHidden={handleDrawerHidden}
-        onNewChat={startNewChat}
-        onSelectChat={handleSelectChat}
-      />
+      {drawerVisible && (
+        <ChatHistoryDrawer
+          visible={drawerVisible}
+          onClose={closeDrawer}
+          onHidden={handleDrawerHidden}
+          onNewChat={startNewChat}
+          onSelectChat={handleSelectChat}
+          activeChatId={chatId}
+          onDeleteActiveChat={handleDeleteActiveChat}
+        />
+      )}
 
       <NetworkConnectivitySheets promptOnMount />
       <ServerUnavailableSheet />
@@ -255,10 +264,10 @@ const styles = StyleSheet.create({
   },
   /** AppHeader satırı scale(48); layout şişmesin, dokunma hitSlop ile kalır. */
   menuBtn: {
-    width: 44,
     height: 44,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 16,
   },
   avatarBtn: {
     borderRadius: 999,

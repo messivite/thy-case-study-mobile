@@ -1,5 +1,5 @@
 /**
- * Tab (home) mount + app foreground: izin varsa push token’ı API’ye bir kez kaydet (process içi tekrar yok).
+ * Tab (home) mount + app foreground: izin varsa push token'ı API'ye bir kez kaydet (process içi tekrar yok).
  * Tercih / MMKV yok; izin durumu native + ayarlar ekranı.
  */
 
@@ -13,7 +13,7 @@ import { canDeliverPushNotifications } from '@/lib/notificationPermission';
 
 const ANDROID_DEFAULT_CHANNEL_ID = 'default';
 
-/** Aynı token+dil için tekrar POST atma (bellekte; cold start’ta bir kez daha gidebilir, backend idempotent olabilir). */
+/** Aynı token+dil için tekrar POST atma (bellekte; cold start'ta bir kez daha gidebilir, backend idempotent olabilir). */
 let lastRegisteredFingerprint: string | null = null;
 
 function resolveExpoProjectId(): string | undefined {
@@ -86,7 +86,7 @@ export function usePushNotifications(): void {
           await registerPushToken({ push_token: expoToken, language: lang });
           lastRegisteredFingerprint = fingerprint;
         } catch {
-          // ağ hatası — sonraki foreground’da tekrar
+          // ağ hatası — sonraki foreground'da tekrar
         }
       }
 

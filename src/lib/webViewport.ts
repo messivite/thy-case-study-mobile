@@ -3,9 +3,9 @@ import { Platform } from 'react-native';
 let injected = false;
 
 /**
- * Expo Web: html/body/#root yüksekliği yoksa hiçbir `flex: 1` zinciri viewport’u doldurmaz
+ * Expo Web: html/body/#root yüksekliği yoksa hiçbir `flex: 1` zinciri viewport'u doldurmaz
  * (içerik üste sıkışır, ScrollView yüksekliği 0 kalır).
- * Bir kez global stil enjekte eder; SSR’da document yoksa no-op.
+ * Bir kez global stil enjekte eder; SSR'da document yoksa no-op.
  */
 export function ensureWebViewportRootStyle(): void {
   if (Platform.OS !== 'web' || typeof document === 'undefined' || injected) {

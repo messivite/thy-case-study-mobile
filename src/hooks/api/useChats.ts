@@ -154,6 +154,7 @@ export const useDeleteChatMutation = () => {
   return useMutation<void, Error, string, { previous: InfiniteData<PaginatedChatsResponse> | undefined }>({
     mutationFn: (chatId) => deleteChat(chatId),
     onMutate: async (chatId) => {
+      // Devam eden fetch'leri iptal et — optimistic update'in üzerine yazmasın
       await queryClient.cancelQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
       const previous = queryClient.getQueryData<InfiniteData<PaginatedChatsResponse>>(
         CHAT_QUERY_KEYS.chatsList,
@@ -171,14 +172,22 @@ export const useDeleteChatMutation = () => {
           };
         },
       );
+      // Realm'den de hemen sil — focusInitialSessions Realm'den okuduğu için gecikme olmasın
+      void realmService.deleteSession(chatId);
       return { previous };
     },
     onError: (_err, _chatId, context) => {
+      // Rollback: React Query cache'i eski haline getir
       if (context?.previous) {
         queryClient.setQueryData(CHAT_QUERY_KEYS.chatsList, context.previous);
       }
+      // Realm'i API'den tazele (deleteSession rollback'i yok, invalidate ile güncel liste gelsin)
+      void queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
     },
     onSuccess: (_data, chatId) => {
+      // Silme başarılı — API artık güncel listeyi döner, invalidate et
+      void queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
+      // Realm'den de sil (onMutate'te zaten silindi ama güvenlik için tekrar)
       void realmService.deleteSession(chatId);
     },
   });

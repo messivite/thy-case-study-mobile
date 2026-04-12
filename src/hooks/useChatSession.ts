@@ -398,6 +398,7 @@ export const useChatSession = () => {
 
   const prevMessagesRef = useRef<Message[]>([]);
   const messages: Message[] = useMemo(() => {
+    if (!chatId) return [];
     if (!messagesQuery.data) return prevMessagesRef.current.length ? [] : prevMessagesRef.current;
 
     const allMsgs = [...messagesQuery.data.pages].reverse().flatMap((page) => page?.messages ?? []);
@@ -626,6 +627,7 @@ export const useChatSession = () => {
     setStreamingMsgIdState('streaming');
     lastStreamTextRef.current = '';
     optimisticUserMsgRef.current = null;
+    const prevChatId = activeChatIdRef.current;
     activeChatIdRef.current = null;
     setIsStreamingActive(false);
     setOptimisticUserMsg(null);
@@ -635,7 +637,7 @@ export const useChatSession = () => {
   }, [dispatch]);
 
   const loadSession = useCallback(
-    (id: string) => {
+    (id: string, title?: string) => {
       if (id === sessionId) return;
       streamCancelledRef.current = true;
       streamDoneRef.current = false;
@@ -653,6 +655,8 @@ export const useChatSession = () => {
       activeChatIdRef.current = id;
       setIsStreamingActive(false);
       setOptimisticUserMsg(null);
+      // Title anında set et — chatsData'nın güncellenmesini bekleme
+      if (title !== undefined) setSessionTitle(title);
       dispatch(setSessionId(id));
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps

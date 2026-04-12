@@ -10,7 +10,7 @@ export const AVATAR_PRESET_SIZES: Record<AvatarSizePreset, number> = {
 
 /**
  * Temsili uzak avatar görseli (DiceBear). `fallback="placeholder"` veya özel kullanım.
- * Ağ erişimi gerekir; offline’da onError ile ikona düşülebilir.
+ * Ağ erişimi gerekir; offline'da onError ile ikona düşülebilir.
  */
 export const DEFAULT_AVATAR_PLACEHOLDER_URI =
   'https://api.dicebear.com/7.x/avataaars/png?seed=thy-assistant&size=256' as const;

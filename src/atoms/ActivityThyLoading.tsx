@@ -22,7 +22,7 @@ export type ActivityThyLoadingProps = {
 };
 
 const FLOAT_AMPLITUDE_PX = 5;
-/** Bir tam salınım süresi; faz lineer → sinüs sabit frekans, ortada “takılma” olmaz */
+/** Bir tam salınım süresi; faz lineer → sinüs sabit frekans, ortada "takılma" olmaz */
 const FLOAT_PERIOD_MS = 3600;
 
 /**

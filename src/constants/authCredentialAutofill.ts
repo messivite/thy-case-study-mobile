@@ -11,7 +11,7 @@ const iosBase: Pick<TextInputProps, 'autoCorrect' | 'spellCheck'> = {
   spellCheck: false,
 };
 
-/** E-posta — iOS’ta mümkünse `keyboardType="default"` kullan (email-address + şifre = login eşlemesi). */
+/** E-posta — iOS'ta mümkünse `keyboardType="default"` kullan (email-address + şifre = login eşlemesi). */
 export const AUTH_NO_CREDENTIAL_EMAIL_PROPS: TextInputProps =
   Platform.OS === 'ios'
     ? {

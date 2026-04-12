@@ -2,7 +2,6 @@
  * Şifremi unuttum — register ile aynı kabuk; tek e-posta, gönder aksiyonu sonra bağlanacak.
  */
 
-import Head from 'expo-router/head';
 import React, { useEffect, useMemo, useRef, type ComponentType } from 'react';
 import {
   View,
@@ -24,6 +23,7 @@ import { SurfaceIconPressable } from '@/atoms/SurfaceIconPressable';
 import { Text } from '@/atoms/Text';
 import { useAuth } from '@/hooks/useAuth';
 import { useI18n } from '@/hooks/useI18n';
+import { usePageTitle } from '@/hooks/usePageTitle';
 import { palette } from '@/constants/colors';
 import { spacing, radius } from '@/constants/spacing';
 import {
@@ -70,6 +70,7 @@ export default function ForgotPasswordScreen() {
   }, [contentScale]);
 
   const { t } = useI18n();
+  usePageTitle(`${t('meta.forgotPassword')} | ${t('meta.suffix')}`);
   const { status } = useAuth();
   const fadeAnim = useRef(new RNAnimated.Value(0)).current;
 
@@ -143,8 +144,7 @@ export default function ForgotPasswordScreen() {
 
   return (
     <View style={screenWrapStyle}>
-      <Head><title>{t('meta.forgotPassword')} | {t('meta.suffix')}</title></Head>
-      <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
+<StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
       <LinearGradient
         colors={gradientColors}
         locations={gradientLocations}

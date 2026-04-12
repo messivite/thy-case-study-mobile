@@ -97,6 +97,7 @@ export const streamChat = async (
       {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         responseType: 'text',
+        timeout: 0, // Stream için timeout yok — Gemini cevap süresi değişken
         transformResponse: [(data) => data],
         // onDownloadProgress: RN'de XHR onprogress — her chunk'ta çağrılır
         // event.target.responseText birikimli tüm text'i içerir
