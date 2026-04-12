@@ -22,6 +22,7 @@ import { WelcomeQuickAction } from '@/organisms/HomeWelcomePanel';
 import { ScrollToBottomButton } from '@/molecules/ScrollToBottomButton';
 import { NetworkConnectivitySheets } from '@/organisms/NetworkConnectivitySheets';
 import { ServerUnavailableSheet } from '@/organisms/ServerUnavailableSheet';
+import { useOfflineQueue } from '@mustafaaksoy41/react-native-offline-queue';
 import { toast } from '@/lib/toast';
 
 export default function HomeScreen() {
@@ -73,10 +74,14 @@ export default function HomeScreen() {
     scrollToLatestRef.current?.();
   }, []);
 
+  const { isSyncing } = useOfflineQueue();
   const [modelPickerVisible, setModelPickerVisible] = useState(false);
   const [drawerVisible, setDrawerVisible] = useState(false);
   const syncSheetOpenRef = useRef<(() => void) | null>(null);
-  const handleQueuedPress = useCallback(() => syncSheetOpenRef.current?.(), []);
+  const handleQueuedPress = useCallback(() => {
+    if (isSyncing) return;
+    syncSheetOpenRef.current?.();
+  }, [isSyncing]);
   const closeModelPicker = useCallback(() => setModelPickerVisible(false), []);
   const openModelPicker = useCallback(() => setModelPickerVisible(true), []);
 
@@ -245,7 +250,7 @@ export default function HomeScreen() {
         variant="liquidGlass"
       />
 
-      {drawerVisible && (
+      {(drawerVisible || Platform.OS === 'web') && (
         <ChatHistoryDrawer
           visible={drawerVisible}
           onClose={closeDrawer}

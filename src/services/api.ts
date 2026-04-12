@@ -109,16 +109,14 @@ api.interceptors.response.use(
   async (error: AxiosError) => {
     const originalConfig = error.config as RetryableConfig | undefined;
 
-    // 401 değilse veya zaten retry edilmişse → raporla + reddet
-    if (error.response?.status !== 401 || !originalConfig || originalConfig._retry) {
+    const status = error.response?.status;
+    if ((status !== 401 && status !== 403) || !originalConfig || originalConfig._retry) {
       captureApiError(error);
       return Promise.reject(error);
     }
 
-    // Bu isteği retry edildi olarak işaretle (sonsuz döngü önlemi)
     originalConfig._retry = true;
 
-    // --- Mutex refresh ---
     const result = await authMutex.refresh();
 
     if (!result.ok) {
@@ -126,7 +124,6 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    // Yeni token ile header'ı güncelle ve isteği tekrar gönder
     originalConfig.headers.Authorization = `Bearer ${result.accessToken}`;
     return api(originalConfig as AxiosRequestConfig);
   },

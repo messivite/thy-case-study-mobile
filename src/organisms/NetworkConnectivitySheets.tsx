@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState, memo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState, memo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -102,26 +102,23 @@ export function NetworkConnectivitySheets({ enabled = true, promptOnMount = fals
   const { pendingCount, isSyncing, syncNow } = useOfflineQueue();
   const { percentage, completedCount, totalCount, failedCount, items } = useSyncProgress();
 
-  const pendingMessages = items.filter((i) => i.action.actionName === 'SEND_MESSAGE').length;
-  const pendingLikes = items.filter((i) => i.action.actionName === 'LIKE_MESSAGE').length;
+  const pendingMessages = useMemo(
+    () => items.filter((i) => i.action.actionName === 'SEND_MESSAGE').length,
+    [items],
+  );
+  const pendingLikes = useMemo(
+    () => items.filter((i) => i.action.actionName === 'LIKE_MESSAGE').length,
+    [items],
+  );
 
   const [offlineOpen, setOfflineOpen] = useState(() => enabled && preview === 'offline');
   const [onlineOpen, setOnlineOpen] = useState(() => enabled && preview === 'online');
   const [syncDone, setSyncDone] = useState(false);
 
-  const wasSyncingRef = useRef(false);
   const syncSnapshotRef = useRef({ messages: 0, likes: 0 });
   const isOnlineRef = useRef(isOnline);
   useEffect(() => { isOnlineRef.current = isOnline; }, [isOnline]);
 
-  // Sync başlarken snapshot al
-  useEffect(() => {
-    if (isSyncing && !wasSyncingRef.current) {
-      syncSnapshotRef.current = { messages: pendingMessages, likes: pendingLikes };
-    }
-  }, [isSyncing, pendingMessages, pendingLikes]);
-
-  // Offline sheet: isOnline false olunca aç
   useEffect(() => {
     if (!enabled || preview != null) return;
     if (isOnline == null) return;
@@ -131,36 +128,38 @@ export function NetworkConnectivitySheets({ enabled = true, promptOnMount = fals
     }
   }, [isOnline, enabled, preview]);
 
-  // Online restore: OfflineManager'ın onOnlineRestore callback'ini kaydet
-  // Paket online'a dönünce bunu çağırır — pending varsa sheet aç
   useEffect(() => {
     if (!enabled) return;
     OfflineManager.configure({
       onOnlineRestore: ({ pendingCount: count }) => {
-        if (count > 0) {
+        if (count > 0 && isOnlineRef.current) {
           setOfflineOpen(false);
           setOnlineOpen(true);
         }
       },
     });
+    return () => {
+      OfflineManager.configure({ onOnlineRestore: undefined });
+    };
   }, [enabled]);
 
-  // promptOnMount: home'a girilince pending var mı — paket queue'dan oku
   useEffect(() => {
     if (!promptOnMount || !enabled) return;
-    const queue = OfflineManager.getQueue();
-    if (queue.length > 0 && OfflineManager.isOnline) {
-      setOnlineOpen(true);
-    }
+    const timer = setTimeout(() => {
+      const queue = OfflineManager.getQueue();
+      if (queue.length > 0 && OfflineManager.isOnline !== false) {
+        setOnlineOpen(true);
+      }
+    }, devConfig.promptOnMountDelayMs);
+    return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // onOpenRef: dışarıdan (MessageBubble warning badge) sheet'i açmak için
   useEffect(() => {
     if (!onOpenRef) return;
     onOpenRef.current = () => {
       if (!isOnlineRef.current) {
-        setOfflineOpen(true); // offline iken → bağlantı yok sheet'i aç
+        setOfflineOpen(true);
         return;
       }
       setOnlineOpen(false);
@@ -171,37 +170,37 @@ export function NetworkConnectivitySheets({ enabled = true, promptOnMount = fals
 
   const closeOffline = useCallback(() => setOfflineOpen(false), []);
   const closeOnline = useCallback(() => {
+    if (isSyncing) return;
     setOnlineOpen(false);
     setSyncDone(false);
-    wasSyncingRef.current = false;
-  }, []);
-
-  // Sync tamamlanınca: syncDone → true → 2sn sonra kapat
-  useEffect(() => {
-    if (isSyncing) {
-      wasSyncingRef.current = true;
-      setSyncDone(false);
-    } else if (wasSyncingRef.current) {
-      wasSyncingRef.current = false;
-      setSyncDone(true);
-    }
-  }, [isSyncing, onlineOpen]);
+  }, [isSyncing]);
 
   const onSyncPress = useCallback(async () => {
     haptics.success();
+    syncSnapshotRef.current = { messages: pendingMessages, likes: pendingLikes };
     try {
       await syncNow();
+      setSyncDone(true);
       void queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
-      // Toast gösterme — sheet içinde syncDone UI'ı gösterecek
     } catch {
       toast.error(t('toast.unknownError'));
     }
-  }, [haptics, t, syncNow, queryClient]);
+  }, [haptics, t, syncNow, queryClient, pendingMessages, pendingLikes]);
 
   // Sync sırasında / sonrasında sayaç değerleri
   const snap = syncSnapshotRef.current;
   const syncedMessages = Math.min(completedCount, snap.messages);
   const syncedLikes = Math.max(0, completedCount - snap.messages);
+
+  // Tipe göre sync tamamlandı metni
+  const syncDoneSubtitle = useMemo(() => {
+    if (snap.messages > 0 && snap.likes > 0) {
+      return t('network.syncDoneMixed', { messages: snap.messages, likes: snap.likes });
+    }
+    if (snap.messages > 0) return t('network.syncDoneMessages', { count: snap.messages });
+    if (snap.likes > 0) return t('network.syncDoneLikes', { count: snap.likes });
+    return t('network.syncDoneSubtitle');
+  }, [snap.messages, snap.likes, t]);
 
   const showBreakdown = (isSyncing || syncDone)
     ? (snap.messages > 0 || snap.likes > 0)
@@ -275,7 +274,7 @@ export function NetworkConnectivitySheets({ enabled = true, promptOnMount = fals
             <Text style={styles.syncDoneSubtitle} color={failedCount > 0 ? palette.warning : palette.success}>
               {failedCount > 0
                 ? t('network.syncFailed', { count: failedCount })
-                : t('network.syncDoneSubtitle')}
+                : syncDoneSubtitle}
             </Text>
           ) : (
             <Text variant="body" color={colors.textSecondary} style={styles.message}>
