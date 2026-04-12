@@ -207,7 +207,7 @@ export default function SettingsScreen() {
   const { data: usageData, isLoading: usageLoading } = useGetUsageQuery();
 
   return (
-    <>
+    <View style={{ flex: 1 }}>
       <AppHeader
         title={t('settings.title')}
         safeAreaTop={false}
@@ -535,7 +535,7 @@ export default function SettingsScreen() {
         open={themePickerOpen}
         onClose={() => setThemePickerOpen(false)}
       />
-    </>
+    </View>
   );
 }
 
