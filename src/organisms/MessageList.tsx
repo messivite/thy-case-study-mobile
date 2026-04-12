@@ -1,57 +1,36 @@
-import React, { useRef, useCallback, useState, useEffect } from 'react';
+import React, { useRef, useCallback, useState, useEffect, useLayoutEffect } from 'react';
 import { View, StyleSheet, ActivityIndicator, FlatList, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
+import { SharedValue } from 'react-native-reanimated';
 import * as Speech from 'expo-speech';
 import { Message } from '@/types/chat.types';
 import { MessageBubble } from '@/molecules/MessageBubble';
-import { ActivityThyLoading } from '@/atoms/ActivityThyLoading';
-import { radius } from '@/constants/spacing';
+import { StreamingBubble } from '@/molecules/StreamingBubble';
 import { Text } from '@/atoms/Text';
 import { HomeWelcomePanel, WelcomeQuickAction } from '@/organisms/HomeWelcomePanel';
 import { useTheme } from '@/hooks/useTheme';
 import { spacing } from '@/constants/spacing';
-import { useI18n } from '@/hooks/useI18n';
 import { stripTextForSpeech, speechLocaleForAppLang } from '@/lib/chatSpeech';
+import i18n from '@/i18n';
 import { toast } from '@/lib/toast';
+import { ActivityThyLoading } from '@/atoms/ActivityThyLoading';
 
-// inverted FlatList'te "aşağı" aslında offset=0 (en üst görsel = en yeni mesaj)
-// Kullanıcı "yukarı" kaydırınca eski mesajlara gider
-const AT_TOP_THRESHOLD = 80; // inverted'da "bottom" aslında offset=0 yani top
+const AT_TOP_THRESHOLD = 80;
+const STREAMING_KEY = '__streaming__';
 
-const WaitingBubble: React.FC = () => {
-  const { colors } = useTheme();
-  const { t } = useI18n();
-  return (
-    <View style={[waitingStyles.bubble, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-      <ActivityThyLoading mode="pulse" size={20} />
-      <Text variant="caption" color={colors.textSecondary}>{t('assistant.awaitingResponse')}</Text>
-    </View>
-  );
-};
-
-const waitingStyles = StyleSheet.create({
-  bubble: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    marginHorizontal: spacing[4],
-    marginVertical: spacing[1],
-    borderRadius: radius.lg,
-    borderBottomLeftRadius: radius.sm,
-    borderWidth: 1,
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[2],
-    gap: spacing[2],
-  },
-});
 
 type Props = {
   chatId?: string | null;
   messages: Message[];
   optimisticUserMsg?: Message | null;
   isStreamingActive?: boolean;
-  streamingMessage?: Message | null;
   streamingMessageId?: string | null;
   optimisticUserMsgId?: string | null;
+  // UI thread streaming — SharedValue ile
+  pendingStreamSV?: SharedValue<string> | null;
+  isStreamingDoneSV?: SharedValue<boolean> | null;
+  streamResetCountSV?: SharedValue<number> | null;
+  onStreamingComplete?: (text: string) => void;
+  lastStreamTextRef?: React.RefObject<string>;
   isTyping: boolean;
   isSessionLoading?: boolean;
   onLike?: (id: string, liked: boolean | null) => void;
@@ -65,7 +44,7 @@ type Props = {
   quickActions?: WelcomeQuickAction[];
   onQuickActionPress?: (action: WelcomeQuickAction) => void;
   onScrollStateChange?: (scrolledUp: boolean, unreadCount: number) => void;
-  onScrollToLatestRef?: React.MutableRefObject<(() => void) | null>;
+  onScrollToLatestRef?: React.RefObject<(() => void) | null>;
 };
 
 export const MessageList: React.FC<Props> = ({
@@ -73,9 +52,13 @@ export const MessageList: React.FC<Props> = ({
   messages,
   optimisticUserMsg,
   isStreamingActive = false,
-  streamingMessage,
   streamingMessageId,
   optimisticUserMsgId,
+  pendingStreamSV,
+  isStreamingDoneSV,
+  streamResetCountSV,
+  onStreamingComplete,
+  lastStreamTextRef,
   isTyping,
   isSessionLoading = false,
   onLike,
@@ -92,28 +75,78 @@ export const MessageList: React.FC<Props> = ({
   onScrollToLatestRef,
 }) => {
   const { colors } = useTheme();
-  const { t, currentLanguage } = useI18n();
   const listRef = useRef<FlatList<Message>>(null);
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
-  // inverted modda offset=0 = en yeni mesaj (görsel olarak en altta)
-  // Kullanıcı eski mesajlara kaydırınca offset artar
-  const isAtLatestRef = useRef(true); // offset=0 → en yeni mesajda mı?
+  // Son streaming'in gerçek mesaj ID'si — streaming bittikten sonra placeholder için tutulur
+  const [lastStreamingMsgId, setLastStreamingMsgId] = useState<string | null>(null);
+  const isAtLatestRef = useRef(true);
   const prevCountRef = useRef(0);
   const unreadCountRef = useRef(0);
+  // Streaming başında var olan mesaj ID'leri — placeholder aktifken eski mesajları filtrele
+  const preStreamMsgIdsRef = useRef<Set<string>>(new Set());
+  const prevChatIdRef = useRef<string | null | undefined>(undefined);
+  // Kullanıcı scroll etmeden (mount anında) onEndReached tetiklenmesin
+  const userHasScrolledRef = useRef(false);
+
+  const hasContent = messages.length > 0 || !!optimisticUserMsg || !!streamingMessageId || isTyping;
+  const welcomeReady = quickActions.length > 0 && !!welcomeGreeting && !!welcomeQuestion && !!onQuickActionPress;
+  const canShowWelcome = !hasContent && welcomeReady;
+
+  // welcomeShownRef: welcome bir kez gösterildi mi
+  const welcomeShownRef = useRef(false);
+  // isWelcomeExiting: exit animasyonu devam ediyor mu — state olarak tut ki panel re-render alsın
+  const [isWelcomeExiting, setIsWelcomeExiting] = useState(false);
+  const isWelcomeExitingRef = useRef(false);
+
+  if (canShowWelcome) welcomeShownRef.current = true;
+
+  // showWelcome: panel gösterilmişse ve exit tamamlanmadıysa mount'ta tut
+  const showWelcome = canShowWelcome || isWelcomeExitingRef.current;
+
+  // canShowWelcome false olunca exit animasyonunu başlat
+  // (render fonksiyonu içinde setState yasak — useEffect zorunlu)
+  useEffect(() => {
+    if (!canShowWelcome && welcomeShownRef.current && !isWelcomeExitingRef.current) {
+      isWelcomeExitingRef.current = true;
+      setIsWelcomeExiting(true);
+    }
+  }, [canShowWelcome]);
+
+  const handleWelcomeExitComplete = useCallback(() => {
+    welcomeShownRef.current = false;
+    isWelcomeExitingRef.current = false;
+    setIsWelcomeExiting(false);
+  }, []);
 
   useEffect(() => () => { void Speech.stop(); }, []);
 
-  // Session değişince sıfırla
-  useEffect(() => {
+  useLayoutEffect(() => {
+    const prev = prevChatIdRef.current;
+    prevChatIdRef.current = chatId ?? null;
+
+    // First mount — nothing to reset
+    if (prev === undefined) return;
+
+    // New chat creation (null → id) during active stream — skip reset
+    // so prevCountRef stays intact mid-stream.
+    // Reset only happens for real session switches (id → differentId).
+    if (prev === null && chatId != null && isStreamingActive) return;
+
     prevCountRef.current = 0;
     unreadCountRef.current = 0;
     isAtLatestRef.current = true;
+    userHasScrolledRef.current = false;
+    setLastStreamingMsgId(null);
+    preStreamMsgIdsRef.current = new Set();
+    welcomeShownRef.current = false;
+    isWelcomeExitingRef.current = false;
+    setIsWelcomeExiting(false);
     onScrollStateChange?.(false, 0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatId]);
 
-  // Yeni mesaj gelince: en yenideyse badge yok (zaten görüyor), değilse badge göster
   useEffect(() => {
-    const total = messages.length + (optimisticUserMsg ? 1 : 0) + (streamingMessage ? 1 : 0);
+    const total = messages.length + (optimisticUserMsg ? 1 : 0) + (streamingMessageId ? 1 : 0);
     const prev = prevCountRef.current;
     if (total === prev || total === 0) return;
     const added = total - prev;
@@ -123,10 +156,10 @@ export const MessageList: React.FC<Props> = ({
       unreadCountRef.current += added;
       onScrollStateChange?.(true, unreadCountRef.current);
     }
-  }, [messages.length, optimisticUserMsg, streamingMessage]);
+  }, [messages.length, optimisticUserMsg, streamingMessageId]);
 
-  // inverted modda scroll event: contentOffset.y=0 → en yeni mesajda
   const handleScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    userHasScrolledRef.current = true;
     const offsetY = e.nativeEvent.contentOffset.y;
     const atLatest = offsetY < AT_TOP_THRESHOLD;
     isAtLatestRef.current = atLatest;
@@ -136,13 +169,17 @@ export const MessageList: React.FC<Props> = ({
     }
   }, [onScrollStateChange]);
 
+  const handleEndReached = useCallback(() => {
+    if (!userHasScrolledRef.current) return;
+    if (hasMore && !isLoadingMore && onLoadMore) onLoadMore();
+  }, [hasMore, isLoadingMore, onLoadMore]);
+
   const handleScrollToLatest = useCallback(() => {
     listRef.current?.scrollToOffset({ offset: 0, animated: true });
     unreadCountRef.current = 0;
     onScrollStateChange?.(false, 0);
   }, [onScrollStateChange]);
 
-  // Dışarıdan scroll-to-latest tetiklenebilsin
   useEffect(() => {
     if (onScrollToLatestRef) {
       onScrollToLatestRef.current = handleScrollToLatest;
@@ -158,7 +195,7 @@ export const MessageList: React.FC<Props> = ({
     void Speech.stop();
     const plain = stripTextForSpeech(text);
     if (!plain.trim()) return;
-    const locale = speechLocaleForAppLang(currentLanguage);
+    const locale = speechLocaleForAppLang(i18n.language);
     setSpeakingMessageId(messageId);
     Speech.speak(plain, {
       language: locale,
@@ -167,31 +204,164 @@ export const MessageList: React.FC<Props> = ({
       onStopped: () => setSpeakingMessageId((cur) => (cur === messageId ? null : cur)),
       onError: () => {
         setSpeakingMessageId((cur) => (cur === messageId ? null : cur));
-        toast.error(t('toast.speechError'));
+        toast.error('Ses çalınamadı');
       },
     });
-  }, [speakingMessageId, currentLanguage, t]);
+  }, [speakingMessageId]);
+
+  // Streaming biterken gerçek ID'yi state'e kaydet — placeholder için kullanılır
+  // streamingMessageId 'streaming' sentinel ise ID bilinmiyor (stop/cancel) — kaydetme
+  useEffect(() => {
+    if (streamingMessageId && streamingMessageId !== 'streaming') {
+      setLastStreamingMsgId(streamingMessageId);
+    }
+  }, [streamingMessageId]);
+
+  // Streaming bitince en üste scroll et — yeni mesaj her zaman görünür
+  // Stop/cancel durumunda streamingMessageId 'streaming' sentinel'e döner —
+  // lastStreamingMsgId'yi temizle ki boş placeholder kalmasın
+  const prevIsStreamingRef = useRef(isStreamingActive);
+  useEffect(() => {
+    if (prevIsStreamingRef.current && !isStreamingActive) {
+      listRef.current?.scrollToOffset({ offset: 0, animated: false });
+      // Stop ile iptal edildiyse (ID hiç set edilmedi veya sentinel'e döndü)
+      if (!streamingMessageId || streamingMessageId === 'streaming') {
+        setLastStreamingMsgId(null);
+        preStreamMsgIdsRef.current = new Set();
+      }
+    }
+    prevIsStreamingRef.current = isStreamingActive;
+  }, [isStreamingActive, streamingMessageId]);
+
+  // speakingMessageId'yi ref'te tut — renderItem dep array'inden çıkar
+  const speakingMessageIdRef = useRef(speakingMessageId);
+  useEffect(() => { speakingMessageIdRef.current = speakingMessageId; }, [speakingMessageId]);
+  const handleSpeakToggleRef = useRef(handleSpeakToggle);
+  useEffect(() => { handleSpeakToggleRef.current = handleSpeakToggle; }, [handleSpeakToggle]);
 
   const renderItem = useCallback(({ item, index }: { item: Message; index: number }) => {
-    const isStreamingItem = !!streamingMessageId && item.id === streamingMessageId;
-    const isOptimisticUserItem = !!optimisticUserMsgId && item.id === optimisticUserMsgId;
+    const isStreamingItem = item.id === STREAMING_KEY;
+
+    if (isStreamingItem && isStreamingActive && pendingStreamSV && isStreamingDoneSV && streamResetCountSV && onStreamingComplete) {
+      return (
+        <StreamingBubble
+          pendingSV={pendingStreamSV}
+          isStreamingDoneSV={isStreamingDoneSV}
+          streamResetCountSV={streamResetCountSV}
+          onComplete={onStreamingComplete}
+        />
+      );
+    }
+
+    const isLastMessage = index === 0;
+
     return (
       <MessageBubble
         message={item}
+        colors={colors}
         onLike={onLike}
         onRegenerate={onRegenerate}
-        index={index}
-        isSpeaking={speakingMessageId === item.id}
-        skipEntryAnimation={isStreamingItem || isOptimisticUserItem}
-        hideFooter={(isStreamingItem && isStreamingActive) || isOptimisticUserItem}
+        isSpeaking={speakingMessageIdRef.current === item.id}
+        hideFooter={isStreamingItem}
+        hideModelLabel={isLastMessage}
         onSpeakToggle={
           item.role === 'assistant' && item.content.trim().length > 0
-            ? () => handleSpeakToggle(item.id, item.content)
+            ? () => handleSpeakToggleRef.current(item.id, item.content)
             : undefined
         }
       />
     );
-  }, [streamingMessageId, isStreamingActive, optimisticUserMsgId, onLike, onRegenerate, speakingMessageId, handleSpeakToggle]);
+  }, [
+    isStreamingActive,
+    optimisticUserMsgId,
+    pendingStreamSV,
+    isStreamingDoneSV,
+    streamResetCountSV,
+    onStreamingComplete,
+    onLike,
+    onRegenerate,
+    colors,
+  ]);
+
+  // Streaming bittikten sonra gerçek mesaj cache'e girene kadar placeholder'ı göstermeye devam et.
+  // Kullanılan ID: aktif streamingMessageId (gerçek ID) VEYA son streaming'in ID'si (lastStreamingMsgId state).
+  // 'streaming' sentinel: onMeta henüz gelmedi — gerçek ID bilinmiyor, placeholder gösterme.
+  const activeOrLastId = (streamingMessageId && streamingMessageId !== 'streaming')
+    ? streamingMessageId
+    : lastStreamingMsgId;
+  const hasRealId = !!activeOrLastId;
+
+  // Streaming başlayınca mevcut mesaj ID'lerini snapshot'la
+  if (isStreamingActive && preStreamMsgIdsRef.current.size === 0 && messages.length > 0) {
+    preStreamMsgIdsRef.current = new Set(messages.map((m) => m.id));
+  }
+
+  // Mesaj zaten cache'de mi? Gerçek ID varsa messages içinde ara.
+  const streamingAlreadyInMessages = hasRealId && messages.some((m) => m.id === activeOrLastId);
+
+  // Placeholder sadece streaming BİTTİKTEN SONRA göster — API gelene kadar boşluğu doldur.
+  // Streaming aktifken StreamingBubble zaten displayMessages'a renderItem üzerinden giriyor,
+  // ayrıca placeholder eklersek çift kart olur.
+  // lastStreamTextRef boşsa stop/cancel edildi — placeholder gösterme.
+  const shouldShowPlaceholder = !isStreamingActive &&
+    hasRealId &&
+    !streamingAlreadyInMessages &&
+    !!lastStreamingMsgId &&
+    !!lastStreamTextRef?.current;
+
+  // Streaming aktifken content boş (StreamingBubble kendi yönetiyor),
+  // bittikten sonra lastStreamTextRef'ten son metni al — API gelene kadar flash olmaz.
+  const placeholderContent = isStreamingActive ? '' : (lastStreamTextRef?.current ?? '');
+
+
+
+  // Streaming aktifken StreamingBubble için displayMessages'a dummy item ekle.
+  // İçerik boş — renderItem içinde StreamingBubble döndürür, içeriği SV'den okur.
+  // Streaming item ID'si sabit sentinel — onMeta gelince streamingMessageId değişse de
+  // FlatList key değişmez, StreamingBubble unmount/remount olmaz → flash yok.
+  const streamingItem: Message | null = isStreamingActive
+    ? { id: STREAMING_KEY, role: 'assistant', content: '', timestamp: 0 }
+    : null;
+
+  // Streaming bittikten sonra API gelene kadar son metni gösteren placeholder.
+  const streamingPlaceholder: Message | null = shouldShowPlaceholder
+    ? { id: activeOrLastId!, role: 'assistant', content: placeholderContent, timestamp: Date.now() }
+    : null;
+
+  // Placeholder kalktıktan sonra state'i temizle — bir sonraki streaming için sıfırla.
+  useEffect(() => {
+    if (!shouldShowPlaceholder && !isStreamingActive) {
+      setLastStreamingMsgId(null);
+      preStreamMsgIdsRef.current = new Set();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shouldShowPlaceholder, isStreamingActive]);
+
+  // Placeholder aktifken activeOrLastId'yi messages'dan çıkar — çift kart önle.
+  const cachedMessages = streamingPlaceholder
+    ? messages.filter((m) => m.id !== activeOrLastId)
+    : messages;
+
+  const displayMessages: Message[] = [
+    ...(streamingItem ? [streamingItem] : []),
+    ...(streamingPlaceholder ? [streamingPlaceholder] : []),
+    ...(optimisticUserMsg ? [optimisticUserMsg] : []),
+    ...cachedMessages.slice().reverse(),
+  ];
+
+
+
+
+
+  // WelcomePanel overlay için greeting'i parçala
+  const welcomeOverlay = showWelcome && welcomeGreeting && welcomeQuestion && onQuickActionPress
+    ? (() => {
+        const spaceIdx = welcomeGreeting.indexOf(' ');
+        const greetingPrefix = spaceIdx !== -1 ? welcomeGreeting.slice(0, spaceIdx) : welcomeGreeting;
+        const greetingName = spaceIdx !== -1 ? welcomeGreeting.slice(spaceIdx + 1) : '';
+        return { greetingPrefix, greetingName };
+      })()
+    : null;
 
   if (isSessionLoading) {
     return (
@@ -201,45 +371,9 @@ export const MessageList: React.FC<Props> = ({
     );
   }
 
-  const hasContent = messages.length > 0 || !!optimisticUserMsg || !!streamingMessage || isTyping;
-
-  if (!hasContent) {
-    if (quickActions.length > 0 && welcomeGreeting && welcomeQuestion && onQuickActionPress) {
-      const spaceIdx = welcomeGreeting.indexOf(' ');
-      const greetingPrefix = spaceIdx !== -1 ? welcomeGreeting.slice(0, spaceIdx) : welcomeGreeting;
-      const greetingName = spaceIdx !== -1 ? welcomeGreeting.slice(spaceIdx + 1) : '';
-      return (
-        <HomeWelcomePanel
-          greetingPrefix={greetingPrefix}
-          greetingName={greetingName}
-          greetingReady={welcomeGreetingReady}
-          question={welcomeQuestion}
-          quickActions={quickActions}
-          onQuickActionPress={onQuickActionPress}
-        />
-      );
-    }
-    return (
-      <View style={styles.center}>
-        <Text variant="h4" align="center" color={colors.text}>{t('assistant.emptyTitle')}</Text>
-        <Text variant="body" align="center" color={colors.textSecondary} style={styles.emptySubtitle}>
-          {t('assistant.emptySubtitle')}
-        </Text>
-      </View>
-    );
-  }
-
-  // inverted FlatList — en yeni mesaj dizinin başında (index 0), görsel olarak en altta
-  // Real message cache'e girince streaming item'ı gösterme — aynı ID zaten messages'ta var
-  const streamingAlreadyInMessages = !!streamingMessageId && messages.some((m) => m.id === streamingMessageId);
-  const displayMessages: Message[] = [
-    ...(!streamingAlreadyInMessages && streamingMessage ? [streamingMessage] : []),
-    ...(optimisticUserMsg ? [optimisticUserMsg] : []),
-    ...messages.slice().reverse(),
-  ];
-
   return (
     <View style={styles.fill}>
+      {/* FlatList always mounted — pre-warmed behind welcome overlay */}
       <FlatList
         ref={listRef}
         data={displayMessages}
@@ -247,7 +381,14 @@ export const MessageList: React.FC<Props> = ({
         keyExtractor={(item) => item.id}
         inverted
         contentContainerStyle={styles.listContent}
-        ListHeaderComponent={isTyping && !streamingMessage && !streamingAlreadyInMessages ? <WaitingBubble /> : null}
+        ListHeaderComponent={
+          (isTyping && !isStreamingActive) ? (
+            <View style={styles.typingIndicator}>
+              <ActivityThyLoading mode="pulse" size={20} />
+              <Text variant="caption" color={colors.textSecondary}>Yanıt bekleniyor...</Text>
+            </View>
+          ) : null
+        }
         ListFooterComponent={
           isLoadingMore ? (
             <View style={styles.loadingMore}>
@@ -255,16 +396,44 @@ export const MessageList: React.FC<Props> = ({
             </View>
           ) : null
         }
-        onEndReached={() => {
-          if (hasMore && !isLoadingMore && onLoadMore) onLoadMore();
-        }}
+        onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
         onScroll={handleScroll}
-        scrollEventThrottle={100}
+        scrollEventThrottle={64}
         showsVerticalScrollIndicator={false}
         keyboardDismissMode="interactive"
         keyboardShouldPersistTaps="handled"
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={5}
+        windowSize={5}
+        initialNumToRender={10}
       />
+
+      {/* Empty state overlay */}
+      {!hasContent && !showWelcome && !isSessionLoading && !isWelcomeExiting && (
+        <View style={[styles.center, styles.welcomeOverlay]} pointerEvents="none">
+          <Text variant="h4" align="center" color={colors.text}>Nasıl yardımcı olabilirim?</Text>
+          <Text variant="body" align="center" color={colors.textSecondary} style={styles.emptySubtitle}>
+            Bir şeyler sormaya başlayın
+          </Text>
+        </View>
+      )}
+
+      {/* WelcomePanel: absolute overlay — FlatList pre-warmed behind it */}
+      {welcomeOverlay && (
+        <View style={styles.welcomeOverlay}>
+          <HomeWelcomePanel
+            greetingPrefix={welcomeOverlay.greetingPrefix}
+            greetingName={welcomeOverlay.greetingName}
+            greetingReady={welcomeGreetingReady}
+            question={welcomeQuestion!}
+            quickActions={quickActions}
+            onQuickActionPress={onQuickActionPress!}
+            isExiting={isWelcomeExiting}
+            onExitComplete={handleWelcomeExitComplete}
+          />
+        </View>
+      )}
     </View>
   );
 };
@@ -276,12 +445,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  welcomeOverlay: {
+    ...StyleSheet.absoluteFillObject,
+  },
   listContent: {
     paddingVertical: spacing[3],
   },
   loadingMore: {
     paddingVertical: spacing[4],
     alignItems: 'center',
+  },
+  typingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+    paddingVertical: spacing[2],
+    marginVertical: spacing[1],
+    marginHorizontal: spacing[4],
   },
   emptySubtitle: {
     marginTop: spacing[1],

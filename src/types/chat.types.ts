@@ -25,9 +25,11 @@ export type Message = {
   id: string;
   role: MessageRole;
   content: string;
-  modelId?: AIModelId;
+  provider?: string;
+  model?: string;
   timestamp: number;
   isLoading?: boolean;
+  queued?: boolean;
   liked?: boolean | null;
   attachments?: Attachment[];
 };

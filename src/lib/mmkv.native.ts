@@ -26,4 +26,5 @@ export const STORAGE_KEYS = {
   CHAT_MESSAGES: 'chat_messages',
   REACT_QUERY_CACHE: 'rq_cache',
   STREAMING: 'streaming_enabled',
+  LOCAL_AVATAR_PATH: 'local_avatar_path',
 } as const;

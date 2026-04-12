@@ -13,7 +13,7 @@ const DEFAULT_SIZE = 32;
 /**
  * THY ikon haritasından isimle SVG render eder; `width` / `height` ile ölçeklenir.
  */
-export const THYIcon: React.FC<THYIconProps> = ({
+const THYIconInner: React.FC<THYIconProps> = ({
   name,
   width = DEFAULT_SIZE,
   height = DEFAULT_SIZE,
@@ -23,3 +23,5 @@ export const THYIcon: React.FC<THYIconProps> = ({
   const Glyph = THY_ICON_MAP[name];
   return <Glyph width={width} height={height} fill={fill} fillSecondary={fillSecondary} />;
 };
+
+export const THYIcon = React.memo(THYIconInner);

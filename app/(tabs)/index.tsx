@@ -1,7 +1,9 @@
 import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { TouchableOpacity, StyleSheet, View } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSharedValue } from 'react-native-reanimated';
 import { ChatLayout } from '@/templates/ChatLayout';
 import { MessageList } from '@/organisms/MessageList';
 import { ChatInput } from '@/organisms/ChatInput';
@@ -12,26 +14,34 @@ import { useAuth } from '@/hooks/useAuth';
 import { useWhoIAm } from '@/hooks/useWhoIAm';
 import { useI18n } from '@/hooks/useI18n';
 import { palette } from '@/constants/colors';
+import { moderateScale } from '@/lib/responsive';
 import { ChatHistoryDrawer } from '@/organisms/ChatHistoryDrawer';
 import { ModelPickerSheet } from '@/organisms/ModelPickerSheet';
 import { WelcomeQuickAction } from '@/organisms/HomeWelcomePanel';
 import { ScrollToBottomButton } from '@/molecules/ScrollToBottomButton';
+import { NetworkConnectivitySheets } from '@/organisms/NetworkConnectivitySheets';
 
 export default function HomeScreen() {
   const { user, isGuest } = useAuth();
-  const { displayName: profileDisplayName, profileReady } = useWhoIAm();
+  const { displayName: profileDisplayName, profileReady, avatarUrl: profileAvatarUrl } = useWhoIAm();
+  // Local disk'te kayıtlı avatar: remote'tan önce göster (hızlı + upload sonrası anında güncellenir)
+  // profileAvatarUrl değişince (upload sonrası) MMKV'den tekrar oku
+  const resolvedAvatarUri = profileAvatarUrl ?? user?.avatarUrl;
   const { t } = useI18n();
   const {
     messages,
     optimisticUserMsg,
     isStreamingActive,
-    streamingMessage,
     streamingMessageId,
     optimisticUserMsgId,
+    pendingStreamSV,
+    isStreamingDoneSV,
+    streamResetCountSV,
+    handleStreamingComplete,
+    lastStreamTextRef,
     selectedAIModel,
     isTyping,
-    isLoading,
-    isFetching,
+    isSessionLoading,
     chatId,
     sessionTitle,
     sendMessage,
@@ -44,17 +54,16 @@ export default function HomeScreen() {
     isFetchingNextPage,
   } = useChatSession();
 
-  // Session seçilmiş ama mesajlar henüz yüklenmemiş → spinner göster
-  const isSessionLoading = !!chatId && (isLoading || (isFetching && messages.length === 0 && !isStreamingActive));
-
   const [scrolledUp, setScrolledUp] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
+  // unreadCount state yerine SharedValue — sayı değişince HomeScreen re-render olmaz,
+  // ScrollToBottomButton UI thread'de badge'i direkt günceller.
+  const unreadCountSV = useSharedValue(0);
   const scrollToLatestRef = useRef<(() => void) | null>(null);
 
   const handleScrollStateChange = useCallback((isScrolledUp: boolean, count: number) => {
+    unreadCountSV.value = count;
     setScrolledUp(isScrolledUp);
-    setUnreadCount(count);
-  }, []);
+  }, [unreadCountSV]);
 
   const handleScrollToLatest = useCallback(() => {
     scrollToLatestRef.current?.();
@@ -63,9 +72,19 @@ export default function HomeScreen() {
   const [modelPickerVisible, setModelPickerVisible] = useState(false);
   const [drawerVisible, setDrawerVisible] = useState(false);
   const closeModelPicker = useCallback(() => setModelPickerVisible(false), []);
+  const openModelPicker = useCallback(() => setModelPickerVisible(true), []);
 
-  // Sol kenardan sağa swipe → drawer aç
-  const openDrawer = useCallback(() => setDrawerVisible(true), []);
+  // Stable strings — dil değişmediği sürece yeni referans üretme
+  const chatPlaceholder = useMemo(() => t('assistant.placeholder'), [t]);
+  const aiModelName = useMemo(() => selectedAIModel?.displayName, [selectedAIModel?.displayName]);
+
+  const openDrawer = useCallback(() => { setDrawerVisible(true); }, []);
+  const closeDrawer = useCallback(() => setDrawerVisible(false), []);
+  const handleDrawerHidden = useCallback(() => {}, []);
+  const handleSelectChat = useCallback((chat: import('@/types/chat.api.types').ChatListItem) => {
+    loadSession(chat.id);
+    setDrawerVisible(false);
+  }, [loadSession]);
 
   const handleSend = useCallback(
     (text: string, attachments: import('@/types/chat.types').Attachment[]) => {
@@ -81,24 +100,24 @@ export default function HomeScreen() {
   const quickActions = useMemo<WelcomeQuickAction[]>(
     () => [
       {
-        id: 'image',
-        label: `🖼️ ${t('assistant.quickActionImage')}`,
-        prompt: t('assistant.quickActionImagePrompt'),
+        id: 'flight',
+        label: `✈️ ${t('assistant.quickActionFlight')}`,
+        prompt: t('assistant.quickActionFlightPrompt'),
       },
       {
-        id: 'music',
-        label: `🎸 ${t('assistant.quickActionMusic')}`,
-        prompt: t('assistant.quickActionMusicPrompt'),
+        id: 'baggage',
+        label: `🧳 ${t('assistant.quickActionBaggage')}`,
+        prompt: t('assistant.quickActionBaggagePrompt'),
       },
       {
-        id: 'energy',
-        label: `✨ ${t('assistant.quickActionEnergy')}`,
-        prompt: t('assistant.quickActionEnergyPrompt'),
+        id: 'travel',
+        label: `🗺️ ${t('assistant.quickActionTravel')}`,
+        prompt: t('assistant.quickActionTravelPrompt'),
       },
       {
-        id: 'video',
-        label: `🎥 ${t('assistant.quickActionVideo')}`,
-        prompt: t('assistant.quickActionVideoPrompt'),
+        id: 'checkin',
+        label: `📋 ${t('assistant.quickActionCheckin')}`,
+        prompt: t('assistant.quickActionCheckinPrompt'),
       },
     ],
     [t],
@@ -120,14 +139,25 @@ export default function HomeScreen() {
     [handleSend],
   );
 
-  const header = (
+  const chatInput = useMemo(() => (
+    <ChatInput
+      onSend={handleSend}
+      onStop={onStop}
+      onModelSelectorPress={openModelPicker}
+      selectedAIModelName={aiModelName}
+      isStreaming={isTyping}
+      placeholder={chatPlaceholder}
+    />
+  ), [handleSend, onStop, openModelPicker, aiModelName, isTyping, chatPlaceholder]);
+
+  const header = useMemo(() => (
     <AppHeader
       title={sessionTitle ?? t('assistant.title')}
       leftContent={
         <TouchableOpacity
           style={styles.menuBtn}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          onPress={() => setDrawerVisible(true)}
+          onPress={openDrawer}
           accessibilityRole="button"
           accessibilityLabel="Sohbet geçmişi menüsü"
         >
@@ -143,42 +173,38 @@ export default function HomeScreen() {
           style={styles.avatarBtn}
         >
           <Avatar
-            uri={user?.avatarUrl}
-            name={isGuest ? 'G' : (user?.name ?? 'U')}
-            width={30}
-            height={30}
+            uri={resolvedAvatarUri}
+            width={moderateScale(38)}
+            height={moderateScale(38)}
           />
         </TouchableOpacity>
       }
       subtitle={undefined}
     />
-  );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  ), [sessionTitle, t, openDrawer, resolvedAvatarUri, user?.name, isGuest]);
 
   return (
     <View style={styles.root}>
+      <StatusBar style="light" />
       <ChatLayout
         header={header}
-input={
-          <ChatInput
-            onSend={handleSend}
-            onStop={onStop}
-            onModelSelectorPress={() => setModelPickerVisible(true)}
-            selectedAIModelName={selectedAIModel?.displayName}
-            isStreaming={isTyping}
-            placeholder={t('assistant.placeholder')}
-          />
-        }
+        input={chatInput}
       >
         <MessageList
           chatId={chatId}
           messages={messages}
           optimisticUserMsg={optimisticUserMsg}
           isStreamingActive={isStreamingActive}
-          streamingMessage={streamingMessage}
           streamingMessageId={streamingMessageId}
           optimisticUserMsgId={optimisticUserMsgId}
+          pendingStreamSV={pendingStreamSV}
+          isStreamingDoneSV={isStreamingDoneSV}
+          streamResetCountSV={streamResetCountSV}
+          onStreamingComplete={handleStreamingComplete}
+          lastStreamTextRef={lastStreamTextRef}
           isTyping={isTyping}
-          isSessionLoading={!!chatId && isSessionLoading}
+          isSessionLoading={isSessionLoading}
           onLike={likeMessage}
           onLoadMore={handleLoadMore}
           hasMore={hasNextPage}
@@ -196,7 +222,7 @@ input={
 
       <ScrollToBottomButton
         visible={scrolledUp}
-        unreadCount={unreadCount}
+        unreadCountSV={unreadCountSV}
         onPress={handleScrollToLatest}
       />
 
@@ -208,10 +234,13 @@ input={
 
       <ChatHistoryDrawer
         visible={drawerVisible}
-        onClose={() => setDrawerVisible(false)}
+        onClose={closeDrawer}
+        onHidden={handleDrawerHidden}
         onNewChat={startNewChat}
-        onSelectChat={(chat) => { loadSession(chat.id); setDrawerVisible(false); }}
+        onSelectChat={handleSelectChat}
       />
+
+      <NetworkConnectivitySheets promptOnMount />
     </View>
   );
 }

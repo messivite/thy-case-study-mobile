@@ -1,6 +1,5 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { View, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 
 type Props = {
@@ -9,24 +8,29 @@ type Props = {
   input: React.ReactNode;
 };
 
-export const ChatLayout: React.FC<Props> = ({ header, children, input }) => {
+const ChatLayoutInner: React.FC<Props> = ({ header, children, input }) => {
   const { colors } = useTheme();
 
+  const rootStyle = React.useMemo(() => [styles.root, { backgroundColor: colors.background }], [colors.background]);
+  const inputAreaStyle = React.useMemo(() => [styles.inputArea, { backgroundColor: colors.background }], [colors.background]);
+
   return (
-    <View style={[styles.root, { backgroundColor: colors.background }]}>
+    <View style={rootStyle}>
       {header}
       <KeyboardAvoidingView
-        behavior="padding"
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.kav}
       >
         <View style={styles.content}>{children}</View>
-        <View style={[styles.inputArea, { backgroundColor: colors.background }]}>
+        <View style={inputAreaStyle}>
           {input}
         </View>
       </KeyboardAvoidingView>
     </View>
   );
 };
+
+export const ChatLayout = React.memo(ChatLayoutInner);
 
 const styles = StyleSheet.create({
   root: { flex: 1 },

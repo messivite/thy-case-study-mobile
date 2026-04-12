@@ -22,6 +22,7 @@ Proje; onboarding, kimlik doğrulama, asistan sohbet akışı, ayarlar, çoklu d
 - [Proje Yapısı](#proje-yapısı)
 - [Hızlı Başlangıç](#hızlı-başlangıç)
 - [Environment Değişkenleri](#environment-değişkenleri)
+- [Yerel API ve ngrok tüneli](#yerel-api-ve-ngrok-tüneli)
 - [Geliştirme Komutları](#geliştirme-komutları)
 - [Çalışma Akışları](#çalışma-akışları)
 - [Auth ve Welcome akışı](#auth-ve-welcome-akışı)
@@ -151,6 +152,28 @@ EXPO_PUBLIC_API_URL=
 ```
 
 Not: `EXPO_PUBLIC_` ile başlayan değişkenler istemci tarafında erişilebilir.
+
+---
+
+## Yerel API ve ngrok tüneli
+
+> **Tunnel:** Docker ile Go API’niz yerelde (ör. `http://localhost:8082`) ayaktayken, fiziksel cihaz veya farklı makineden aynı backend’e ulaşmak için ngrok ile public bir HTTPS adresi açabilirsiniz. Mobil uygulamada `EXPO_PUBLIC_API_URL` değerini bu tünel URL’si yaparak `.env` / `.env.development` üzerinden lokal geliştirmeyi sürdürebilirsiniz.
+
+**Ön koşul:** Backend konteyneri ve Go servisi çalışıyor olmalı; API’nin dinlediği port (örnekte **8082**) ngrok ile eşleşmeli.
+
+```bash
+ngrok http 8082
+```
+
+Komut çıktısındaki **Forwarding** satırındaki `https://….ngrok-free.app` (veya size verilen adres) değerini kopyalayın ve ortam dosyanızda şu şekilde kullanın:
+
+```env
+EXPO_PUBLIC_API_URL=https://xxxx.ngrok-free.app
+```
+
+- Metro’yu / uygulamayı **env değişikliğinden sonra** yeniden başlatın (Expo public env’ler build/start anında okunur).
+- ngrok ücretsiz planda URL her oturumda değişebilir; değiştikçe `EXPO_PUBLIC_API_URL`’i güncellemeniz gerekir.
+- Yerel makinede yalnızca simülatör/emülatör kullanıyorsanız çoğu zaman doğrudan `http://localhost:8082` yeterlidir; tünel özellikle **gerçek cihaz** veya **LAN dışı** senaryolarda işe yarar.
 
 ---
 

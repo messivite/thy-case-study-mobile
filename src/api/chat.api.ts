@@ -69,7 +69,6 @@ export const streamChat = async (
     let buffer = '';
     let processedLength = 0;
     let settled = false;
-    let totalDelay = 0; // typewriter animation toplam gecikme
 
     const settle = () => {
       if (settled) return;
@@ -101,6 +100,7 @@ export const streamChat = async (
           const xhr = progressEvent.event?.target as XMLHttpRequest | undefined;
           const xhrAlt = progressEvent.event?.currentTarget as XMLHttpRequest | undefined;
           const fullText: string = xhr?.responseText ?? xhrAlt?.responseText ?? (progressEvent as any).responseText ?? '';
+
           if (!fullText || fullText.length <= processedLength) return;
 
           const newChunk = fullText.slice(processedLength);
@@ -125,23 +125,18 @@ export const streamChat = async (
           for (const line of lines) {
             const captured = line;
             if (isMeta(line)) {
-              // meta → anında işle, ID'ler FlatList key'i için hemen lazım
               processLine(captured, callbacks);
             } else if (isDelta(line)) {
-              // Tüm delta'ları anında gönder — karakter yayma onDelta'da yapılır
               processLine(captured, callbacks);
             } else {
-              // done/error — son delta'dan sonra
-              const schedAt = totalDelay + 1;
-              setTimeout(() => processLine(captured, callbacks), schedAt);
+              setTimeout(() => processLine(captured, callbacks), 1);
             }
           }
         },
         signal: controller.signal,
       },
     ).then((response) => {
-      // Response tamamlandı — onDownloadProgress hiç tetiklenmediyse
-      // (bazı RN ortamlarında) tüm text burada gelir
+      // Response tamamlandı — onDownloadProgress hiç tetiklenmediyse tüm text burada gelir
       if (processedLength === 0 && response.data) {
         const allText: string = typeof response.data === 'string' ? response.data : '';
         const lines = allText.split('\n');
@@ -149,8 +144,7 @@ export const streamChat = async (
       } else if (buffer.trim()) {
         processLine(buffer, callbacks);
       }
-      // Typewriter animation bitene kadar bekle
-      setTimeout(settle, totalDelay + 50);
+      setTimeout(settle, 50);
     }).catch((err) => {
       if (axios.isCancel(err) || (err as Error)?.name === 'CanceledError' || (err as Error)?.name === 'AbortError') {
         callbacks.onError?.('aborted');

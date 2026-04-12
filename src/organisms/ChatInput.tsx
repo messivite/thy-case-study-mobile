@@ -14,8 +14,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   Platform,
-  ScrollView,
-  Alert,
   Modal,
   KeyboardAvoidingView,
 } from 'react-native';
@@ -29,9 +27,6 @@ import Animated, {
   Extrapolation,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
-import { MotiView } from '@/lib/motiView';
-import * as ImagePicker from 'expo-image-picker';
-import * as DocumentPicker from 'expo-document-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
@@ -40,22 +35,22 @@ import { BlurView } from 'expo-blur';
 import { THYIcon } from '@/atoms/thy-icon';
 import { AI_MODELS, AIModelId } from '@/constants/models';
 import { Attachment } from '@/types/chat.types';
-import { AttachmentPreview } from '@/molecules/AttachmentPreview';
-import { AttachmentPickerSheet } from '@/molecules/AttachmentPickerSheet';
 import { radius, spacing } from '@/constants/spacing';
 import { fontFamily, fontSize } from '@/constants/typography';
 import { palette } from '@/constants/colors';
 import { scale as scaleSize } from '@/lib/responsive';
+import { Text } from '@/atoms/Text';
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
 const LINE_HEIGHT = 22;
-const MIN_INPUT_HEIGHT = 22; // single line
-const MAX_LINES = 3;
+const MAX_LINES = 4;
 const MAX_INPUT_HEIGHT = LINE_HEIGHT * MAX_LINES;
-const SIZE = scaleSize(36);
+const MAX_CHARS = 600;
+const CHAR_WARN_THRESHOLD = 100; // bu kadar kala counter görünür
+const SIZE = scaleSize(42);
 const ICON_SIZE = SIZE - scaleSize(10);
 
 // ---------------------------------------------------------------------------
@@ -239,6 +234,7 @@ const chipStyles = StyleSheet.create({
   },
 });
 
+
 // Gemini-style soft shadow — no harsh border, depth comes from shadow
 const cardShadow = {
   shadowColor: '#000',
@@ -254,8 +250,8 @@ const cardShadow = {
 
 interface ExpandedInputModalProps {
   visible: boolean;
-  value: string;
-  onChange: (t: string) => void;
+  defaultValue: string;
+  onChangeText: (t: string) => void;
   onClose: () => void;
   onSend: () => void;
   canSend: boolean;
@@ -265,11 +261,12 @@ interface ExpandedInputModalProps {
 }
 
 const ExpandedInputModal = memo<ExpandedInputModalProps>(({
-  visible, value, onChange, onClose, onSend, canSend, isStreaming, onStop, placeholder,
+  visible, defaultValue, onChangeText, onClose, onSend, canSend, isStreaming, onStop, placeholder,
 }) => {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const inputRef = useRef<TextInput>(null);
+  const [charCount, setCharCount] = useState(defaultValue.length);
 
   const handleShow = useCallback(() => {
     setTimeout(() => inputRef.current?.focus(), 100);
@@ -283,51 +280,47 @@ const ExpandedInputModal = memo<ExpandedInputModalProps>(({
   const sheetStyle = useMemo(() => ([
     styles.expandedSheet,
     {
-      backgroundColor: colors.surface,
+      backgroundColor: colors.background,
+      paddingTop: insets.top + spacing[2],
       paddingBottom: insets.bottom + spacing[3],
-      borderTopColor: colors.border,
     },
-  ]), [colors.surface, colors.border, insets.bottom]);
+  ]), [colors.background, insets.top, insets.bottom]);
 
   const inputStyle = useMemo(() => ([
     styles.expandedInput,
     { color: colors.text, fontFamily: fontFamily.regular, fontSize: fontSize.base },
   ]), [colors.text]);
 
-  const grabBarStyle = useMemo(() => ([
-    styles.grabBar, { backgroundColor: colors.border },
-  ]), [colors.border]);
-
   return (
     <Modal
       visible={visible}
-      transparent
+      transparent={false}
       animationType="slide"
       onShow={handleShow}
       onRequestClose={onClose}
     >
       <KeyboardAvoidingView
-        style={styles.expandedBg}
+        style={sheetStyle}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onClose} />
-        <View style={sheetStyle}>
-          <View style={grabBarStyle} />
-          <TextInput
-            ref={inputRef}
-            style={inputStyle}
-            placeholder={placeholder}
-            placeholderTextColor={colors.textSecondary}
-            multiline
-            value={value}
-            onChangeText={onChange}
-            autoCorrect={false}
-            textAlignVertical="top"
-          />
-          <View style={styles.expandedRow}>
-            <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
+        {/* Header */}
+        <View style={styles.expandedHeader}>
+          <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="chevron-down" size={24} color={colors.textSecondary} />
+          </TouchableOpacity>
+          <View style={styles.expandedHeaderRight}>
+            <Animated.Text style={[
+              growingStyles.counter,
+              {
+                color: charCount >= MAX_CHARS - 50
+                  ? '#e53e3e'
+                  : charCount >= MAX_CHARS - 100
+                  ? '#dd6b20'
+                  : colors.textSecondary + '99',
+              },
+            ]}>
+              {charCount}/{MAX_CHARS}
+            </Animated.Text>
             <SendButton
               canSend={canSend}
               isStreaming={isStreaming}
@@ -336,9 +329,153 @@ const ExpandedInputModal = memo<ExpandedInputModalProps>(({
             />
           </View>
         </View>
+
+        <TextInput
+          ref={inputRef}
+          style={inputStyle}
+          placeholder={placeholder}
+          placeholderTextColor={colors.textSecondary}
+          multiline
+          defaultValue={defaultValue}
+          maxLength={MAX_CHARS}
+          onChangeText={(t) => {
+            setCharCount(t.length);
+            onChangeText(t);
+          }}
+          autoCorrect={false}
+          textAlignVertical="top"
+        />
       </KeyboardAvoidingView>
     </Modal>
   );
+});
+
+// ---------------------------------------------------------------------------
+// GrowingTextInput — kendi value/height state'ini yönetir, parent'ı re-render etmez
+// ---------------------------------------------------------------------------
+
+interface GrowingTextInputHandle {
+  getText: () => string;
+  clear: () => void;
+  focus: () => void;
+  syncValue: (v: string) => void;
+}
+
+interface GrowingTextInputProps {
+  placeholder: string;
+  placeholderTextColor: string;
+  editable: boolean;
+  color: string;
+  counterColor: string;
+  onHasTextChange: (hasText: boolean) => void;
+  onFocus: () => void;
+  onBlur: () => void;
+}
+
+const GrowingTextInput = React.memo(React.forwardRef<GrowingTextInputHandle, GrowingTextInputProps>(
+  ({ placeholder, placeholderTextColor, editable, color, counterColor, onHasTextChange, onFocus, onBlur }, ref) => {
+    const inputRef = useRef<TextInput>(null);
+    const prevHasText = useRef(false);
+    const prevShowCounter = useRef(false);
+    const [value, setValue] = useState('');
+    const [counterState, setCounterState] = useState<number | null>(null);
+
+    const onHasTextChangeRef = useRef(onHasTextChange);
+    useEffect(() => { onHasTextChangeRef.current = onHasTextChange; }, [onHasTextChange]);
+
+    const valueRef = useRef('');
+
+    React.useImperativeHandle(ref, () => ({
+      getText: () => valueRef.current,
+      clear: () => {
+        valueRef.current = '';
+        setValue('');
+        if (prevShowCounter.current) {
+          prevShowCounter.current = false;
+          setCounterState(null);
+        }
+        if (prevHasText.current) {
+          prevHasText.current = false;
+          onHasTextChangeRef.current(false);
+        }
+      },
+      focus: () => inputRef.current?.focus(),
+      syncValue: (v: string) => {
+        valueRef.current = v;
+        setValue(v);
+      },
+    }), []);
+
+    const handleChangeText = useCallback((t: string) => {
+      valueRef.current = t;
+      setValue(t);
+      const nowShow = t.length >= MAX_CHARS - CHAR_WARN_THRESHOLD;
+      if (nowShow !== prevShowCounter.current) {
+        prevShowCounter.current = nowShow;
+        setCounterState(nowShow ? t.length : null);
+      } else if (nowShow) {
+        setCounterState(t.length);
+      }
+      const nowHas = t.trim().length > 0;
+      if (nowHas !== prevHasText.current) {
+        prevHasText.current = nowHas;
+        onHasTextChangeRef.current(nowHas);
+      }
+    }, []);
+
+    const counterTextColor = counterState !== null
+      ? counterState >= MAX_CHARS - 50
+        ? '#e53e3e'
+        : counterState >= MAX_CHARS - 100
+        ? '#dd6b20'
+        : counterColor
+      : counterColor;
+
+    return (
+      <View>
+        <TextInput
+          ref={inputRef}
+          style={[growingStyles.input, { color }]}
+          placeholder={placeholder}
+          placeholderTextColor={placeholderTextColor}
+          multiline
+          value={value}
+          maxLength={MAX_CHARS}
+          onChangeText={handleChangeText}
+          onFocus={onFocus}
+          onBlur={onBlur}
+          returnKeyType="default"
+          editable={editable}
+          textAlignVertical="top"
+          scrollEnabled
+          autoCorrect={false}
+          spellCheck={false}
+        />
+        {counterState !== null && (
+          <Animated.Text style={[growingStyles.counter, { color: counterTextColor, alignSelf: 'flex-end' }]}>
+            {counterState}/{MAX_CHARS}
+          </Animated.Text>
+        )}
+      </View>
+    );
+  },
+));
+
+const growingStyles = StyleSheet.create({
+  input: {
+    fontFamily: fontFamily.regular,
+    fontSize: fontSize.base,
+    lineHeight: LINE_HEIGHT,
+    includeFontPadding: false,
+    paddingTop: 0,
+    paddingBottom: spacing[2],
+    minHeight: LINE_HEIGHT,
+    maxHeight: MAX_INPUT_HEIGHT,
+  },
+  counter: {
+    fontSize: 11,
+    fontFamily: fontFamily.regular,
+  },
 });
 
 // ---------------------------------------------------------------------------
@@ -350,7 +487,7 @@ type Props = {
   onStop?: () => void;
   onModelSelectorPress: () => void;
   selectedModel?: AIModelId;
-  selectedAIModelName?: string; // API'den gelen dinamik model adı
+  selectedAIModelName?: string;
   disabled?: boolean;
   isStreaming?: boolean;
   placeholder?: string;
@@ -369,143 +506,35 @@ const ChatInputInner: React.FC<Props> = ({
   const { colors, isDark } = useTheme();
   const haptics = useHaptics();
   const insets = useSafeAreaInsets();
+  // insets.bottom keyboard açılınca değişmez — bir kez ref'e al, style recompute tetiklemesin
+  const bottomInsetRef = useRef(insets.bottom);
+  if (insets.bottom > 0) bottomInsetRef.current = insets.bottom;
 
-  const [text, setText] = useState('');
-  const [lineCount, setLineCount] = useState(1);
-  const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [pickerVisible, setPickerVisible] = useState(false);
+  const growingInputRef = useRef<GrowingTextInputHandle>(null);
+  const [hasText, setHasText] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
   const focusProgress = useSharedValue(0);
-  const expandOpacity = useSharedValue(0);
-  const expandVisible = lineCount > 2;
 
-  useEffect(() => {
-    expandOpacity.value = withTiming(expandVisible ? 1 : 0, { duration: 180 });
-  }, [expandVisible, expandOpacity]);
-
-  const expandAnimStyle = useAnimatedStyle(() => ({
-    opacity: expandOpacity.value,
-    pointerEvents: expandOpacity.value > 0.5 ? 'auto' : 'none',
-  }));
-
+  // String concat worklet içinde değil, colors değişince bir kez hesapla
+  const primaryBorder = useMemo(() => colors.primary + '55', [colors.primary]);
   const containerBorderStyle = useAnimatedStyle(() => ({
     borderColor: interpolateColor(
       focusProgress.value,
       [0, 1],
-      ['rgba(0,0,0,0.06)', colors.primary + '55'],
+      ['rgba(0,0,0,0.06)', primaryBorder],
     ),
   }));
-
-  // --- Attachment helpers ---
-  // useCallback ile stable referans — simulateUpload'a stale closure geçmemek için
-  // updateAttachment'ı fonksiyonel updater (prev =>) olarak kullanıyoruz.
-
-  const addAttachment = useCallback((a: Attachment) => {
-    setAttachments((prev) => [...prev, a]);
-  }, []);
-
-  const updateAttachment = useCallback((id: string, updates: Partial<Attachment>) => {
-    setAttachments((prev) => prev.map((a) => (a.id === id ? { ...a, ...updates } : a)));
-  }, []);
-
-  const removeAttachment = useCallback((id: string) => {
-    setAttachments((prev) => prev.filter((a) => a.id !== id));
-  }, []);
-
-  // updateAttachment ref'i — interval callback'i her zaman güncel fonksiyonu çağırır
-  const updateAttachmentRef = useRef(updateAttachment);
-  useEffect(() => {
-    updateAttachmentRef.current = updateAttachment;
-  }, [updateAttachment]);
-
-  const simulateUpload = useCallback((id: string) => {
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += 0.15 + Math.random() * 0.1;
-      if (progress >= 1) {
-        clearInterval(interval);
-        updateAttachmentRef.current(id, { status: 'done', progress: 1, remoteUrl: 'https://placeholder.url' });
-      } else {
-        updateAttachmentRef.current(id, { status: 'uploading', progress });
-      }
-    }, 250);
-  }, []);
-
-  // --- Pickers ---
-
-  const handleCamera = useCallback(async () => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('İzin Gerekli', 'Kamera erişimi için izin vermeniz gerekiyor.');
-      return;
-    }
-    const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.85 });
-    if (result.canceled || !result.assets?.[0]) return;
-    const asset = result.assets[0];
-    const id = `att_${Date.now()}`;
-    addAttachment({
-      id, type: 'image',
-      name: asset.fileName ?? `photo_${Date.now()}.jpg`,
-      uri: asset.uri, mimeType: asset.mimeType ?? 'image/jpeg',
-      size: asset.fileSize, width: asset.width, height: asset.height,
-      status: 'uploading', progress: 0,
-    });
-    simulateUpload(id);
-  }, [addAttachment, simulateUpload]);
-
-  const handleGallery = useCallback(async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('İzin Gerekli', 'Galeri erişimi için izin vermeniz gerekiyor.');
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'], allowsMultipleSelection: true, quality: 0.85, selectionLimit: 5,
-    });
-    if (result.canceled || !result.assets?.length) return;
-    result.assets.forEach((asset) => {
-      const id = `att_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-      addAttachment({
-        id, type: 'image',
-        name: asset.fileName ?? `image_${Date.now()}.jpg`,
-        uri: asset.uri, mimeType: asset.mimeType ?? 'image/jpeg',
-        size: asset.fileSize, width: asset.width, height: asset.height,
-        status: 'uploading', progress: 0,
-      });
-      simulateUpload(id);
-    });
-  }, [addAttachment, simulateUpload]);
-
-  const handleDocument = useCallback(async () => {
-    const result = await DocumentPicker.getDocumentAsync({
-      type: ['application/pdf', '*/*'], multiple: false, copyToCacheDirectory: true,
-    });
-    if (result.canceled || !result.assets?.[0]) return;
-    const asset = result.assets[0];
-    const id = `att_${Date.now()}`;
-    const isPDF = asset.mimeType === 'application/pdf' || asset.name?.toLowerCase().endsWith('.pdf');
-    addAttachment({
-      id, type: isPDF ? 'pdf' : 'file',
-      name: asset.name ?? `file_${Date.now()}`,
-      uri: asset.uri, mimeType: asset.mimeType ?? 'application/octet-stream',
-      size: asset.size, status: 'uploading', progress: 0,
-    });
-    simulateUpload(id);
-  }, [addAttachment, simulateUpload]);
 
   // --- Send / Stop ---
 
   const handleSend = useCallback(() => {
-    const trimmed = text.trim();
-    if ((!trimmed && attachments.length === 0) || disabled) return;
-    if (attachments.some((a) => a.status === 'uploading')) return;
+    const trimmed = (growingInputRef.current?.getText() ?? '').trim();
+    if (!trimmed || disabled) return;
     haptics.medium();
-    onSend(trimmed, attachments);
-    setText('');
-    setAttachments([]);
-    setLineCount(1);
-  }, [text, attachments, disabled, onSend, haptics]);
+    onSend(trimmed, []);
+    growingInputRef.current?.clear();
+  }, [disabled, onSend, haptics]);
 
   const handleStop = useCallback(() => {
     haptics.medium();
@@ -514,39 +543,20 @@ const ChatInputInner: React.FC<Props> = ({
 
   // --- Derived state (memoized) ---
 
-  const canSend = useMemo(() =>
-    !disabled &&
-    (text.trim().length > 0 || attachments.length > 0) &&
-    !attachments.some((a) => a.status === 'uploading'),
-  [disabled, text, attachments]);
+  const canSend = useMemo(() => !disabled && hasText, [disabled, hasText]);
 
   const model = useMemo(() =>
     AI_MODELS.find((m) => m.id === selectedModel),
   [selectedModel]);
 
-  const hasAttachments = attachments.length > 0;
-
-  const imageAttachments = useMemo(() =>
-    attachments.filter((a) => a.type === 'image'),
-  [attachments]);
-
-  const fileAttachments = useMemo(() =>
-    attachments.filter((a) => a.type !== 'image'),
-  [attachments]);
-
   // --- Stable callbacks for toolbar buttons ---
 
   const handleFocus = useCallback(() => {
     focusProgress.value = withTiming(1, { duration: 200 });
-  }, [focusProgress]);
+  }, []);
 
   const handleBlur = useCallback(() => {
     focusProgress.value = withTiming(0, { duration: 200 });
-  }, [focusProgress]);
-
-  const handleContentSizeChange = useCallback((e: any) => {
-    const lines = Math.round(e.nativeEvent.contentSize.height / LINE_HEIGHT);
-    setLineCount(Math.max(1, lines));
   }, []);
 
   const handleExpandPress = useCallback(() => {
@@ -556,13 +566,6 @@ const ChatInputInner: React.FC<Props> = ({
 
   const handleExpandClose = useCallback(() => setExpanded(false), []);
 
-  const handlePickerClose = useCallback(() => setPickerVisible(false), []);
-
-  const handleAttachPress = useCallback(() => {
-    haptics.light();
-    setPickerVisible(true);
-  }, [haptics]);
-
   // --- Memoized styles ---
 
   const wrapperStyle = useMemo(() => ([
@@ -571,104 +574,48 @@ const ChatInputInner: React.FC<Props> = ({
 
   const cardStyle = useMemo(() => ([
     styles.card,
-    { backgroundColor: colors.inputBg, paddingBottom: insets.bottom },
+    { backgroundColor: colors.inputBg, paddingBottom: bottomInsetRef.current },
     cardShadow,
-  ]), [colors.inputBg, insets.bottom]);
-
-  const inputStyle = useMemo(() => ([
-    styles.input,
-    { color: colors.text, fontFamily: fontFamily.regular, fontSize: fontSize.base },
-  ]), [colors.text]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  ]), [colors.inputBg]);
 
   return (
     <View style={wrapperStyle}>
-      {/* Attachment previews */}
-      {hasAttachments && (
-        <MotiView
-          from={{ opacity: 0, translateY: 8 }}
-          animate={{ opacity: 1, translateY: 0 }}
-          transition={{ type: 'timing', duration: 200 }}
-          style={styles.previewArea}
-        >
-          {imageAttachments.length > 0 && (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.imagePreviewRow}
-            >
-              {imageAttachments.map((att) => (
-                <AttachmentPreview
-                  key={att.id}
-                  attachment={att}
-                  isInput
-                  onRemove={() => removeAttachment(att.id)}
-                />
-              ))}
-            </ScrollView>
-          )}
-          {fileAttachments.map((att) => (
-            <AttachmentPreview
-              key={att.id}
-              attachment={att}
-              isInput
-              onRemove={() => removeAttachment(att.id)}
-            />
-          ))}
-        </MotiView>
-      )}
-
       {/* Main input card */}
       <Animated.View style={[cardStyle, containerBorderStyle]}>
-        {/* Expand — top right, animates in after 2 lines */}
-        <Animated.View style={[styles.expandBtn, expandAnimStyle]} pointerEvents={expandVisible ? 'auto' : 'none'}>
-          <TouchableOpacity
-            onPress={handleExpandPress}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Ionicons name="expand-outline" size={scaleSize(16)} color={colors.textSecondary} />
-          </TouchableOpacity>
-        </Animated.View>
+        {/* Input row: text büyür, expand ikonu sağda sabit */}
+        <View style={styles.inputRow}>
+          <View style={styles.inputWrap}>
+            <GrowingTextInput
+              ref={growingInputRef}
+              placeholder={placeholder}
+              placeholderTextColor={colors.textSecondary}
+              editable={!disabled && !isStreaming}
+              color={colors.text}
+              counterColor={colors.textSecondary + '99'}
+              onHasTextChange={setHasText}
+              onFocus={handleFocus}
+              onBlur={handleBlur}
+            />
+          </View>
 
-        {/* Text input */}
-        <TextInput
-          style={inputStyle}
-          placeholder={placeholder}
-          placeholderTextColor={colors.textSecondary}
-          multiline
-          value={text}
-          onChangeText={setText}
-          onFocus={handleFocus}
-          onBlur={handleBlur}
-          onContentSizeChange={handleContentSizeChange}
-          returnKeyType="default"
-          editable={!disabled && !isStreaming}
-          textAlignVertical="top"
-          scrollEnabled
-        />
+          {/* Expand — her zaman görünür, onContentSizeChange yükü kalktı */}
+          <View style={styles.expandSide}>
+            <TouchableOpacity
+              onPress={handleExpandPress}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons name="expand-outline" size={scaleSize(18)} color={colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+        </View>
 
         {/* Bottom toolbar */}
         <View style={styles.toolbar}>
           <View style={styles.toolbarLeft}>
-            {/* Attach */}
-            <TouchableOpacity
-              style={styles.iconBtn}
-              onPress={handleAttachPress}
-              disabled={disabled}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Ionicons
-                name="add"
-                size={scaleSize(22)}
-                color={hasAttachments ? colors.primary : colors.textSecondary}
-              />
-              {hasAttachments && (
-                <View style={[styles.badge, { backgroundColor: colors.primary }]}>
-                  <Animated.Text style={styles.badgeText}>{attachments.length}</Animated.Text>
-                </View>
-              )}
-            </TouchableOpacity>
-
-            {/* Model chip */}
+            <Text variant="caption" color={colors.textSecondary} style={styles.modelLabel}>
+              Model Tercihi:
+            </Text>
             <ModelChip
               modelName={selectedAIModelName ?? model?.description ?? 'Model'}
               modelColor={model?.color ?? colors.primary}
@@ -677,27 +624,26 @@ const ChatInputInner: React.FC<Props> = ({
             />
           </View>
 
-          <SendButton
-            canSend={canSend}
-            isStreaming={isStreaming}
-            onSend={handleSend}
-            onStop={handleStop}
-          />
+          <View style={styles.toolbarRight}>
+            <SendButton
+              canSend={canSend}
+              isStreaming={isStreaming}
+              onSend={handleSend}
+              onStop={handleStop}
+            />
+          </View>
         </View>
       </Animated.View>
 
-      <AttachmentPickerSheet
-        visible={pickerVisible}
-        onClose={handlePickerClose}
-        onCamera={handleCamera}
-        onGallery={handleGallery}
-        onDocument={handleDocument}
-      />
-
       <ExpandedInputModal
         visible={expanded}
-        value={text}
-        onChange={setText}
+        defaultValue={growingInputRef.current?.getText() ?? ''}
+        onChangeText={(t) => {
+          // Modal'daki text değişince ref'i senkronize et
+          growingInputRef.current?.syncValue(t);
+          const nowHas = t.trim().length > 0;
+          setHasText((prev) => prev === nowHas ? prev : nowHas);
+        }}
         onClose={handleExpandClose}
         onSend={handleSend}
         canSend={canSend}
@@ -722,12 +668,6 @@ const styles = StyleSheet.create({
     paddingBottom: 0,
     gap: spacing[2],
   },
-  previewArea: { gap: spacing[2] },
-  imagePreviewRow: {
-    flexDirection: 'row',
-    gap: spacing[2],
-    paddingVertical: spacing[1],
-  },
   card: {
     borderTopLeftRadius: radius['2xl'],
     borderTopRightRadius: radius['2xl'],
@@ -738,18 +678,9 @@ const styles = StyleSheet.create({
     paddingTop: spacing[3],
     position: 'relative',
   },
-  expandBtn: {
-    position: 'absolute',
-    top: spacing[3],
-    right: spacing[3],
-    zIndex: 1,
-  },
   input: {
-    minHeight: MIN_INPUT_HEIGHT,
-    maxHeight: MAX_INPUT_HEIGHT,
     paddingTop: 0,
     paddingBottom: spacing[2],
-    paddingRight: spacing[3] + scaleSize(16) + spacing[2],
     lineHeight: LINE_HEIGHT,
     includeFontPadding: false,
   },
@@ -764,61 +695,46 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing[2],
   },
-  iconBtn: {
-    width: scaleSize(34),
-    height: scaleSize(34),
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
+  modelLabel: {
+    fontFamily: fontFamily.medium,
   },
-  badge: {
-    position: 'absolute',
-    top: 2,
-    right: 2,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
+  toolbarRight: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: spacing[2],
+    marginRight: spacing[1],
   },
-  badgeText: {
-    color: palette.white,
-    fontSize: 9,
-    fontFamily: fontFamily.bold,
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+  },
+  inputWrap: {
+    flex: 1,
+    marginRight: spacing[2],
+  },
+  expandSide: {
+    paddingBottom: spacing[2],
   },
   // Expanded modal
-  expandedBg: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.4)',
-  },
   expandedSheet: {
-    borderTopLeftRadius: radius['2xl'],
-    borderTopRightRadius: radius['2xl'],
-    borderTopWidth: 1,
-    paddingHorizontal: spacing[4],
-    paddingTop: spacing[3],
-    minHeight: 260,
-    maxHeight: '75%',
-  },
-  grabBar: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginBottom: spacing[3],
-  },
-  expandedInput: {
     flex: 1,
-    minHeight: 160,
-    lineHeight: LINE_HEIGHT,
-    includeFontPadding: false,
-    textAlignVertical: 'top',
+    paddingHorizontal: spacing[4],
   },
-  expandedRow: {
+  expandedHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: spacing[2],
+    paddingBottom: spacing[3],
+  },
+  expandedHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+  },
+  expandedInput: {
+    flex: 1,
+    lineHeight: LINE_HEIGHT,
+    includeFontPadding: false,
+    textAlignVertical: 'top',
   },
 });

@@ -39,6 +39,8 @@ export class RealmMessage extends Realm.Object<RealmMessage> {
   content!: string;
   createdAt!: string;
   syncedAt!: number;
+  provider?: string;
+  model?: string;
 
   static schema: Realm.ObjectSchema = {
     name: 'RealmMessage',
@@ -50,6 +52,8 @@ export class RealmMessage extends Realm.Object<RealmMessage> {
       content: 'string',
       createdAt: 'string',
       syncedAt: 'int',
+      provider: 'string?',
+      model: 'string?',
     },
   };
 }
@@ -75,7 +79,7 @@ export const openRealm = (): Promise<Realm> => {
 
   _realmPromise = Realm.open({
     schema: [RealmSession, RealmMessage],
-    schemaVersion: 6,
+    schemaVersion: 8,
     onMigration: (_oldRealm: Realm, newRealm: Realm) => {
       // v1 → v2: lastMessagePreview alani eklendi, mevcutlara bos string ver
       const sessions = newRealm.objects('RealmSession');
@@ -118,6 +122,24 @@ export const closeRealm = (): void => {
     _realm = null;
   }
   _realmPromise = null;
+};
+
+// ---------------------------------------------------------------------------
+// writeQueue — aynı sessionId için concurrent Realm write'ı serialize eder.
+// Realm JS thread'inde çalışır; iç içe write() transaction'ları exception atar.
+// ---------------------------------------------------------------------------
+
+const writeQueues = new Map<string, Promise<void>>();
+
+const enqueue = (key: string, fn: () => Promise<void>): Promise<void> => {
+  const prev = writeQueues.get(key) ?? Promise.resolve();
+  const next = prev.then(fn).catch(() => {});
+  writeQueues.set(key, next);
+  // Tamamlanınca map'ten temizle — bellek sızdırma olmasın
+  next.finally(() => {
+    if (writeQueues.get(key) === next) writeQueues.delete(key);
+  });
+  return next;
 };
 
 // ---------------------------------------------------------------------------
@@ -170,11 +192,10 @@ export const realmService = {
    * Sessionlari Realm'e kaydeder (upsert + max 20 kurali).
    * Async — JS thread'ini bloklamaz.
    */
-  async saveSessions(items: ChatListItem[]): Promise<void> {
-    try {
+  saveSessions(items: ChatListItem[]): Promise<void> {
+    return enqueue('__sessions__', async () => {
       const realm = await openRealm();
       const now = Date.now();
-
       realm.write(() => {
         for (const item of items) {
           realm.create<RealmSession>(
@@ -191,7 +212,6 @@ export const realmService = {
             Realm.UpdateMode.Modified,
           );
         }
-
         const all = realm
           .objects<RealmSession>('RealmSession')
           .sorted('lastMessageAt', true);
@@ -200,9 +220,7 @@ export const realmService = {
           for (const s of toDelete) realm.delete(s);
         }
       });
-    } catch {
-      // Realm yazma hatasi — sessizce gec
-    }
+    });
   },
 
   /**
@@ -226,8 +244,8 @@ export const realmService = {
         id: m._id,
         role: m.role as 'user' | 'assistant',
         content: m.content,
-        provider: '' as string,
-        model: '' as string,
+        provider: m.provider ?? '',
+        model: m.model ?? '',
         createdAt: m.createdAt,
       }));
 
@@ -242,17 +260,14 @@ export const realmService = {
    * Mesajlari Realm'e kaydeder (upsert + max 20 kurali).
    * Async — JS thread'ini bloklamaz.
    */
-  async saveMessages(sessionId: string, messages: ChatMessage[]): Promise<void> {
-    try {
+  saveMessages(sessionId: string, messages: ChatMessage[]): Promise<void> {
+    return enqueue(sessionId, async () => {
       const realm = await openRealm();
       const now = Date.now();
-
       realm.write(() => {
         for (let i = 0; i < messages.length; i++) {
           const msg = messages[i];
           const msgCreatedAt = msg.createdAt ?? new Date(now + i).toISOString();
-          // _id: API id varsa kullan (upsert güvenli), yoksa sessionId+createdAt bazlı sabit key
-          // createdAt sabit olduğu sürece aynı mesaj her zaman aynı _id üretir → duplicate yok
           const msgId = msg.id ?? `${sessionId}__${msgCreatedAt}__${msg.role}`;
           realm.create<RealmMessage>(
             'RealmMessage',
@@ -263,24 +278,22 @@ export const realmService = {
               content: msg.content,
               createdAt: msgCreatedAt,
               syncedAt: now,
+              provider: msg.provider ?? undefined,
+              model: msg.model ?? undefined,
             },
-            Realm.UpdateMode.Modified, // aynı _id varsa güncelle, yoksa ekle
+            Realm.UpdateMode.Modified,
           );
         }
-
-        // Max 20 kural — en eski mesajları sil
         const all = realm
           .objects<RealmMessage>('RealmMessage')
           .filtered('sessionId == $0', sessionId)
-          .sorted('createdAt', true); // newest first
+          .sorted('createdAt', true);
         if (all.length > MAX_MESSAGES_PER_SESSION) {
           const toDelete = Array.from(all).slice(MAX_MESSAGES_PER_SESSION);
           for (const m of toDelete) realm.delete(m);
         }
       });
-    } catch {
-      // sessizce gec
-    }
+    });
   },
 
   /**

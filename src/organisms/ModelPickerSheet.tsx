@@ -35,7 +35,9 @@ import { Text } from '@/atoms/Text';
 import { THYIcon } from '@/atoms/thy-icon';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
+import { toast } from '@/lib/toast';
 import { useModels } from '@/hooks/api/useModels';
+import { useUpdateMeMutation } from '@/hooks/api/useUpdateMe';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setSelectedAIModel } from '@/store/slices/chatSlice';
 import { palette } from '@/constants/colors';
@@ -280,7 +282,10 @@ export const ModelPickerSheet: React.FC<ModelPickerSheetProps> = ({
   const insets = useSafeAreaInsets();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const dispatch = useAppDispatch();
+  const { mutate: updateMeProfile } = useUpdateMeMutation();
   const selectedAIModel = useAppSelector((s) => s.chat.selectedAIModel);
+  const selectedAIModelRef = useRef(selectedAIModel);
+  useEffect(() => { selectedAIModelRef.current = selectedAIModel; }, [selectedAIModel]);
   const { models, isLoading } = useModels();
 
   const pageWidth = windowWidth;
@@ -366,13 +371,27 @@ export const ModelPickerSheet: React.FC<ModelPickerSheetProps> = ({
   const handleTabPress = useCallback((i: number) => goTo(i), [goTo]);
 
   const handleSelect = useCallback((record: AIModelRecord) => {
+    const previous = selectedAIModelRef.current;
+    // Optimistic: anında Redux + MMKV güncelle
     dispatch(setSelectedAIModel({
       provider: record.provider,
       model: record.model,
       displayName: record.displayName,
     }));
+    // Backend sync — hata alırsa rollback
+    updateMeProfile(
+      { preferredProvider: record.provider, preferredModel: record.model },
+      {
+        onSuccess: () => {
+          toast.success(t('settings.modelPreferenceUpdated'));
+        },
+        onError: () => {
+          dispatch(setSelectedAIModel(previous));
+        },
+      },
+    );
     closeWithAnimation();
-  }, [dispatch, closeWithAnimation]);
+  }, [dispatch, updateMeProfile, closeWithAnimation]);
 
   // closeWithAnimation ref — gesture rebuild olmadan güncel fonksiyonu tutar
   const closeRef = useRef(closeWithAnimation);

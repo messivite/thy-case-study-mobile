@@ -1,7 +1,6 @@
 import React from 'react';
-import { Text as RNText, TextProps, StyleSheet } from 'react-native';
+import { Text as RNText, TextProps } from 'react-native';
 import { textVariants, fontFamily } from '@/constants/typography';
-import { useTheme } from '@/hooks/useTheme';
 
 type TextVariant = keyof typeof textVariants;
 
@@ -11,25 +10,29 @@ type Props = TextProps & {
   align?: 'left' | 'center' | 'right';
 };
 
-export const Text: React.FC<Props> = ({
+// useTheme yok — color her zaman prop olarak geçilmeli.
+// Default renk: koyu (light mode uyumlu) — tema geçişlerinde parent zaten rengi prop olarak veriyor.
+// Context subscription yok → re-render yok.
+const TextInner: React.FC<Props> = ({
   variant = 'body',
-  color,
+  color = '#111111',
   align = 'left',
   style,
   ...props
 }) => {
-  const { colors } = useTheme();
   const variantStyle = textVariants[variant];
 
   return (
     <RNText
       style={[
-        { fontFamily: fontFamily.regular }, // Inter default — variant veya style prop override eder
+        { fontFamily: fontFamily.regular },
         variantStyle,
-        { color: color ?? colors.text, textAlign: align },
+        { color, textAlign: align },
         style,
       ]}
       {...props}
     />
   );
 };
+
+export const Text = React.memo(TextInner);

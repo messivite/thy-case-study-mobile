@@ -99,7 +99,11 @@
     "onlineMessage": "If you have messages queued while offline, you can sync them with the server now.",
     "onlineSync": "Sync now",
     "onlineLater": "Later",
-    "syncPlaceholder": "Sync will be wired up with the offline queue next."
+    "onlineMessagePending": "{{count}} message(s) queued while offline. Sync now to send them.",
+    "syncSuccess": "Synced successfully, chat updated",
+    "syncingTitle": "Syncing...",
+    "syncingMessage": "{{completed}} / {{total}} messages sent",
+    "syncFailed": "{{count}} message(s) failed to send"
   },
   "assistant": {
     "title": "Assistant",
@@ -114,14 +118,14 @@
     "emptySubtitle": "Write a question and your AI assistant will respond.",
     "welcomeGreeting": "Hi {{name}}",
     "welcomeQuestion": "Where should we begin?",
-    "quickActionImage": "Create Image",
-    "quickActionImagePrompt": "Generate a creative visual idea for me.",
-    "quickActionMusic": "Create Music",
-    "quickActionMusicPrompt": "Suggest a short focus music playlist.",
-    "quickActionEnergy": "Boost my day",
-    "quickActionEnergyPrompt": "Give me 5 short tips to start the day with energy.",
-    "quickActionVideo": "Create Video",
-    "quickActionVideoPrompt": "Suggest a 30-second social media video concept.",
+    "quickActionFlight": "Check My Flight",
+    "quickActionFlightPrompt": "I'd like information about my flight. Can you help me with a flight number or route?",
+    "quickActionBaggage": "Baggage Rules",
+    "quickActionBaggagePrompt": "What are Turkish Airlines' baggage allowance rules and fees?",
+    "quickActionTravel": "Travel Suggestions",
+    "quickActionTravelPrompt": "Can you give me travel suggestions for beautiful destinations I can visit?",
+    "quickActionCheckin": "Check-in Help",
+    "quickActionCheckinPrompt": "How do I do online check-in and when can I start?",
     "typing": "Typing...",
     "loadingMore": "Loading older messages...",
     "speak": "Listen",
@@ -160,7 +164,17 @@
     "logout": "Sign Out",
     "logoutConfirm": "Are you sure you want to sign out?",
     "guest": "Guest User",
-    "loginToSync": "Sign in to sync your data"
+    "loginToSync": "Sign in to sync your data",
+    "editProfile": "Edit Profile",
+    "changeAvatar": "Change profile photo",
+    "avatarUpdated": "Profile photo updated",
+    "avatarUpdateFailed": "Failed to upload photo",
+    "profileUpdated": "Profile saved",
+    "profileUpdateFailed": "Failed to save profile",
+    "modelPreferenceUpdated": "Model preference updated",
+    "displayName": "Display Name",
+    "displayNamePlaceholder": "Your name",
+    "displayNameMin": "Name must be at least 2 characters"
   },
   "models": {
     "gemini": "Gemini",
@@ -233,6 +247,8 @@
     "settingsSaved": "Settings saved",
     "networkError": "No internet connection",
     "unknownError": "An error occurred",
-    "speechError": "Could not start text-to-speech"
+    "messageSendFailed": "Failed to send message",
+    "speechError": "Could not start text-to-speech",
+    "profileLoadFailed": "Could not load profile"
   }
 }

@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { View, Image, StyleSheet, type ViewStyle } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { View, Image, StyleSheet, Animated, type ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/atoms/Text';
 import { palette } from '@/constants/colors';
@@ -60,11 +60,27 @@ export const Avatar: React.FC<AvatarProps> = ({
   const [imageFailed, setImageFailed] = useState(false);
   const [placeholderFailed, setPlaceholderFailed] = useState(false);
   const trimmedUri = uri?.trim() ?? '';
+  const imageOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     setImageFailed(false);
     setPlaceholderFailed(false);
-  }, [trimmedUri, fallback, placeholderUri]);
+    imageOpacity.setValue(0);
+  }, [trimmedUri, fallback, placeholderUri, imageOpacity]);
+
+  const isLocalUri = trimmedUri.startsWith('file://');
+
+  const handleImageLoad = () => {
+    if (isLocalUri) {
+      imageOpacity.setValue(1);
+      return;
+    }
+    Animated.timing(imageOpacity, {
+      toValue: 1,
+      duration: 180,
+      useNativeDriver: true,
+    }).start();
+  };
 
   const showRemoteAvatar = Boolean(trimmedUri) && !imageFailed;
 
@@ -96,10 +112,15 @@ export const Avatar: React.FC<AvatarProps> = ({
   if (showRemoteAvatar) {
     return (
       <View accessibilityLabel={label} accessibilityRole="image" style={[frameStyle, style]}>
-        <Image
+        {/* Fallback arka planda — image yüklenene kadar görünür kalır */}
+        <View style={[StyleSheet.absoluteFill, styles.centered, { backgroundColor: frameStyle.backgroundColor as string }]}>
+          <Ionicons name="person" size={iconSize} color="#999" />
+        </View>
+        <Animated.Image
           source={{ uri: trimmedUri }}
-          style={StyleSheet.absoluteFill}
+          style={[StyleSheet.absoluteFill, { opacity: imageOpacity }]}
           resizeMode="cover"
+          onLoad={handleImageLoad}
           onError={() => setImageFailed(true)}
         />
       </View>

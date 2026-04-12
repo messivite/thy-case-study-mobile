@@ -16,6 +16,7 @@ import {
   Inter_600SemiBold,
   Inter_700Bold,
 } from '@expo-google-fonts/inter';
+import { OfflineProvider, getRealmAdapter } from '@mustafaaksoy41/react-native-offline-queue';
 
 import { store } from '@/store';
 import { queryClient } from '@/services/queryClient';
@@ -26,6 +27,7 @@ import { AppErrorBoundary } from '@/components/AppErrorBoundary';
 import { initErrorReporting } from '@/services/errorReporting';
 import { ensureWebViewportRootStyle } from '@/lib/webViewport';
 import { realmService } from '@/services/realm';
+import { ThemeProvider } from '@/contexts/ThemeContext';
 
 // Sentry native köprüsü her build'de bir kez init (DSN yok / dev'de enabled:false)
 initErrorReporting();
@@ -42,6 +44,7 @@ function RootLayout() {
     Inter_700Bold,
   });
 
+
   return (
     <GestureHandlerRootView
       style={[styles.root, Platform.OS === 'web' && styles.rootWeb]}
@@ -53,14 +56,21 @@ function RootLayout() {
       >
       <SafeAreaProvider>
         <Provider store={store}>
-          <QueryClientProvider client={queryClient}>
-            <I18nextProvider i18n={i18n}>
-              <AppErrorBoundary>
-                {/* AuthProvider: Supabase listener + token refresh burada başlar */}
-                {fontsLoaded ? <AuthProvider /> : null}
-              </AppErrorBoundary>
-            </I18nextProvider>
-          </QueryClientProvider>
+          <ThemeProvider>
+            <QueryClientProvider client={queryClient}>
+              <I18nextProvider i18n={i18n}>
+                <OfflineProvider config={{
+                  storageType: 'realm',
+                  storage: getRealmAdapter(),
+                  syncMode: 'manual',
+                }}>
+                  <AppErrorBoundary>
+                    {fontsLoaded ? <AuthProvider /> : null}
+                  </AppErrorBoundary>
+                </OfflineProvider>
+              </I18nextProvider>
+            </QueryClientProvider>
+          </ThemeProvider>
         </Provider>
       </SafeAreaProvider>
       </KeyboardProvider>

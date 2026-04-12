@@ -49,7 +49,8 @@ import { authEventEmitter, AUTH_EVENTS } from '@/services/api';
 import { authMutex } from '@/lib/authMutex';
 import { setErrorReportingUser } from '@/services/errorReporting';
 import { toast } from '@/lib/toast';
-import { getMe } from '@/api/user.api';
+import { useI18n } from '@/hooks/useI18n';
+import { getMe, updateMe } from '@/api/user.api';
 import { setProfile, setProfileError } from '@/store/slices/profileSlice';
 import type { AuthStatus } from '@/types/auth.types';
 import type { AuthResult } from '@/services/authService';
@@ -103,6 +104,7 @@ export const useSupabaseAuth = (): SupabaseAuthApi => {
 
 function useSupabaseAuthState(): SupabaseAuthApi {
   const dispatch = useAppDispatch();
+  const { t } = useI18n();
   const { accessToken, refreshToken, expiresAt, status } = useAppSelector((s) => s.auth);
   const refreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isRefreshingRef = useRef(false);
@@ -144,8 +146,22 @@ function useSupabaseAuthState(): SupabaseAuthApi {
   // /api/me → profileSlice — session kurulduktan hemen sonra arka planda çağrılır
   const fetchAndSetProfile = useCallback(() => {
     getMe()
-      .then((data) => dispatch(setProfile(data)))
-      .catch(() => dispatch(setProfileError()));
+      .then((data) => {
+        dispatch(setProfile(data));
+        // Onboarding sync: yerel onboarding tamamlandı ama backend henüz bilmiyor
+        const localDone = mmkvStorage.getBoolean(STORAGE_KEYS.ONBOARDING_DONE) === true;
+        if (!data.profile.onboardingCompleted && localDone) {
+          updateMe({ onboardingCompleted: true })
+            .then((updated) => dispatch(setProfile(updated)))
+            .catch(() => {
+              // Sessizce yoksay — bir sonraki girişte tekrar denenecek
+            });
+        }
+      })
+      .catch(() => {
+        dispatch(setProfileError());
+        toast.error(t('toast.profileLoadFailed'));
+      });
   }, [dispatch]);
 
   const dispatchRefreshedTokens = useCallback(
@@ -231,7 +247,7 @@ function useSupabaseAuthState(): SupabaseAuthApi {
     const unsub = authEventEmitter.on(AUTH_EVENTS.SESSION_EXPIRED, () => {
       doLogout(true);
     });
-    return () => unsub();
+    return () => { unsub(); };
   }, [doLogout]);
 
   // -------------------------------------------------------------------------
