@@ -16,7 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { palette } from '@/constants/colors';
 import { useHaptics } from '@/hooks/useHaptics';
 import { useI18n } from '@/hooks/useI18n';
-import { stripTextForSpeech, speechLocaleForAppLang } from '@/lib/chatSpeech';
+import { stripTextForSpeech } from '@/lib/chatSpeech';
 import { toast } from '@/lib/toast';
 
 const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
@@ -101,8 +101,7 @@ export const SpeechRoundButton: React.FC<Props> = ({
     }
 
     void Speech.stop();
-    const locale =
-      speechLanguageProp ?? speechLocaleForAppLang(currentLanguage);
+    const locale = speechLanguageProp ?? 'tr-TR';
 
     setIsPlaying(true);
     onPlaybackStart?.();

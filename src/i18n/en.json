@@ -17,12 +17,6 @@
     "version": "Version"
   },
   "onboarding": {
-    "slide1Title": "AI-Powered Assistant",
-    "slide1Desc": "Your intelligent AI assistant is always by your side, ready to answer your questions instantly.",
-    "slide2Title": "Personalized Experience",
-    "slide2Desc": "Use Gemini, ChatGPT, Claude and more from a single application.",
-    "slide3Title": "Always With You",
-    "slide3Desc": "Experience uninterrupted service with offline mode and fast responses.",
     "skip": "Skip",
     "skipAndContinue": "Skip & Continue",
     "next": "Next",

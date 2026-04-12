@@ -248,8 +248,6 @@ Release workflow’u önce test + typecheck koşar; kırmızıysa APK üretilmez
 - Başarılı e-posta girişi: `router.replace('/(tabs)')` (layout’daki `Redirect` ile uyumlu; çift yönlendirme kabul edilebilir).
 - Hata: toast; yanlış şifrede alan **sıfırlanmaz** (UX).
 - Misafir: toast + `continueAsGuest`, ardından `router.replace('/(tabs)')`.
-- iOS Keychain “şifre kaydet” uyarısını azaltmak için `AUTH_NO_CREDENTIAL_EMAIL_PROPS` / `AUTH_NO_CREDENTIAL_PASSWORD_PROPS` (`src/constants/authCredentialAutofill.ts`); welcome’da e-posta için iOS’ta `keyboardType="default"`.
-- Form üzerinde misafir / submit beklerken Reanimated ile hafif dim.
 
 **Login / Register sayfaları:** `app/(auth)/login`, `app/(auth)/register` — kendi RHF + Zod şemaları; layout aynı `Redirect` kuralına tabi.
 

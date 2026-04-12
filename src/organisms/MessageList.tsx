@@ -9,8 +9,7 @@ import { Text } from '@/atoms/Text';
 import { HomeWelcomePanel, WelcomeQuickAction } from '@/organisms/HomeWelcomePanel';
 import { useTheme } from '@/hooks/useTheme';
 import { spacing } from '@/constants/spacing';
-import { stripTextForSpeech, speechLocaleForAppLang } from '@/lib/chatSpeech';
-import i18n from '@/i18n';
+import { stripTextForSpeech } from '@/lib/chatSpeech';
 import { toast } from '@/lib/toast';
 import { ActivityThyLoading } from '@/atoms/ActivityThyLoading';
 
@@ -195,7 +194,7 @@ export const MessageList: React.FC<Props> = ({
     void Speech.stop();
     const plain = stripTextForSpeech(text);
     if (!plain.trim()) return;
-    const locale = speechLocaleForAppLang(i18n.language);
+    const locale = 'tr-TR';
     setSpeakingMessageId(messageId);
     Speech.speak(plain, {
       language: locale,
@@ -261,7 +260,7 @@ export const MessageList: React.FC<Props> = ({
         colors={colors}
         onLike={onLike}
         onRegenerate={onRegenerate}
-        isSpeaking={speakingMessageIdRef.current === item.id}
+        isSpeaking={speakingMessageId === item.id}
         hideFooter={isStreamingItem}
         hideModelLabel={isLastMessage}
         onSpeakToggle={
@@ -281,6 +280,7 @@ export const MessageList: React.FC<Props> = ({
     onLike,
     onRegenerate,
     colors,
+    speakingMessageId,
   ]);
 
   // Streaming bittikten sonra gerçek mesaj cache'e girene kadar placeholder'ı göstermeye devam et.
