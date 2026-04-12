@@ -32,11 +32,8 @@ import { spacing } from '@/constants/spacing';
 import { scale } from '@/lib/responsive';
 import { fontFamily } from '@/constants/typography';
 
-/** Safe area altındaki bar — tüm ekranlarda aynı yükseklik (tab geçişinde zıplama olmasın). */
-// Web'de scale() ekran genişliğine göre devasa büyür — sabit dp kullan
-const sc = (n: number) => Platform.OS === 'web' ? n : scale(n);
-const HEADER_ROW_HEIGHT = sc(50);
-const SIDE_SLOT_WIDTH = Platform.OS === 'web' ? 56 : scale(72);
+const HEADER_ROW_HEIGHT = scale(50);
+const SIDE_SLOT_WIDTH = scale(72);
 
 // ---------------------------------------------------------------------------
 // Types
@@ -81,8 +78,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   const haptics = useHaptics();
   const insets = useSafeAreaInsets();
   const IS_WEB = Platform.OS === 'web';
-  const s = (n: number) => n; // web'de sabit dp, scale yok
-  const rowHeight = IS_WEB ? 50 : HEADER_ROW_HEIGHT;
+  const rowHeight = HEADER_ROW_HEIGHT;
 
   const handleBack = () => {
     haptics.light();
@@ -109,8 +105,8 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
             accessibilityLabel="Geri"
             accessibilityRole="button"
           >
-            <View style={[styles.backCircle, Platform.OS === 'web' && { width: s(34), height: s(34) }]}>
-              <Ionicons name="arrow-back" size={sc(18)} color={palette.white} />
+            <View style={styles.backCircle}>
+              <Ionicons name="arrow-back" size={scale(18)} color={palette.white} />
             </View>
           </TouchableOpacity>
         </View>
@@ -139,7 +135,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
             accessibilityLabel={icon.accessibilityLabel}
             accessibilityRole="button"
           >
-            <Ionicons name={icon.name} size={sc(22)} color={palette.white} />
+            <Ionicons name={icon.name} size={scale(22)} color={palette.white} />
             {icon.badge !== undefined && icon.badge > 0 && (
               <View
                 style={styles.badge}
@@ -224,14 +220,14 @@ const styles = StyleSheet.create({
   },
   title: {
     fontFamily: fontFamily.semiBold,
-    fontSize: sc(16),
+    fontSize: scale(16),
     color: palette.white,
     letterSpacing: 0.3,
     textAlign: 'center',
   },
   subtitle: {
     fontFamily: fontFamily.regular,
-    fontSize: sc(11),
+    fontSize: scale(11),
     color: 'rgba(255,255,255,0.75)',
     marginTop: 2,
     textAlign: 'center',
@@ -241,8 +237,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   backCircle: {
-    width: sc(34),
-    height: sc(34),
+    width: scale(34),
+    height: scale(34),
     borderRadius: 999,
     backgroundColor: 'rgba(255,255,255,0.18)',
     alignItems: 'center',
@@ -260,16 +256,16 @@ const styles = StyleSheet.create({
     right: 0,
     backgroundColor: palette.white,
     borderRadius: 999,
-    minWidth: sc(16),
-    height: sc(16),
+    minWidth: scale(16),
+    height: scale(16),
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 3,
   },
   badgeText: {
     fontFamily: fontFamily.bold,
-    fontSize: sc(9),
+    fontSize: scale(9),
     color: palette.primary,
-    lineHeight: sc(12),
+    lineHeight: scale(12),
   },
 });

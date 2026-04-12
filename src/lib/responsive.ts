@@ -19,21 +19,24 @@ const BASE_WIDTH = DESIGN_BASE_WIDTH;
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
-/** Yatay ölçek — genişliğe orantılı */
-export const scale = (size: number): number =>
-  Math.round((SCREEN_W / BASE_WIDTH) * size);
+const IS_WEB = Platform.OS === 'web';
 
-/** Dikey ölçek — yüksekliğe orantılı */
+/** Yatay ölçek — genişliğe orantılı. Web'de identity. */
+export const scale = (size: number): number =>
+  IS_WEB ? size : Math.round((SCREEN_W / BASE_WIDTH) * size);
+
+/** Dikey ölçek — yüksekliğe orantılı. Web'de identity. */
 export const verticalScale = (size: number): number =>
-  Math.round((SCREEN_H / BASE_HEIGHT) * size);
+  IS_WEB ? size : Math.round((SCREEN_H / BASE_HEIGHT) * size);
 
 /**
  * Karma ölçek — büyük/küçük ekranlar arası dengeli ölçekleme.
  * factor = 0 → sabit boyut, factor = 1 → tam ölçek
  * Varsayılan 0.5: tasarım niyetini korur, aşırı büyümez.
+ * Web'de identity.
  */
 export const moderateScale = (size: number, factor = 0.5): number =>
-  Math.round(size + (scale(size) - size) * factor);
+  IS_WEB ? size : Math.round(size + (scale(size) - size) * factor);
 
 /**
  * Font ölçeği — PixelRatio normalize + moderateScale.
