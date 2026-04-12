@@ -102,7 +102,6 @@ export function NetworkConnectivitySheets({ enabled = true, promptOnMount = fals
   const { pendingCount, isSyncing, syncNow } = useOfflineQueue();
   const { percentage, completedCount, totalCount, failedCount, items } = useSyncProgress();
 
-  // C4: items.filter memoize — her render'da yeniden çalışmasın
   const pendingMessages = useMemo(
     () => items.filter((i) => i.action.actionName === 'SEND_MESSAGE').length,
     [items],
@@ -120,7 +119,6 @@ export function NetworkConnectivitySheets({ enabled = true, promptOnMount = fals
   const isOnlineRef = useRef(isOnline);
   useEffect(() => { isOnlineRef.current = isOnline; }, [isOnline]);
 
-  // Offline sheet: isOnline false olunca aç
   useEffect(() => {
     if (!enabled || preview != null) return;
     if (isOnline == null) return;
@@ -130,8 +128,6 @@ export function NetworkConnectivitySheets({ enabled = true, promptOnMount = fals
     }
   }, [isOnline, enabled, preview]);
 
-  // B1: OfflineManager.configure — enabled değişince yeniden kayıt, cleanup ile temizle
-  // B2: onOnlineRestore içinde isOnlineRef kontrolü — hızlı geçişte yanlış açılma önlenir
   useEffect(() => {
     if (!enabled) return;
     OfflineManager.configure({
@@ -143,13 +139,10 @@ export function NetworkConnectivitySheets({ enabled = true, promptOnMount = fals
       },
     });
     return () => {
-      // Cleanup: component unmount'ta callback'i temizle
       OfflineManager.configure({ onOnlineRestore: undefined });
     };
   }, [enabled]);
 
-  // promptOnMount: home'a girilince pending var mı — paket queue'dan oku
-  // isOnline mount anında null gelebilir, kısa delay ile bekle
   useEffect(() => {
     if (!promptOnMount || !enabled) return;
     const timer = setTimeout(() => {
@@ -162,12 +155,11 @@ export function NetworkConnectivitySheets({ enabled = true, promptOnMount = fals
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // onOpenRef: dışarıdan (MessageBubble warning badge) sheet'i açmak için
   useEffect(() => {
     if (!onOpenRef) return;
     onOpenRef.current = () => {
       if (!isOnlineRef.current) {
-        setOfflineOpen(true); // offline iken → bağlantı yok sheet'i aç
+        setOfflineOpen(true);
         return;
       }
       setOnlineOpen(false);
@@ -178,13 +170,11 @@ export function NetworkConnectivitySheets({ enabled = true, promptOnMount = fals
 
   const closeOffline = useCallback(() => setOfflineOpen(false), []);
   const closeOnline = useCallback(() => {
-    // B4: sync devam ediyorsa UI'ı kapatma — arka planda devam etsin
     if (isSyncing) return;
     setOnlineOpen(false);
     setSyncDone(false);
   }, [isSyncing]);
 
-  // Sync tamamlanınca: syncDone → true
   const onSyncPress = useCallback(async () => {
     haptics.success();
     syncSnapshotRef.current = { messages: pendingMessages, likes: pendingLikes };

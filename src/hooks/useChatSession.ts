@@ -402,8 +402,6 @@ export const useChatSession = () => {
       }
     } else {
       await mutateOfflineRef.current(payload);
-      // mutateOffline 4xx alınca kuyruğa atar — kuyruğa atılanı hemen temizle
-      // (withNoRetryOn4xx flushQueue sırasında temizler ama bu path'te zaten temizlenmeli)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

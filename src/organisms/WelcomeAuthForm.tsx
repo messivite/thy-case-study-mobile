@@ -79,9 +79,10 @@ export function WelcomeAuthForm({
   const {
     control,
     handleSubmit,
-    formState: { isSubmitting },
+    formState: { isSubmitting, isValid },
   } = useValidatedForm<WelcomeLoginFormValues>(schema, {
     defaultValues: { email: '', password: '' },
+    mode: 'onChange',
   });
 
   useEffect(() => {
@@ -162,7 +163,7 @@ export function WelcomeAuthForm({
     router.push('/(auth)/register');
   }, []);
 
-  const loginBtnOpacity = anyPending ? 1 : WELCOME_LOGIN_BUTTON_DISABLED_OPACITY;
+  const loginBtnOpacity = (!isValid && !anyPending) ? WELCOME_LOGIN_BUTTON_DISABLED_OPACITY : 1;
 
   return (
     <Animated.View
