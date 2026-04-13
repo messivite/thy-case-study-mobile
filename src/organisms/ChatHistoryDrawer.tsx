@@ -34,7 +34,6 @@ import {
   Alert,
   LayoutChangeEvent,
   FlatList,
-  Modal,
   Platform,
   Pressable,
   RefreshControl,
@@ -559,6 +558,8 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
   const translateX = useSharedValue(-DRAWER_WIDTH);
   const overlayOpacity = useSharedValue(0);
   const drawerWidthSV = useSharedValue(DRAWER_WIDTH);
+  // Overlay/panel tıklama aktif mi — animasyon tamamlanınca true
+  const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => { drawerWidthSV.value = DRAWER_WIDTH; }, [DRAWER_WIDTH, drawerWidthSV]);
 
@@ -572,7 +573,6 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
   }, []);
 
   // UI state
-  const [modalVisible, setModalVisible] = useState(false);
   const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -649,21 +649,19 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
 
   useEffect(() => {
     if (visible) {
+      // View her zaman mounted — animasyon gecikme olmadan anında başlar
       translateX.value = -DRAWER_WIDTH;
       overlayOpacity.value = 0;
-      setModalVisible(true);
-      // requestAnimationFrame: Modal visible=true olduktan sonra bir frame bekle,
-      // layout hazır değilken spring başlarsa ilk frame skip olur.
-      requestAnimationFrame(() => {
-        translateX.value = withSpring(0, SPRING_CONFIG);
-        overlayOpacity.value = withTiming(0.45, { duration: 220 });
-      });
+      setIsOpen(true);
+      translateX.value = withSpring(0, SPRING_CONFIG);
+      overlayOpacity.value = withTiming(0.45, { duration: 200 });
       return;
     } else {
+      setIsOpen(false);
       overlayOpacity.value = withTiming(0, { duration: 160 });
       translateX.value = withTiming(-DRAWER_WIDTH, { duration: 180 }, (done) => {
         'worklet';
-        if (done) { runOnJS(setModalVisible)(false); runOnJS(callOnHidden)(); }
+        if (done) runOnJS(callOnHidden)();
       });
       // Arama state'ini temizle
       setSearchFocused(false);
@@ -866,16 +864,16 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
   // JSX
   // ---------------------------------------------------------------------------
 
+  // Drawer kapalıyken overlay ve panel tıklamaları geçirgen yap
+  const containerPointerEvents = isOpen ? 'box-none' : 'none';
+
   return (
-    <Modal
-      visible={modalVisible}
-      transparent
-      animationType="none"
-      statusBarTranslucent={Platform.OS === 'android'}
-      onRequestClose={onClose}
+    <View
+      style={StyleSheet.absoluteFill}
+      pointerEvents={containerPointerEvents}
     >
       {/* Dimmed overlay */}
-      <Animated.View style={[styles.overlay, overlayAnimatedStyle]} pointerEvents="box-none">
+      <Animated.View style={[styles.overlay, overlayAnimatedStyle]} pointerEvents={isOpen ? 'box-none' : 'none'}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
       </Animated.View>
 
@@ -1005,7 +1003,7 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
         </Animated.View>
       </GestureDetector>
 
-    </Modal>
+    </View>
   );
 };
 
