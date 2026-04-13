@@ -1,5 +1,5 @@
-import React from 'react';
-import { TextInput, View, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { TextInput, View, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import Reanimated, {
   useSharedValue,
   useAnimatedProps,
@@ -34,7 +34,11 @@ type Props = {
   onComplete: (finalText: string) => void;
 };
 
-const StreamingBubbleInner: React.FC<Props> = ({ pendingSV, isStreamingDoneSV, streamResetCountSV, onComplete }) => {
+// ---------------------------------------------------------------------------
+// Native streaming bubble — uses AnimatedTextInput + useFrameCallback (UI thread)
+// ---------------------------------------------------------------------------
+
+const StreamingBubbleNative: React.FC<Props> = ({ pendingSV, isStreamingDoneSV, streamResetCountSV, onComplete }) => {
   const { colors } = useTheme();
   const completedSV = useSharedValue(false);
   const lastResetCountSV = useSharedValue(0);
@@ -45,8 +49,6 @@ const StreamingBubbleInner: React.FC<Props> = ({ pendingSV, isStreamingDoneSV, s
     defaultValue: '',
   }));
 
-  // Do not call withTiming inside useAnimatedStyle — it re-runs every frame and can
-  // starve or interfere with useFrameCallback / runOnJS(onComplete).
   const loadingStyle = useAnimatedStyle(() => ({
     opacity: textArrivedSV.value ? 0 : 1,
   }));
@@ -76,7 +78,6 @@ const StreamingBubbleInner: React.FC<Props> = ({ pendingSV, isStreamingDoneSV, s
 
   return (
     <View style={[styles.row, styles.rowLeft]}>
-      {/* Bubble — always in flow; opacity fades in when first chunk arrives */}
       <Reanimated.View style={[styles.bubbleRow, textStyle]}>
         <AiTail color={colors.surface} borderColor={colors.border} />
         <View style={[styles.bubble, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -107,13 +108,104 @@ const StreamingBubbleInner: React.FC<Props> = ({ pendingSV, isStreamingDoneSV, s
         </View>
       </Reanimated.View>
 
-      {/* Loading — absolutely positioned, fades out when text arrives */}
       <Reanimated.View style={[styles.waitingRow, loadingStyle]} pointerEvents="none">
         <ActivityThyLoading mode="pulse" size={20} />
         <Text variant="caption" color={colors.textSecondary}>Yanıt bekleniyor...</Text>
       </Reanimated.View>
     </View>
   );
+};
+
+// ---------------------------------------------------------------------------
+// Web streaming bubble — uses React state + rAF polling (JS thread only)
+// ---------------------------------------------------------------------------
+
+const StreamingBubbleWeb: React.FC<Props> = ({ pendingSV, isStreamingDoneSV, streamResetCountSV, onComplete }) => {
+  const { colors } = useTheme();
+  const [displayText, setDisplayText] = useState('');
+  const [done, setDone] = useState(false);
+  const completedRef = useRef(false);
+  const lastResetRef = useRef(streamResetCountSV.value);
+  const rafRef = useRef<number | null>(null);
+  const onCompleteRef = useRef(onComplete);
+  useEffect(() => { onCompleteRef.current = onComplete; }, [onComplete]);
+
+  useEffect(() => {
+    completedRef.current = false;
+    lastResetRef.current = streamResetCountSV.value;
+    setDisplayText('');
+    setDone(false);
+
+    const poll = () => {
+      // Reset detected
+      const resetCount = streamResetCountSV.value;
+      if (resetCount !== lastResetRef.current) {
+        lastResetRef.current = resetCount;
+        completedRef.current = false;
+        setDisplayText('');
+        setDone(false);
+        rafRef.current = requestAnimationFrame(poll);
+        return;
+      }
+
+      const text = pendingSV.value;
+      setDisplayText(text);
+
+      if (isStreamingDoneSV.value && !completedRef.current) {
+        completedRef.current = true;
+        setDone(true);
+        onCompleteRef.current(text);
+        return; // stop polling
+      }
+
+      rafRef.current = requestAnimationFrame(poll);
+    };
+
+    rafRef.current = requestAnimationFrame(poll);
+
+    return () => {
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingSV, isStreamingDoneSV, streamResetCountSV]);
+
+  const hasText = displayText.length > 0;
+
+  return (
+    <View style={[styles.row, styles.rowLeft]}>
+      {hasText ? (
+        <View style={styles.bubbleRow}>
+          <AiTail color={colors.surface} borderColor={colors.border} />
+          <View style={[styles.bubble, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text
+              variant="body"
+              color={colors.text}
+              style={styles.webContent}
+            >
+              {displayText}
+            </Text>
+            <View style={styles.footer} pointerEvents="none">
+              <Text variant="micro" color="transparent">00:00</Text>
+            </View>
+          </View>
+        </View>
+      ) : (
+        <View style={styles.waitingRowWeb}>
+          <ActivityThyLoading mode="pulse" size={20} />
+          <Text variant="caption" color={colors.textSecondary}>Yanıt bekleniyor...</Text>
+        </View>
+      )}
+    </View>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Export — platform-aware
+// ---------------------------------------------------------------------------
+
+const StreamingBubbleInner: React.FC<Props> = (props) => {
+  if (Platform.OS === 'web') return <StreamingBubbleWeb {...props} />;
+  return <StreamingBubbleNative {...props} />;
 };
 
 export const StreamingBubble = React.memo(StreamingBubbleInner);
@@ -152,6 +244,13 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[1],
     paddingHorizontal: spacing[1],
   },
+  waitingRowWeb: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+    paddingVertical: spacing[1],
+    paddingHorizontal: spacing[1],
+  },
   content: {
     fontFamily: fontFamily.regular,
     fontSize: fontSize.base,
@@ -160,6 +259,9 @@ const styles = StyleSheet.create({
     padding: 0,
     margin: 0,
     backgroundColor: 'transparent',
+  },
+  webContent: {
+    lineHeight: 22,
   },
   footer: {
     flexDirection: 'row',
