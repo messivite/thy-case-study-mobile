@@ -1,7 +1,6 @@
 import React, { useCallback } from 'react';
 import {
   View,
-  TouchableOpacity,
   StyleSheet,
   Modal,
   Pressable,
@@ -71,17 +70,19 @@ export const ModelSelector: React.FC<Props> = ({
           {AI_MODELS.map((model) => {
             const isSelected = model.id === selectedModel;
             return (
-              <TouchableOpacity
+              <Pressable
                 key={model.id}
-                style={[
+                style={({ pressed }) => [
                   styles.item,
                   { borderColor: colors.border },
                   isSelected && {
                     backgroundColor: model.color + '15',
                     borderColor: model.color + '55',
                   },
+                  pressed && styles.itemPressed,
                 ]}
                 onPress={() => handleSelect(model.id)}
+                android_ripple={{ color: model.color + '22', borderless: false }}
               >
                 <View style={[styles.iconWrap, { backgroundColor: model.color + '22' }]}>
                   <Ionicons name={model.icon as any} size={22} color={model.color} />
@@ -97,7 +98,7 @@ export const ModelSelector: React.FC<Props> = ({
                 {isSelected && (
                   <Ionicons name="checkmark-circle" size={22} color={model.color} />
                 )}
-              </TouchableOpacity>
+              </Pressable>
             );
           })}
         </MotiView>
@@ -130,6 +131,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginBottom: spacing[2],
     gap: spacing[3],
+  },
+  itemPressed: {
+    opacity: 0.7,
   },
   iconWrap: {
     width: 44,

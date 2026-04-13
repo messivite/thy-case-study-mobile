@@ -12,6 +12,7 @@ import {
   View,
   TextInput,
   TouchableOpacity,
+  Pressable,
   StyleSheet,
   Platform,
   Modal,
@@ -65,36 +66,42 @@ interface SendButtonProps {
   onStop: () => void;
 }
 
+const sendBtnStyle = {
+  width: SIZE,
+  height: SIZE,
+  borderRadius: SIZE / 2,
+  overflow: 'hidden' as const,
+};
+
 const SendButton = memo<SendButtonProps>(({ canSend, isStreaming, onSend, onStop }) => {
   const haptics = useHaptics();
 
   // 0 = send görünür, 1 = stop görünür.
-  // Her iki layer her zaman mount — sadece opacity/transform animate edilir.
-  // withSpring başladıktan sonra tamamen UI thread'de çalışır, JS'ye dönmez.
+  // useEffect kaldırıldı — render sırasında doğrudan .value set etmek
+  // JS bridge'i 1-2 frame atlatır, geçiş anında hissedilir.
   const streamProgress = useSharedValue(isStreaming ? 1 : 0);
+  const prevIsStreaming = useRef(isStreaming);
+  if (prevIsStreaming.current !== isStreaming) {
+    prevIsStreaming.current = isStreaming;
+    // withTiming: spring'e göre daha öngörülebilir süre, overshoot yok.
+    // 160ms send→stop için yeterince hızlı, göz kopmaz.
+    streamProgress.value = withTiming(isStreaming ? 1 : 0, { duration: 160 });
+  }
 
-  useEffect(() => {
-    streamProgress.value = withSpring(isStreaming ? 1 : 0, {
-      damping: 18,
-      stiffness: 120,
-      mass: 0.6,
-    });
-  }, [isStreaming, streamProgress]);
-
-  // streaming'de sıfıra iner, send modunda tam opak — canSend'e göre opacity yok
   const sendLayerStyle = useAnimatedStyle(() => ({
     opacity: 1 - streamProgress.value,
+    transform: [{ scale: interpolate(streamProgress.value, [0, 1], [1, 0.7], Extrapolation.CLAMP) }],
   }));
 
   const stopLayerStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(streamProgress.value, [0, 1], [0, 1], Extrapolation.CLAMP),
+    opacity: streamProgress.value,
+    transform: [{ scale: interpolate(streamProgress.value, [0, 1], [0.7, 1], Extrapolation.CLAMP) }],
   }));
 
   const stopIconSlideStyle = useAnimatedStyle(() => ({
     transform: [
-      {
-        translateY: interpolate(streamProgress.value, [0, 1], [SIZE * 0.8, 0], Extrapolation.CLAMP),
-      },
+      { translateY: interpolate(streamProgress.value, [0, 1], [SIZE * 0.6, 0], Extrapolation.CLAMP) },
+      { scale: interpolate(streamProgress.value, [0.5, 1], [0.6, 1], Extrapolation.CLAMP) },
     ],
   }));
 
@@ -104,19 +111,14 @@ const SendButton = memo<SendButtonProps>(({ canSend, isStreaming, onSend, onStop
     else if (canSend) onSend();
   }, [haptics, isStreaming, canSend, onSend, onStop]);
 
+  const disabled = !isStreaming && !canSend;
+
   return (
-    <TouchableOpacity
+    <Pressable
       onPress={handlePress}
-      disabled={!isStreaming && !canSend}
-      activeOpacity={0.85}
+      disabled={disabled}
       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-      style={{
-        width: SIZE,
-        height: SIZE,
-        borderRadius: SIZE / 2,
-        overflow: 'hidden',
-        opacity: (!isStreaming && !canSend) ? 0.75 : 1,
-      }}
+      style={[sendBtnStyle, disabled && sendBtnDisabledStyle]}
     >
       {/* Sabit primary arka plan — geçiş sırasında parlama olmasın */}
       <View
@@ -126,7 +128,7 @@ const SendButton = memo<SendButtonProps>(({ canSend, isStreaming, onSend, onStop
         ]}
       />
 
-      {/* Stop layer — gradient + stop icon, send'in altında */}
+      {/* Stop layer — gradient + stop icon */}
       <Animated.View
         style={[StyleSheet.absoluteFill, stopLayerStyle, { pointerEvents: 'none' as const }]}
       >
@@ -142,7 +144,7 @@ const SendButton = memo<SendButtonProps>(({ canSend, isStreaming, onSend, onStop
         </LinearGradient>
       </Animated.View>
 
-      {/* Send layer — THY icon, üstte */}
+      {/* Send layer — THY icon */}
       <Animated.View
         style={[StyleSheet.absoluteFill, centerStyle, sendLayerStyle, { pointerEvents: 'none' as const }]}
       >
@@ -154,9 +156,11 @@ const SendButton = memo<SendButtonProps>(({ canSend, isStreaming, onSend, onStop
           fillSecondary={palette.primary}
         />
       </Animated.View>
-    </TouchableOpacity>
+    </Pressable>
   );
 });
+
+const sendBtnDisabledStyle = { opacity: 0.75 };
 
 const centerStyle = { alignItems: 'center' as const, justifyContent: 'center' as const };
 
@@ -180,11 +184,11 @@ const ModelChip = memo<ModelChipProps>(({ modelName, modelColor, onPress, isDark
   }));
 
   const handlePressIn = useCallback(() => {
-    scale.value = withSpring(0.94, { damping: 20, stiffness: 400, mass: 0.4 });
+    scale.value = withSpring(0.93, { damping: 25, stiffness: 600, mass: 0.3 });
   }, [scale]);
 
   const handlePressOut = useCallback(() => {
-    scale.value = withSpring(1, { damping: 20, stiffness: 400, mass: 0.4 });
+    scale.value = withSpring(1, { damping: 25, stiffness: 600, mass: 0.3 });
   }, [scale]);
 
   const handlePress = useCallback(() => {
@@ -297,7 +301,7 @@ const ExpandedInputModal = memo<ExpandedInputModalProps>(({
   const [charCount, setCharCount] = useState(defaultValue.length);
 
   const handleShow = useCallback(() => {
-    setTimeout(() => inputRef.current?.focus(), 100);
+    requestAnimationFrame(() => inputRef.current?.focus());
   }, []);
 
   const handleSendAndClose = useCallback(() => {
@@ -323,7 +327,7 @@ const ExpandedInputModal = memo<ExpandedInputModalProps>(({
     <Modal
       visible={visible}
       transparent={false}
-      animationType="slide"
+      animationType="fade"
       onShow={handleShow}
       onRequestClose={onClose}
     >
@@ -333,9 +337,13 @@ const ExpandedInputModal = memo<ExpandedInputModalProps>(({
       >
         {/* Header */}
         <View style={styles.expandedHeader}>
-          <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Pressable
+            onPress={onClose}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            style={({ pressed }) => pressed && styles.expandPressed}
+          >
             <Ionicons name="chevron-down" size={24} color={colors.textSecondary} />
-          </TouchableOpacity>
+          </Pressable>
           <View style={styles.expandedHeaderRight}>
             <Animated.Text style={[
               growingStyles.counter,
@@ -633,12 +641,13 @@ const ChatInputInner: React.FC<Props> = ({
 
           {/* Expand — her zaman görünür, onContentSizeChange yükü kalktı */}
           <View style={styles.expandSide}>
-            <TouchableOpacity
+            <Pressable
               onPress={handleExpandPress}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              style={({ pressed }) => pressed && styles.expandPressed}
             >
               <Ionicons name="expand-outline" size={cs(18)} color={colors.textSecondary} />
-            </TouchableOpacity>
+            </Pressable>
           </View>
         </View>
 
@@ -740,6 +749,9 @@ const styles = StyleSheet.create({
   },
   expandSide: {
     paddingBottom: spacing[2],
+  },
+  expandPressed: {
+    opacity: 0.5,
   },
   // Expanded modal
   expandedSheet: {
