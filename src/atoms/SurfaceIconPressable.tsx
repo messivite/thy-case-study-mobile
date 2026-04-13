@@ -1,7 +1,7 @@
 import React, { useCallback } from 'react';
 import { Pressable, StyleSheet, ViewStyle, StyleProp } from 'react-native';
 import { palette } from '@/constants/colors';
-import { shadow as shadowTokens } from '@/constants/spacing';
+import { nativeShadow } from '@/constants/spacing';
 import { useHaptics } from '@/hooks/useHaptics';
 
 export type SurfaceIconPressableShape = 'circle' | 'square';
@@ -78,11 +78,8 @@ export const SurfaceIconPressable: React.FC<SurfaceIconPressableProps> = ({
     justifyContent: 'center',
   };
 
-  const elevationStyle: ViewStyle = shadowEnabled
-    ? {
-        shadowColor: '#000',
-        ...shadowTokens.sm,
-      }
+  const elevationStyle = shadowEnabled
+    ? nativeShadow({ color: '#000', offsetY: 1, opacity: 0.05, radius: 3, elevation: 2 })
     : {};
 
   return (

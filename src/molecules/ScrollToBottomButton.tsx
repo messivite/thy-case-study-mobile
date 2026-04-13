@@ -13,6 +13,7 @@ import { useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
 import { palette } from '@/constants/colors';
+import { nativeShadow } from '@/constants/spacing';
 
 type Props = {
   visible: boolean;
@@ -61,12 +62,12 @@ export const ScrollToBottomButton: React.FC<Props> = ({ visible, unreadCountSV, 
     {
       backgroundColor: colors.surface,
       borderColor: colors.border,
-      shadowColor: isDark ? '#000' : '#555',
     },
+    nativeShadow({ color: isDark ? '#000' : '#555', offsetY: 2, opacity: 0.18, radius: 6, elevation: 4 }),
   ]), [colors.surface, colors.border, isDark]);
 
   return (
-    <Animated.View style={[styles.wrapper, animStyle]} pointerEvents={visible ? 'auto' : 'none'}>
+    <Animated.View style={[styles.wrapper, animStyle, { pointerEvents: visible ? 'auto' : 'none' as const }]}>
       <TouchableOpacity
         onPress={onPress}
         activeOpacity={0.85}
@@ -100,10 +101,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.18,
-    shadowRadius: 6,
-    elevation: 4,
   },
   badge: {
     position: 'absolute',

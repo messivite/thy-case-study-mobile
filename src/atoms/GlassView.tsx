@@ -2,7 +2,7 @@ import React from 'react';
 import { View, StyleSheet, Platform, ViewStyle, StyleProp } from 'react-native';
 import { BlurView, BlurViewProps } from 'expo-blur';
 import { useTheme } from '@/hooks/useTheme';
-import { radius } from '@/constants/spacing';
+import { radius, nativeShadow } from '@/constants/spacing';
 
 type GlassTint = 'light' | 'dark' | 'auto';
 type GlassVariant = 'sheet' | 'card' | 'overlay' | 'subtle';
@@ -69,10 +69,9 @@ export const GlassView: React.FC<Props> = ({
       <View
         style={[
           StyleSheet.absoluteFill,
-          { borderRadius: br },
+          { borderRadius: br, pointerEvents: 'none' as const },
           getBlurOverlayStyle(isDark, variant),
         ]}
-        pointerEvents="none"
       />
       {children}
     </BlurView>
@@ -137,8 +136,7 @@ function getAndroidGlassStyle(isDark: boolean, variant: GlassVariant): ViewStyle
     backgroundColor: isDark ? darkBg : lightBg,
     borderColor: isDark ? darkBorder : lightBorder,
     // Elevation for depth perception on Android
-    elevation: variant === 'overlay' ? 0 : variant === 'sheet' ? 24 : 8,
-    shadowColor: isDark ? '#000' : 'rgba(0,0,0,0.15)',
+    ...nativeShadow({ color: isDark ? '#000' : 'rgba(0,0,0,0.15)', offsetY: 2, opacity: 0.12, radius: 8, elevation: variant === 'overlay' ? 0 : variant === 'sheet' ? 24 : 8 }),
   };
 }
 

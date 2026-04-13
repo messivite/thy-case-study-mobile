@@ -23,7 +23,7 @@ import { FormField } from '@/molecules/FormField';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { useValidatedForm } from '@/hooks/useValidatedForm';
 import { palette } from '@/constants/colors';
-import { spacing, radius } from '@/constants/spacing';
+import { spacing, radius, nativeShadow } from '@/constants/spacing';
 import {
   WELCOME_GUEST_AUTH_FLOW,
   WELCOME_GUEST_SIGNING_TOAST_ID,
@@ -166,8 +166,7 @@ export function WelcomeAuthForm({
 
   return (
     <Animated.View
-      style={[styles.formRoot, formRootAnimatedStyle]}
-      pointerEvents={anyPending ? 'none' : 'auto'}
+      style={[styles.formRoot, formRootAnimatedStyle, { pointerEvents: anyPending ? 'none' : 'auto' }]}
     >
       <View style={styles.flexSpacer} />
       <View style={styles.formSection}>
@@ -309,15 +308,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: spacing[4],
-    shadowColor: palette.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.28,
-    shadowRadius: 10,
-    elevation: 4,
+    ...nativeShadow({ color: palette.primary, offsetY: 4, opacity: 0.28, radius: 10, elevation: 4 }),
   },
   loginBtnDisabled: {
-    shadowOpacity: 0,
-    elevation: 0,
+    ...nativeShadow({ color: 'transparent', offsetY: 0, opacity: 0, radius: 0, elevation: 0 }),
   },
   loginBtnRow: {
     flexDirection: 'row',

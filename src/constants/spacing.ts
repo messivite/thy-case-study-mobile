@@ -24,26 +24,23 @@ export const radius = {
   full: 9999,
 } as const;
 
-export const shadow = {
-  sm: {
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  md: {
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  lg: {
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 8,
-  },
+const _nativeShadowTokens = {
+  sm: { shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 2 },
+  md: { shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 4 },
+  lg: { shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 16, elevation: 8 },
 } as const;
+
+/**
+ * Platform-aware shadow tokens.
+ * Web'de shadow* props deprecated — web'de boş obje döner, warning oluşmaz.
+ */
+export const shadow: {
+  sm: Record<string, unknown>;
+  md: Record<string, unknown>;
+  lg: Record<string, unknown>;
+} = Platform.OS === 'web'
+  ? { sm: {}, md: {}, lg: {} }
+  : _nativeShadowTokens;
 
 import { Platform } from 'react-native';
 

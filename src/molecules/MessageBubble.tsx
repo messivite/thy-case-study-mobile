@@ -284,7 +284,7 @@ const MessageBubbleInner: React.FC<Props> = ({
       style={[styles.row, isUser ? styles.rowRight : styles.rowLeft]}
     >
       {isUser ? (
-        <View style={[styles.bubbleRow, styles.bubbleRowUser]}>
+        <View style={[styles.bubbleRow, styles.bubbleRowUser, Platform.OS === 'web' && styles.bubbleRowUserWeb]}>
           {message.queued && (
             <Pressable onPress={onQueuedPress} hitSlop={8} style={styles.queuedIcon}>
               <Ionicons name="warning" size={scale(22)} color={palette.error} />
@@ -339,14 +339,8 @@ const styles = StyleSheet.create({
   },
   rowRight: {
     justifyContent: 'flex-end',
-    marginHorizontal: spacing[2],
-    // Web: row flex-row olduğunda width:auto olur — justifyContent:'flex-end' çalışmaz.
-    // width:'100%' ile row tam genişliğe oturur, bubble sağa yaslanır.
-    ...(Platform.OS === 'web' && {
-      marginRight: spacing[4],
-      marginLeft: spacing[2],
-      width: '100%',
-    }),
+    marginRight: spacing[4],
+    marginLeft: Platform.OS === 'web' ? 0 : spacing[2],
   },
   bubbleRow: {
     flexDirection: 'row',
@@ -355,6 +349,9 @@ const styles = StyleSheet.create({
   bubbleRowUser: {
     maxWidth: '75%',
   },
+  // Web: marginLeft:auto bubble'ı sağa yaslar — justifyContent:'flex-end' parent width gerektirirdi
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  bubbleRowUserWeb: { marginLeft: 'auto' as any },
   queuedIcon: {
     alignSelf: 'flex-end',
     marginRight: spacing[1],
