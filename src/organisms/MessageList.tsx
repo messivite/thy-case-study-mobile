@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, useState, useEffect, useLayoutEffect } from 'react';
+import React, { useRef, useCallback, useState, useEffect, useLayoutEffect, useMemo } from 'react';
 import { View, StyleSheet, ActivityIndicator, FlatList, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { SharedValue } from 'react-native-reanimated';
 import * as Speech from 'expo-speech';
@@ -219,6 +219,7 @@ const MessageListInner: React.FC<Props> = ({
   }, [streamingMessageId]);
 
   // Streaming bitince en üste scroll et — yeni mesaj her zaman görünür
+  // animated:false → native scroll momentum ile çakışmaz, anında konumlanır (native his).
   // Stop/cancel durumunda streamingMessageId 'streaming' sentinel'e döner —
   // lastStreamingMsgId'yi temizle ki boş placeholder kalmasın
   const prevIsStreamingRef = useRef(isStreamingActive);
@@ -262,7 +263,7 @@ const MessageListInner: React.FC<Props> = ({
         colors={colors}
         onLike={onLike}
         onRegenerate={onRegenerate}
-        isSpeaking={speakingMessageId === item.id}
+        isSpeaking={speakingMessageIdRef.current === item.id}
         hideFooter={isStreamingItem}
         hideModelLabel={isLastMessage}
         onQueuedPress={item.queued ? onQueuedPress : undefined}
@@ -275,7 +276,6 @@ const MessageListInner: React.FC<Props> = ({
     );
   }, [
     isStreamingActive,
-    optimisticUserMsgId,
     pendingStreamSV,
     isStreamingDoneSV,
     streamResetCountSV,
@@ -284,7 +284,7 @@ const MessageListInner: React.FC<Props> = ({
     onRegenerate,
     onQueuedPress,
     colors,
-    speakingMessageId,
+    // speakingMessageId dep'den çıkarıldı — FlatList extraData üzerinden sadece ilgili 2 mesajı günceller.
   ]);
 
   // Streaming bittikten sonra gerçek mesaj cache'e girene kadar placeholder'ı göstermeye devam et.
@@ -341,17 +341,22 @@ const MessageListInner: React.FC<Props> = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shouldShowPlaceholder, isStreamingActive]);
 
-  // Placeholder aktifken activeOrLastId'yi messages'dan çıkar — çift kart önle.
-  const cachedMessages = streamingPlaceholder
-    ? messages.filter((m) => m.id !== activeOrLastId)
-    : messages;
+  // displayMessages useMemo ile sabit referans — her render'da yeni array yaratmak FlatList'i
+  // gereksiz reconcile döngüsüne sokar. Bağımlılıklar minimumda tutuldu.
+  const displayMessages: Message[] = useMemo(() => {
+    // Placeholder aktifken activeOrLastId'yi messages'dan çıkar — çift kart önle.
+    const cachedMessages = streamingPlaceholder
+      ? messages.filter((m) => m.id !== activeOrLastId)
+      : messages;
 
-  const displayMessages: Message[] = [
-    ...(streamingItem ? [streamingItem] : []),
-    ...(streamingPlaceholder ? [streamingPlaceholder] : []),
-    ...(optimisticUserMsg ? [optimisticUserMsg] : []),
-    ...cachedMessages.slice().reverse(),
-  ];
+    return [
+      ...(streamingItem ? [streamingItem] : []),
+      ...(streamingPlaceholder ? [streamingPlaceholder] : []),
+      ...(optimisticUserMsg ? [optimisticUserMsg] : []),
+      ...cachedMessages.slice().reverse(),
+    ];
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages, optimisticUserMsg, isStreamingActive, shouldShowPlaceholder, activeOrLastId]);
 
 
 
@@ -383,6 +388,9 @@ const MessageListInner: React.FC<Props> = ({
         data={displayMessages}
         renderItem={renderItem}
         keyExtractor={(item) => item.id}
+        // speakingMessageId değişince FlatList sadece ilgili item'ı yeniden render eder.
+        // renderItem callback'i yeniden oluşmaz — tüm liste reconcile'dan kurtulur.
+        extraData={speakingMessageId}
         inverted
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={
@@ -403,14 +411,15 @@ const MessageListInner: React.FC<Props> = ({
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
         onScroll={handleScroll}
-        scrollEventThrottle={64}
+        scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
         keyboardDismissMode="interactive"
         keyboardShouldPersistTaps="handled"
         removeClippedSubviews={true}
-        maxToRenderPerBatch={5}
-        windowSize={5}
-        initialNumToRender={10}
+        maxToRenderPerBatch={8}
+        updateCellsBatchingPeriod={20}
+        windowSize={7}
+        initialNumToRender={12}
       />
 
       {/* Empty state overlay */}

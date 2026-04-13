@@ -250,17 +250,15 @@ export default function HomeScreen() {
         variant="liquidGlass"
       />
 
-      {(drawerVisible || Platform.OS === 'web') && (
-        <ChatHistoryDrawer
-          visible={drawerVisible}
-          onClose={closeDrawer}
-          onHidden={handleDrawerHidden}
-          onNewChat={startNewChat}
-          onSelectChat={handleSelectChat}
-          activeChatId={chatId}
-          onDeleteActiveChat={handleDeleteActiveChat}
-        />
-      )}
+      <ChatHistoryDrawer
+        visible={drawerVisible}
+        onClose={closeDrawer}
+        onHidden={handleDrawerHidden}
+        onNewChat={startNewChat}
+        onSelectChat={handleSelectChat}
+        activeChatId={chatId}
+        onDeleteActiveChat={handleDeleteActiveChat}
+      />
 
       <NetworkConnectivitySheets
         promptOnMount

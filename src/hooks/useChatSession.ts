@@ -91,11 +91,12 @@ export const useChatSession = () => {
   // Reanimated SharedValue — AnimatedTextInput buradan okur (UI thread)
   const pendingStreamSV = useSharedValue('');
 
-  // JS thread'de biriken tüm delta'lar
+  // Backend'den gelen tüm delta'lar — JS thread'de biriktirilen ham buffer
   const pendingBufferRef = useRef('');
-  // pendingStreamSV'ye kaç karakter yazıldı
+  // UI thread typewriter: buffer'ın tamamı SV'ye kopyalandı mı?
+  // writtenLenRef: setInterval yerine kullanılıyor — değer JS'de, sadece write path'i tutar
   const writtenLenRef = useRef(0);
-  // typewriter interval handle
+  // typewriter interval handle — kullanılmaya devam ediyor (fallback)
   const typewriterIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // backend onDone geldi mi — interval bunu kontrol eder
   const streamDoneRef = useRef(false);
@@ -153,8 +154,15 @@ export const useChatSession = () => {
         // Library payload'ı değiştirmiyor, bu yüzden zaman eşiği güvenli fallback.
         const isQueued = !!payload.fromQueue ||
           (Date.now() - new Date(payload.sentAt).getTime() > 3000);
-        if (isQueued) {
-          activeChatIdRef.current = cid;
+        // Kullanıcı şu an bu chat'i görüyor mu?
+        // activeChatIdRef.current === null: home ekranı — UI'a hiç dokunma.
+        // Farklı bir chat'teyse — o chat'in state'ini bozma.
+        const isActiveChat = activeChatIdRef.current === cid;
+
+        // UI state güncellemesi: sadece aktif chat + kuyruktan geliyorsa
+        // (isQueued=false → sendMessage'ın ilk anında çağırması,
+        //  activeChatIdRef zaten o an sendMessage'da set edilmiş olmalıydı)
+        if (isQueued && isActiveChat) {
           streamCancelledRef.current = false;
           streamingMsgIdRef.current = 'streaming';
           setStreamingMsgIdState('streaming');
@@ -172,6 +180,30 @@ export const useChatSession = () => {
           }
         }
 
+        // Farklı chat işleniyorsa typewriter/stream state'lerine dokunma
+        if (!isActiveChat) {
+          // Sadece API çağrısını yap, cache invalidation onSuccess'te yapılır
+          if (streamingEnabledRef.current) {
+            await streamChat(
+              cid,
+              { provider, model, messages: [{ role: 'user', content }] },
+              {
+                onMeta: () => {},
+                onDelta: () => {},
+                onDone: () => {},
+                onError: (err) => { if (err !== 'aborted') throw new Error(String(err)); },
+              },
+            );
+          } else {
+            if (isQueued) {
+              await syncChat(cid, { provider, model, messages: [{ content, sentAt: payload.sentAt }] });
+            } else {
+              await sendMessageApi(cid, { provider, model, messages: [{ role: 'user', content }] });
+            }
+          }
+          return;
+        }
+
         if (streamingEnabledRef.current) {
           await new Promise<void>((resolve, reject) => {
             const ctrl = new AbortController();
@@ -184,20 +216,26 @@ export const useChatSession = () => {
             pendingStreamSV.value = '';
             streamResetCountSV.value = streamResetCountSV.value + 1;
 
-            if (typewriterIntervalRef.current) clearInterval(typewriterIntervalRef.current);
-            typewriterIntervalRef.current = setInterval(() => {
+            // requestAnimationFrame döngüsü: frame-sync, setInterval'ın JS event loop
+            // gecikmesinden bağımsız. Her frame'de buffer'dan 8 karakter yazar.
+            if (typewriterIntervalRef.current) cancelAnimationFrame(typewriterIntervalRef.current as unknown as number);
+            const tick = () => {
               const buf = pendingBufferRef.current;
               const written = writtenLenRef.current;
               if (written < buf.length) {
-                const next = Math.min(written + 6, buf.length);
+                const next = Math.min(written + 8, buf.length);
                 writtenLenRef.current = next;
                 pendingStreamSV.value = buf.slice(0, next);
+                typewriterIntervalRef.current = requestAnimationFrame(tick) as unknown as ReturnType<typeof setInterval>;
               } else if (streamDoneRef.current) {
-                clearInterval(typewriterIntervalRef.current!);
                 typewriterIntervalRef.current = null;
                 isStreamingDoneSV.value = true;
+              } else {
+                // Buffer dolmadı, stream devam ediyor — bir sonraki frame'de tekrar dene
+                typewriterIntervalRef.current = requestAnimationFrame(tick) as unknown as ReturnType<typeof setInterval>;
               }
-            }, 32);
+            };
+            typewriterIntervalRef.current = requestAnimationFrame(tick) as unknown as ReturnType<typeof setInterval>;
 
             streamChat(
               cid,
@@ -230,7 +268,7 @@ export const useChatSession = () => {
                 onError: (err) => {
                   streamCancelledRef.current = true;
                   streamDoneRef.current = false;
-                  if (typewriterIntervalRef.current) { clearInterval(typewriterIntervalRef.current); typewriterIntervalRef.current = null; }
+                  if (typewriterIntervalRef.current) { cancelAnimationFrame(typewriterIntervalRef.current as unknown as number); typewriterIntervalRef.current = null; }
                   isStreamingDoneSV.value = false;
                   pendingBufferRef.current = '';
                   writtenLenRef.current = 0;
@@ -345,8 +383,8 @@ export const useChatSession = () => {
           queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.messages(cid) });
         }
         queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
-        // Her modda: hala bu chat'e ait queued bubble varsa temizle
-        // (kuyruktan işlenen mesaj için optimisticUserMsgRef hala set olabilir)
+        // Sadece bu chat aktifse UI state'ini temizle — başka chat'in sync'i mevcut UI'ı bozmasın
+        const isCurrentChat = activeChatIdRef.current === cid;
         if (optimisticUserMsgRef.current?.queued &&
             optimisticUserMsgRef.current.id === payload.optimisticMsg.id) {
           optimisticUserMsgRef.current = null;
@@ -355,7 +393,7 @@ export const useChatSession = () => {
             setIsNonStreamPending(false);
             setOptimisticUserMsg(null);
           });
-        } else if (!streamingEnabledRef.current) {
+        } else if (isCurrentChat && !streamingEnabledRef.current) {
           unstable_batchedUpdates(() => {
             setIsNonStreamPending(false);
             setOptimisticUserMsg(null);
@@ -363,17 +401,20 @@ export const useChatSession = () => {
         }
       },
       onError: (_err, payload) => {
+        const isCurrentChat = activeChatIdRef.current === payload.chatId;
         if (!isOnlineRef.current) {
-          // Offline'da hata → queued bubble göster, toast yok
-          const queuedMsg = { ...payload.optimisticMsg, queued: true };
-          optimisticUserMsgRef.current = queuedMsg;
-          unstable_batchedUpdates(() => {
-            setIsStreamingActive(false);
-            setIsNonStreamPending(false);
-            setOptimisticUserMsg(queuedMsg);
-          });
+          // Offline'da hata → sadece aktif chat'teyse queued bubble göster
+          if (isCurrentChat) {
+            const queuedMsg = { ...payload.optimisticMsg, queued: true };
+            optimisticUserMsgRef.current = queuedMsg;
+            unstable_batchedUpdates(() => {
+              setIsStreamingActive(false);
+              setIsNonStreamPending(false);
+              setOptimisticUserMsg(queuedMsg);
+            });
+          }
           toast.info('Çevrimdışı – mesaj kuyruğa alındı');
-        } else {
+        } else if (isCurrentChat) {
           unstable_batchedUpdates(() => {
             setIsStreamingActive(false);
             setIsNonStreamPending(false);
@@ -403,20 +444,23 @@ export const useChatSession = () => {
           writtenLenRef.current = 0;
           pendingStreamSV.value = '';
           streamResetCountSV.value = streamResetCountSV.value + 1;
-          if (typewriterIntervalRef.current) clearInterval(typewriterIntervalRef.current);
-          typewriterIntervalRef.current = setInterval(() => {
+          if (typewriterIntervalRef.current) cancelAnimationFrame(typewriterIntervalRef.current as unknown as number);
+          const tickWeb = () => {
             const buf = pendingBufferRef.current;
             const written = writtenLenRef.current;
             if (written < buf.length) {
-              const next = Math.min(written + 6, buf.length);
+              const next = Math.min(written + 8, buf.length);
               writtenLenRef.current = next;
               pendingStreamSV.value = buf.slice(0, next);
+              typewriterIntervalRef.current = requestAnimationFrame(tickWeb) as unknown as ReturnType<typeof setInterval>;
             } else if (streamDoneRef.current) {
-              clearInterval(typewriterIntervalRef.current!);
               typewriterIntervalRef.current = null;
               isStreamingDoneSV.value = true;
+            } else {
+              typewriterIntervalRef.current = requestAnimationFrame(tickWeb) as unknown as ReturnType<typeof setInterval>;
             }
-          }, 32);
+          };
+          typewriterIntervalRef.current = requestAnimationFrame(tickWeb) as unknown as ReturnType<typeof setInterval>;
           streamChat(
             cid,
             { provider, model, messages: [{ role: 'user', content }] },
@@ -442,7 +486,7 @@ export const useChatSession = () => {
               onError: (err) => {
                 streamCancelledRef.current = true;
                 streamDoneRef.current = false;
-                if (typewriterIntervalRef.current) { clearInterval(typewriterIntervalRef.current); typewriterIntervalRef.current = null; }
+                if (typewriterIntervalRef.current) { cancelAnimationFrame(typewriterIntervalRef.current as unknown as number); typewriterIntervalRef.current = null; }
                 isStreamingDoneSV.value = false;
                 pendingBufferRef.current = '';
                 writtenLenRef.current = 0;
@@ -783,7 +827,7 @@ if (!chatId) return;
 
     // 2. Typewriter interval'i durdur — buffer'daki yarım içerik SV'ye yazılmasın
     if (typewriterIntervalRef.current) {
-      clearInterval(typewriterIntervalRef.current);
+      cancelAnimationFrame(typewriterIntervalRef.current as unknown as number);
       typewriterIntervalRef.current = null;
     }
 
@@ -812,7 +856,7 @@ if (!chatId) return;
   const startNewChat = useCallback(() => {
     streamCancelledRef.current = true;
     streamDoneRef.current = false;
-    if (typewriterIntervalRef.current) { clearInterval(typewriterIntervalRef.current); typewriterIntervalRef.current = null; }
+    if (typewriterIntervalRef.current) { cancelAnimationFrame(typewriterIntervalRef.current as unknown as number); typewriterIntervalRef.current = null; }
     isStreamingDoneSV.value = false;
     abortCtrlRef.current?.abort();
     abortCtrlRef.current = null;
@@ -836,7 +880,7 @@ if (!chatId) return;
       if (id === sessionId) return;
       streamCancelledRef.current = true;
       streamDoneRef.current = false;
-      if (typewriterIntervalRef.current) { clearInterval(typewriterIntervalRef.current); typewriterIntervalRef.current = null; }
+      if (typewriterIntervalRef.current) { cancelAnimationFrame(typewriterIntervalRef.current as unknown as number); typewriterIntervalRef.current = null; }
       isStreamingDoneSV.value = false;
       abortCtrlRef.current?.abort();
       abortCtrlRef.current = null;
@@ -905,11 +949,13 @@ if (!chatId) return;
 
   // Hook içinde hesapla — isFetching/isLoading'i dışarı sızdırmak HomeScreen'i
   // her refetch'te re-render eder (mesaj gönderme anında çakışır).
+  // Sadece isLoading (ilk fetch, cache yok): Realm cache varsa messages.length > 0, loading false.
+  // isFetching background refresh — spinner gösterme, kullanıcı mesajları zaten görüyor.
   const isSessionLoading =
     !!chatId &&
     !isStreamingActive &&
     !optimisticUserMsg &&
-    (messagesQuery.isLoading || (messagesQuery.isFetching && messages.length === 0));
+    messagesQuery.isLoading;
 
   return {
     messages,
