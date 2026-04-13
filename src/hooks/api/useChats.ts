@@ -152,7 +152,7 @@ export const useInfiniteChatsQuery = () => {
 export const useDeleteChatMutation = () => {
   const queryClient = useQueryClient();
 
-  return useMutation<void, Error, string, { previous: InfiniteData<PaginatedChatsResponse> | undefined }>({
+  return useMutation<void, Error, string, { previous: InfiniteData<PaginatedChatsResponse> | undefined; deletedItem: import('@/types/chat.api.types').ChatListItem | undefined }>({
     mutationFn: (chatId) => deleteChat(chatId),
     onMutate: async (chatId) => {
       // Devam eden fetch'leri iptal et — optimistic update'in üzerine yazmasın
@@ -160,6 +160,8 @@ export const useDeleteChatMutation = () => {
       const previous = queryClient.getQueryData<InfiniteData<PaginatedChatsResponse>>(
         CHAT_QUERY_KEYS.chatsList,
       );
+      // Silinen item'ı rollback için sakla
+      const deletedItem = previous?.pages.flatMap((p) => p.items).find((c) => c.id === chatId);
       queryClient.setQueryData<InfiniteData<PaginatedChatsResponse>>(
         CHAT_QUERY_KEYS.chatsList,
         (old) => {
@@ -173,23 +175,24 @@ export const useDeleteChatMutation = () => {
           };
         },
       );
-      // Realm'den de hemen sil — focusInitialSessions Realm'den okuduğu için gecikme olmasın
-      void realmService.deleteSession(chatId);
-      return { previous };
+      // Realm'e onMutate'te dokunma — API hata verirse rollback için veri kaybolmasın
+      return { previous, deletedItem };
     },
     onError: (_err, _chatId, context) => {
       // Rollback: React Query cache'i eski haline getir
       if (context?.previous) {
         queryClient.setQueryData(CHAT_QUERY_KEYS.chatsList, context.previous);
       }
-      // Realm'i API'den tazele (deleteSession rollback'i yok, invalidate ile güncel liste gelsin)
+      // Realm'e silinmiş item'ı geri yaz (onMutate'te dokunmadık, ama güvenlik için)
+      if (context?.deletedItem) {
+        void realmService.saveSessions([context.deletedItem]);
+      }
       void queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
     },
     onSuccess: (_data, chatId) => {
-      // Silme başarılı — API artık güncel listeyi döner, invalidate et
-      void queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
-      // Realm'den de sil (onMutate'te zaten silindi ama güvenlik için tekrar)
+      // Silme başarılı — Realm'den tek seferinde sil
       void realmService.deleteSession(chatId);
+      void queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
     },
   });
 };

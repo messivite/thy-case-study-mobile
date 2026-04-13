@@ -62,7 +62,7 @@ const ngrokHeaders = Platform.OS === 'web' && BASE_URL.includes('ngrok')
 // Auth gerektiren istekler için (interceptor'lı)
 export const api = axios.create({
   baseURL: BASE_URL,
-  timeout: 8000,
+  timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
     ...ngrokHeaders,
@@ -72,7 +72,7 @@ export const api = axios.create({
 // Auth gerektirmeyen public istekler için (interceptor'sız)
 export const publicApi = axios.create({
   baseURL: BASE_URL,
-  timeout: 8000,
+  timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
     ...ngrokHeaders,
@@ -110,7 +110,8 @@ api.interceptors.response.use(
     const originalConfig = error.config as RetryableConfig | undefined;
 
     const status = error.response?.status;
-    if ((status !== 401 && status !== 403) || !originalConfig || originalConfig._retry) {
+    // 403 = Forbidden — token refresh ile çözülmez, direkt hata olarak ilet
+    if (status !== 401 || !originalConfig || originalConfig._retry) {
       captureApiError(error);
       return Promise.reject(error);
     }
