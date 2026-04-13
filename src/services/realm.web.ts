@@ -112,17 +112,20 @@ export const realmService = {
   },
 
   async updateMessageLiked(messageId: string, liked: boolean | null): Promise<void> {
-    // Web'de hangi session'a ait olduğunu bilmiyoruz — MESSAGES_PREFIX key'lerini tara.
-    // Snapshot al (indeks kayması olmasın), sadece ilgili prefix'i filtrele.
+    // Web'de hangi session'a ait olduğunu bilmiyoruz — localStorage.key() ile tara.
+    // Object.keys(localStorage) bazı mock ortamlarda storage key'lerini değil obje
+    // property'lerini döndürebilir; localStorage.length + .key(i) standart Web Storage API'si.
     try {
-      const allKeys = Object.keys(localStorage).filter((k) => k.startsWith(MESSAGES_PREFIX));
-      for (const key of allKeys) {
-        const stored = readJSON<StoredMessage[]>(key);
+      const len = localStorage.length;
+      for (let i = 0; i < len; i++) {
+        const k = localStorage.key(i);
+        if (!k || !k.startsWith(MESSAGES_PREFIX)) continue;
+        const stored = readJSON<StoredMessage[]>(k);
         if (!stored) continue;
         const idx = stored.findIndex((m) => m.id === messageId);
         if (idx === -1) continue;
         stored[idx] = { ...stored[idx], liked };
-        writeJSON(key, stored);
+        writeJSON(k, stored);
         break;
       }
     } catch {
