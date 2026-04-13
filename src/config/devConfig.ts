@@ -9,4 +9,6 @@ export const devConfig = {
    * Network detection'ın tamamlanması için gereken bekleme süresi (ms).
    */
   promptOnMountDelayMs: 800,
+  /** true: ONBOARDING_DONE flag'ini yok say → her açılışta onboarding'e git (test için) */
+  forceOnboarding: false,
 };

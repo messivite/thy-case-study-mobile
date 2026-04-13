@@ -4,6 +4,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { mmkvStorage, STORAGE_KEYS } from '@/lib/mmkv';
 import { getCurrentSession } from '@/services/authService';
 import { AppSplashScreen } from '@/screens/AppSplashScreen';
+import { devConfig } from '@/config/devConfig';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -27,7 +28,7 @@ export default function SplashPage() {
   }, []);
 
   const navigate = async () => {
-    const onboardingDone = mmkvStorage.getBoolean(STORAGE_KEYS.ONBOARDING_DONE);
+    const onboardingDone = !devConfig.forceOnboarding && mmkvStorage.getBoolean(STORAGE_KEYS.ONBOARDING_DONE);
     if (!onboardingDone) {
       schedulePostSplashNavigation(() => router.replace('/(onboarding)'));
       return;

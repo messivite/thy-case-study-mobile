@@ -29,7 +29,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useI18n } from '@/hooks/useI18n';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { palette } from '@/constants/colors';
-import { spacing, radius } from '@/constants/spacing';
+import { spacing, radius, nativeShadow } from '@/constants/spacing';
 import { WELCOME_GUEST_AUTH_FLOW } from '@/constants/welcomeGuestAuthFlow';
 import {
   WELCOME_HERO_RATIO,
@@ -297,11 +297,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[2],
     marginBottom: spacing[1],
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
+    ...nativeShadow({ color: '#000', offsetY: 2, opacity: 0.08, radius: 8, elevation: 3 }),
   },
   heroTitleWrap: {
     width: '100%',

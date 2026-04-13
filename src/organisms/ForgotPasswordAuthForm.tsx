@@ -48,7 +48,7 @@ export function ForgotPasswordAuthForm({ webScaled, footer }: Props) {
   const {
     control,
     handleSubmit,
-    formState: { isSubmitting },
+    formState: { isSubmitting, isValid },
   } = useValidatedForm<ForgotPasswordFormValues>(schema, {
     defaultValues: { email: '' },
   });
@@ -79,7 +79,7 @@ export function ForgotPasswordAuthForm({ webScaled, footer }: Props) {
     [forgotPassword, t],
   );
 
-  const submitOpacity = isSubmitting ? 1 : WELCOME_LOGIN_BUTTON_DISABLED_OPACITY;
+  const submitOpacity = (!isValid && !isSubmitting) ? WELCOME_LOGIN_BUTTON_DISABLED_OPACITY : 1;
 
   return (
     <Animated.View
@@ -113,7 +113,7 @@ export function ForgotPasswordAuthForm({ webScaled, footer }: Props) {
             accessibilityState={{ disabled: isSubmitting }}
           >
             {isSubmitting ? (
-              <View style={styles.submitBtn}>
+              <View style={styles.submitBtnRow}>
                 <Ionicons name="reload-outline" size={scale(16)} color={palette.white} />
                 <Text style={[styles.submitBtnText, webScaled?.submitBtnText]}>
                   {t('auth.sending')}
@@ -170,6 +170,11 @@ const styles = StyleSheet.create({
   },
   submitBtnDisabled: {
     ...nativeShadow({ color: 'transparent', offsetY: 0, opacity: 0, radius: 0, elevation: 0 }),
+  },
+  submitBtnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
   },
   submitBtnText: {
     fontFamily: fontFamily.semiBold,

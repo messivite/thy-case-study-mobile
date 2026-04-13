@@ -51,7 +51,7 @@ export function RegisterAuthForm({ contentScale, webScaled, footer }: Props) {
   const {
     control,
     handleSubmit,
-    formState: { isSubmitting },
+    formState: { isSubmitting, isValid },
   } = useValidatedForm<RegisterFormValues>(schema, {
     defaultValues: { email: '', password: '' },
   });
@@ -98,7 +98,7 @@ export function RegisterAuthForm({ contentScale, webScaled, footer }: Props) {
     [signUp, t],
   );
 
-  const submitOpacity = isSubmitting ? 1 : WELCOME_LOGIN_BUTTON_DISABLED_OPACITY;
+  const submitOpacity = (!isValid && !isSubmitting) ? WELCOME_LOGIN_BUTTON_DISABLED_OPACITY : 1;
 
   return (
     <Animated.View
