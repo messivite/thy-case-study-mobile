@@ -126,16 +126,8 @@ export function NetworkConnectivitySheets({ enabled = true, promptOnMount = fals
 
   const syncSnapshotRef = useRef({ messages: 0, likes: 0 });
   const isOnlineRef = useRef(isOnline);
+  const prevIsOnlineRef = useRef(isOnline);
   useEffect(() => { isOnlineRef.current = isOnline; }, [isOnline]);
-
-  useEffect(() => {
-    if (!enabled || preview != null) return;
-    if (isOnline == null) return;
-    if (!isOnline) {
-      setOfflineOpen(true);
-      setOnlineOpen(false);
-    }
-  }, [isOnline, enabled, preview]);
 
   // autoSyncRunning: arka planda başlatılan otomatik sync takibi
   const autoSyncRunningRef = useRef(false);
@@ -163,6 +155,37 @@ export function NetworkConnectivitySheets({ enabled = true, promptOnMount = fals
     }
   }, [syncNow, queryClient]);
 
+  const runAutoSyncRef = useRef(runAutoSync);
+  useEffect(() => { runAutoSyncRef.current = runAutoSync; }, [runAutoSync]);
+
+  // isOnline değişimini React tarafında da dinle — onOnlineRestore'a ek güvence.
+  // Sadece isOnline değişince çalışır — runAutoSync ref üzerinden çağrılır, bağımlılığa girmez.
+  useEffect(() => {
+    if (!enabled || preview != null) return;
+    if (isOnline == null) return;
+
+    const wasOffline = prevIsOnlineRef.current === false;
+    prevIsOnlineRef.current = isOnline;
+
+    if (!isOnline) {
+      setOfflineOpen(true);
+      setOnlineOpen(false);
+      return;
+    }
+
+    // false → true geçişi: queue varsa sync başlat
+    if (wasOffline) {
+      const queue = OfflineManager.getQueue();
+      if (queue.length > 0) {
+        setOfflineOpen(false);
+        const msgs = queue.filter((a) => a.actionName === 'SEND_MESSAGE').length;
+        const likes = queue.filter((a) => a.actionName === 'LIKE_MESSAGE').length;
+        void runAutoSyncRef.current(msgs, likes);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOnline]);
+
   useEffect(() => {
     if (!enabled) return;
     OfflineManager.onOnlineRestore = ({ pendingCount: count }) => {
@@ -185,11 +208,15 @@ export function NetworkConnectivitySheets({ enabled = true, promptOnMount = fals
     if (!promptOnMount || !enabled) return;
     const timer = setTimeout(() => {
       const queue = OfflineManager.getQueue();
-      if (queue.length > 0 && OfflineManager.isOnline !== false) {
+      if (queue.length === 0) return;
+      // isOnline === true ise sync dene; false veya null (bilinmiyor) ise offline sheet aç
+      if (OfflineManager.isOnline === true) {
         const msgs = queue.filter((a) => a.actionName === 'SEND_MESSAGE').length;
         const likes = queue.filter((a) => a.actionName === 'LIKE_MESSAGE').length;
-        // App başlarken de otomatik sync — sheet açmak yerine
         void runAutoSync(msgs, likes);
+      } else {
+        // Offline veya durum bilinmiyor — kullanıcıya bildir
+        setOfflineOpen(true);
       }
     }, devConfig.promptOnMountDelayMs);
     return () => clearTimeout(timer);

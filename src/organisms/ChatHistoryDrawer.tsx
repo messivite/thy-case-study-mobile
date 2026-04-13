@@ -107,7 +107,8 @@ type ContextMenuState = {
 // Constants
 // ---------------------------------------------------------------------------
 
-const SPRING_CONFIG = { damping: 32, stiffness: 380, mass: 0.6 } as const;
+// stiffness↑ + mass↓ = daha hızlı, native iOS sidepanel hissine yakın
+const SPRING_CONFIG = { damping: 28, stiffness: 480, mass: 0.45 } as const;
 const CLOSE_THRESHOLD = 80;
 const SWIPE_VELOCITY_THRESHOLD = 600;
 const CONTEXT_MENU_WIDTH = 200;
@@ -651,12 +652,16 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
       translateX.value = -DRAWER_WIDTH;
       overlayOpacity.value = 0;
       setModalVisible(true);
-      translateX.value = withSpring(0, SPRING_CONFIG);
-      overlayOpacity.value = withTiming(0.55, { duration: 260 });
+      // requestAnimationFrame: Modal visible=true olduktan sonra bir frame bekle,
+      // layout hazır değilken spring başlarsa ilk frame skip olur.
+      requestAnimationFrame(() => {
+        translateX.value = withSpring(0, SPRING_CONFIG);
+        overlayOpacity.value = withTiming(0.45, { duration: 220 });
+      });
       return;
     } else {
-      overlayOpacity.value = withTiming(0, { duration: 200 });
-      translateX.value = withTiming(-DRAWER_WIDTH, { duration: 220 }, (done) => {
+      overlayOpacity.value = withTiming(0, { duration: 160 });
+      translateX.value = withTiming(-DRAWER_WIDTH, { duration: 180 }, (done) => {
         'worklet';
         if (done) { runOnJS(setModalVisible)(false); runOnJS(callOnHidden)(); }
       });
