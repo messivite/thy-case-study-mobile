@@ -49,6 +49,8 @@ import { authEventEmitter, AUTH_EVENTS } from '@/services/api';
 import { authMutex } from '@/lib/authMutex';
 import { setErrorReportingUser } from '@/services/errorReporting';
 import { toast } from '@/lib/toast';
+import { realmService } from '@/services/realm';
+import { queryClient } from '@/services/queryClient';
 import { getMe, updateMe } from '@/api/user.api';
 import { setProfile, setProfileError } from '@/store/slices/profileSlice';
 import type { AuthStatus } from '@/types/auth.types';
@@ -132,6 +134,7 @@ function useSupabaseAuthState(): SupabaseAuthApi {
           expiresAt: session.expiresAt,
         }),
       );
+      realmService.setUserId(session.user.id);
       setErrorReportingUser({
         id: session.user.id,
         email: session.user.email,
@@ -195,6 +198,9 @@ function useSupabaseAuthState(): SupabaseAuthApi {
     stopRefreshInterval();
     authMutex.reset();
     void clearSession();
+    // Başka kullanıcıya ait session/mesaj kalıntıları 403'e neden olmasın
+    void realmService.clearAll();
+    queryClient.clear();
     setErrorReportingUser(null);
     if (showExpiredToast) {
       toast.error('Oturumunuzun süresi doldu, tekrar giriş yapın.');

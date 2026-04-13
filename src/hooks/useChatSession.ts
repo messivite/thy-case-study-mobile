@@ -401,9 +401,9 @@ export const useChatSession = () => {
         // Stop edilmişse — partial data yok, invalidate gereksiz network isteği olur
         if (streamCancelledRef.current) return;
         const cid = payload.chatId;
-        if (streamingEnabledRef.current) {
-          queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.messages(cid) });
-        }
+        // Stream: handleStreamingComplete zaten cache'e direkt yazdı — ayrıca invalidate gereksiz,
+        // aksi halde chat seçilince mount fetch + bu invalidate üst üste 2-3 istek oluşur.
+        // Non-stream: setQueryData ile cache güncellendi, invalidate yine gereksiz.
         queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
         // Sadece bu chat aktifse UI state'ini temizle — başka chat'in sync'i mevcut UI'ı bozmasın
         const isCurrentChat = activeChatIdRef.current === cid;

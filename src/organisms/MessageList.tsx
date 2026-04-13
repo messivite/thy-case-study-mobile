@@ -260,37 +260,67 @@ const MessageListInner: React.FC<Props> = ({
   const handleSpeakToggleRef = useRef(handleSpeakToggle);
   useEffect(() => { handleSpeakToggleRef.current = handleSpeakToggle; }, [handleSpeakToggle]);
 
+  // renderItem'ın dep array'ini minimumda tutmak için tüm callback/prop'ları ref'e al.
+  // Bu sayede streaming, like, renk değişimi gibi dış güncellemeler tüm listeyi reconcile etmez.
+  const onLikeRef = useRef(onLike);
+  useEffect(() => { onLikeRef.current = onLike; }, [onLike]);
+  const onRegenerateRef = useRef(onRegenerate);
+  useEffect(() => { onRegenerateRef.current = onRegenerate; }, [onRegenerate]);
+  const onQueuedPressRef = useRef(onQueuedPress);
+  useEffect(() => { onQueuedPressRef.current = onQueuedPress; }, [onQueuedPress]);
+  const colorsRef = useRef(colors);
+  useEffect(() => { colorsRef.current = colors; }, [colors]);
+  const isStreamingActiveRef = useRef(isStreamingActive);
+  // Render sırasında da güncelle — useEffect async olduğu için STREAMING_KEY item render'ına yetişemez.
+  // Ref render-time'da da okunduğu için synchronous güncelleme şart.
+  isStreamingActiveRef.current = isStreamingActive;
+  useEffect(() => { isStreamingActiveRef.current = isStreamingActive; }, [isStreamingActive]);
+  const pendingStreamSVRef = useRef(pendingStreamSV);
+  useEffect(() => { pendingStreamSVRef.current = pendingStreamSV; }, [pendingStreamSV]);
+  const isStreamingDoneSVRef = useRef(isStreamingDoneSV);
+  useEffect(() => { isStreamingDoneSVRef.current = isStreamingDoneSV; }, [isStreamingDoneSV]);
+  const streamResetCountSVRef = useRef(streamResetCountSV);
+  useEffect(() => { streamResetCountSVRef.current = streamResetCountSV; }, [streamResetCountSV]);
+  const onStreamingCompleteRef = useRef(onStreamingComplete);
+  useEffect(() => { onStreamingCompleteRef.current = onStreamingComplete; }, [onStreamingComplete]);
+
   // displayMessages'ın en üstündeki (index 0) assistant mesajının ID'si —
   // model label sadece bu mesajda gizlenir. Ref üzerinden geçilir, renderItem dep'e girmez.
   const lastAssistantIdRef = useRef<string | null>(null);
 
+  // Dep array kasıtlı boş — tüm değerler ref üzerinden okunur.
+  // Bu sayede streaming/like/renk değişimleri tüm listeyi reconcile ettirmez;
+  // FlatList sadece data/extraData değişince ilgili item'ları günceller.
   const renderItem = useCallback(({ item }: { item: Message }) => {
     const isStreamingItem = item.id === STREAMING_KEY;
 
-    if (isStreamingItem && isStreamingActive && pendingStreamSV && isStreamingDoneSV && streamResetCountSV && onStreamingComplete) {
+    const pSV = pendingStreamSVRef.current;
+    const dSV = isStreamingDoneSVRef.current;
+    const rSV = streamResetCountSVRef.current;
+    const onComplete = onStreamingCompleteRef.current;
+    if (isStreamingItem && isStreamingActiveRef.current && pSV && dSV && rSV && onComplete) {
       return (
         <StreamingBubble
-          pendingSV={pendingStreamSV}
-          isStreamingDoneSV={isStreamingDoneSV}
-          streamResetCountSV={streamResetCountSV}
-          onComplete={onStreamingComplete}
+          pendingSV={pSV}
+          isStreamingDoneSV={dSV}
+          streamResetCountSV={rSV}
+          onComplete={onComplete}
         />
       );
     }
 
-    // En üstteki assistant mesajında model label gizlenir (streaming bubble aktifse o zaten STREAMING_KEY)
     const hideModelLabel = item.id === lastAssistantIdRef.current;
 
     const bubble = (
       <MessageBubble
         message={item}
-        colors={colors}
-        onLike={onLike}
-        onRegenerate={onRegenerate}
+        colors={colorsRef.current}
+        onLike={onLikeRef.current}
+        onRegenerate={onRegenerateRef.current}
         isSpeaking={speakingMessageIdRef.current === item.id}
         hideFooter={isStreamingItem}
         hideModelLabel={hideModelLabel}
-        onQueuedPress={item.queued ? onQueuedPress : undefined}
+        onQueuedPress={item.queued ? onQueuedPressRef.current : undefined}
         onSpeakToggle={
           item.role === 'assistant' && item.content.trim().length > 0
             ? () => handleSpeakToggleRef.current(item.id, item.content)
@@ -299,23 +329,12 @@ const MessageListInner: React.FC<Props> = ({
       />
     );
 
-    // Streaming placeholder'dan gerçek mesaja geçişte FadeIn — keskin atlama yerine yumuşak
     if (item.role === 'assistant' && !isStreamingItem) {
       return <Animated.View entering={FadeIn.duration(180)}>{bubble}</Animated.View>;
     }
     return bubble;
-  }, [
-    isStreamingActive,
-    pendingStreamSV,
-    isStreamingDoneSV,
-    streamResetCountSV,
-    onStreamingComplete,
-    onLike,
-    onRegenerate,
-    onQueuedPress,
-    colors,
-    // speakingMessageId dep'den çıkarıldı — FlatList extraData üzerinden sadece ilgili 2 mesajı günceller.
-  ]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Streaming bittikten sonra gerçek mesaj cache'e girene kadar placeholder'ı göstermeye devam et.
   // Kullanılan ID: aktif streamingMessageId (gerçek ID) VEYA son streaming'in ID'si (lastStreamingMsgId state).
@@ -456,7 +475,7 @@ const MessageListInner: React.FC<Props> = ({
         </ScrollView>
 
         {!hasContent && !showWelcome && !isSessionLoading && !isWelcomeExiting && (
-          <View style={[styles.center, styles.welcomeOverlay]} pointerEvents="none">
+          <View style={[styles.center, styles.welcomeOverlay, { pointerEvents: 'none' as const }]}>
             <Text variant="h4" align="center" color={colors.text}>Nasıl yardımcı olabilirim?</Text>
             <Text variant="body" align="center" color={colors.textSecondary} style={styles.emptySubtitle}>
               Bir şeyler sormaya başlayın
@@ -491,8 +510,9 @@ const MessageListInner: React.FC<Props> = ({
         renderItem={renderItem}
         keyExtractor={(item) => item.id}
         // speakingMessageId değişince FlatList sadece ilgili item'ı yeniden render eder.
+        // isStreamingActive: STREAMING_KEY item'ı renderItem'a doğru ref değeriyle geçmesi için.
         // renderItem callback'i yeniden oluşmaz — tüm liste reconcile'dan kurtulur.
-        extraData={speakingMessageId}
+        extraData={[speakingMessageId, isStreamingActive]}
         inverted
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={
@@ -518,15 +538,15 @@ const MessageListInner: React.FC<Props> = ({
         keyboardDismissMode="interactive"
         keyboardShouldPersistTaps="handled"
         removeClippedSubviews={true}
-        maxToRenderPerBatch={8}
-        updateCellsBatchingPeriod={20}
-        windowSize={7}
-        initialNumToRender={12}
+        maxToRenderPerBatch={5}
+        updateCellsBatchingPeriod={50}
+        windowSize={5}
+        initialNumToRender={10}
       />
 
       {/* Empty state overlay */}
       {!hasContent && !showWelcome && !isSessionLoading && !isWelcomeExiting && (
-        <View style={[styles.center, styles.welcomeOverlay]} pointerEvents="none">
+        <View style={[styles.center, styles.welcomeOverlay, { pointerEvents: 'none' as const }]}>
           <Text variant="h4" align="center" color={colors.text}>Nasıl yardımcı olabilirim?</Text>
           <Text variant="body" align="center" color={colors.textSecondary} style={styles.emptySubtitle}>
             Bir şeyler sormaya başlayın

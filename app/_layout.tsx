@@ -28,6 +28,7 @@ const offlineConfig = Platform.OS !== 'web'
   ? { storage: getRealmAdapter(), syncMode: 'manual' as const }
   : null;
 
+import { configureReanimatedLogger, ReanimatedLogLevel } from 'react-native-reanimated';
 import { store } from '@/store';
 import { queryClient } from '@/services/queryClient';
 import i18n from '@/i18n';
@@ -38,6 +39,10 @@ import { initErrorReporting } from '@/services/errorReporting';
 import { ensureWebViewportRootStyle } from '@/lib/webViewport';
 import { realmService } from '@/services/realm';
 import { ThemeProvider } from '@/contexts/ThemeContext';
+
+// Reanimated strict mod uyarılarını kapat — Fast Refresh / hot reload sırasında
+// SharedValue yeniden init edilirken false positive warning üretiyor.
+configureReanimatedLogger({ level: ReanimatedLogLevel.warn, strict: false });
 
 // Sentry native köprüsü her build'de bir kez init (DSN yok / dev'de enabled:false)
 initErrorReporting();
