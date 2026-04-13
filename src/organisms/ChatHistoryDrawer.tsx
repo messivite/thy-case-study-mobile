@@ -862,6 +862,147 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
   // Drawer kapalıyken overlay ve panel tıklamaları geçirgen yap
   const containerPointerEvents = isOpen ? 'box-none' : 'none';
 
+  // panelContent — hem web hem native path'te kullanılan drawer içeriği
+  const panelContent = (
+    <>
+      {/* ── Fixed top section — ölçüm burada ── */}
+      <View
+        ref={fixedAreaRef}
+        onLayout={(e: LayoutChangeEvent) => setFixedAreaHeight(e.nativeEvent.layout.height)}
+      >
+        <AppHeader
+          title={t('chatHistory.title')}
+          style={{ paddingHorizontal: spacing[3] }}
+        />
+        <View style={[styles.toolbar, { backgroundColor: colors.background, borderBottomColor: colors.border + '55' }]}>
+          <SearchInput
+            ref={searchInputRef}
+            placeholder={t('chatHistory.searchPlaceholder')}
+            onChangeText={handleSearchChange}
+            onFocusChange={handleSearchFocus}
+            onClear={() => { searchQueryRef.current = ''; setDebouncedQuery(''); }}
+            onSubmitEditing={() => {
+              if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+              const q = searchQueryRef.current.trim();
+              if (q) setDebouncedQuery(q);
+            }}
+            showCancelOnFocus
+            cancelLabel={t('chatHistory.cancel')}
+            containerStyle={styles.searchInputContainer}
+            themeColors={colors}
+          />
+          <Animated.View style={[styles.newChatWrap, newChatAnimatedStyle]}>
+            <Button
+              title={t('chatHistory.newChat')}
+              variant="ghost"
+              fullWidth={false}
+              style={styles.newChatBtn}
+              titleStyle={styles.newChatBtnText}
+              icon={<Ionicons name="create-outline" size={moderateScale(22)} color={colors.primary} />}
+              onPress={() => { onNewChat?.(); onClose(); }}
+            />
+          </Animated.View>
+        </View>
+      </View>
+
+      {/* ── Scrollable content ── */}
+      <View style={styles.listContainer}>
+        {isLoading && chats.length === 0 ? (
+          <View style={styles.loadingContainer}>
+            <Spinner size="large" color={palette.primary} />
+          </View>
+        ) : chats.length === 0 ? (
+          <EmptyState textColor={colors.text} textSecondary={colors.textSecondary} t={t} />
+        ) : (
+          <FlatList
+            data={chats}
+            keyExtractor={(item) => item.id}
+            renderItem={renderItem}
+            extraData={extraData}
+            showsVerticalScrollIndicator={false}
+            onEndReachedThreshold={0.2}
+            onEndReached={handleEndReached}
+            initialNumToRender={12}
+            maxToRenderPerBatch={8}
+            windowSize={5}
+            removeClippedSubviews
+            ListFooterComponent={
+              isFetchingNextPage ? (
+                <View style={styles.footerLoader}>
+                  <Spinner size="small" color={palette.primary} />
+                </View>
+              ) : null
+            }
+            refreshControl={
+              <RefreshControl
+                refreshing={isRefetching && !isLoading}
+                onRefresh={refetch}
+                tintColor={palette.primary}
+                colors={[palette.primary]}
+              />
+            }
+            contentContainerStyle={styles.listContent}
+          />
+        )}
+      </View>
+
+      {/* Search overlay */}
+      {searchOverlayVisible && (
+        <SearchOverlay
+          queryState={queryState}
+          queryText={debouncedQuery}
+          isSearching={isSearching}
+          isFetchingNext={isSearchFetchingNext}
+          hasNext={searchHasNext ?? false}
+          searchResults={filteredSearchResults}
+          focusInitialSessions={focusInitialSessions}
+          topOffset={fixedAreaHeight}
+          onLoadMore={searchFetchNext}
+          onSelectResult={handleSelectSearchResult}
+          onSelectSession={(item) => {
+            if (onSelectChat) {
+              onSelectChat(item);
+            } else {
+              dispatch(setSessionId(item.id));
+              onClose();
+            }
+            setSearchFocused(false);
+            searchInputRef.current?.blur();
+          }}
+          textColor={colors.text}
+          textSecondary={colors.textSecondary}
+          borderColor={colors.border}
+          backgroundColor={colors.background}
+          t={t}
+        />
+      )}
+    </>
+  );
+
+  // Web: absoluteFill container + style.pointerEvents 'box-none' CSS'te çalışmaz.
+  // Backdrop ayrı Pressable, panel display:none ile gizlenir — native'e dokunmaz.
+  if (IS_WEB) {
+    return (
+      <>
+        {visible && (
+          <Pressable
+            style={[StyleSheet.absoluteFill, styles.webBackdrop]}
+            onPress={onClose}
+          />
+        )}
+        <Animated.View
+          style={[
+            styles.panel,
+            { width: DRAWER_WIDTH, backgroundColor: colors.background, display: visible ? 'flex' : 'none' },
+            panelAnimatedStyle,
+          ]}
+        >
+          {panelContent}
+        </Animated.View>
+      </>
+    );
+  }
+
   return (
     <View
       style={[StyleSheet.absoluteFill, { pointerEvents: containerPointerEvents }]}
@@ -880,120 +1021,7 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
             panelAnimatedStyle,
           ]}
         >
-          {/* ── Fixed top section — ölçüm burada ── */}
-          <View
-            ref={fixedAreaRef}
-            onLayout={(e: LayoutChangeEvent) => setFixedAreaHeight(e.nativeEvent.layout.height)}
-          >
-            <AppHeader
-              title={t('chatHistory.title')}
-              style={{ paddingHorizontal: spacing[3] }}
-            />
-
-            {/* Toolbar: search + new chat */}
-            <View style={[styles.toolbar, { backgroundColor: colors.background, borderBottomColor: colors.border + '55' }]}>
-              <SearchInput
-                ref={searchInputRef}
-                placeholder={t('chatHistory.searchPlaceholder')}
-                onChangeText={handleSearchChange}
-                onFocusChange={handleSearchFocus}
-                onClear={() => { searchQueryRef.current = ''; setDebouncedQuery(''); }}
-                onSubmitEditing={() => {
-                  // Debounce beklemeden anında ara
-                  if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
-                  const q = searchQueryRef.current.trim();
-                  if (q) setDebouncedQuery(q);
-                }}
-                showCancelOnFocus
-                cancelLabel={t('chatHistory.cancel')}
-                containerStyle={styles.searchInputContainer}
-                themeColors={colors}
-              />
-              <Animated.View style={[styles.newChatWrap, newChatAnimatedStyle]}>
-                <Button
-                  title={t('chatHistory.newChat')}
-                  variant="ghost"
-                  fullWidth={false}
-                  style={styles.newChatBtn}
-                  titleStyle={styles.newChatBtnText}
-                  icon={<Ionicons name="create-outline" size={moderateScale(22)} color={colors.primary} />}
-                  onPress={() => { onNewChat?.(); onClose(); }}
-                />
-              </Animated.View>
-            </View>
-          </View>
-
-          {/* ── Scrollable content ── */}
-          <View style={styles.listContainer}>
-            {isLoading && chats.length === 0 ? (
-              <View style={styles.loadingContainer}>
-                <Spinner size="large" color={palette.primary} />
-              </View>
-            ) : chats.length === 0 ? (
-              <EmptyState textColor={colors.text} textSecondary={colors.textSecondary} t={t} />
-            ) : (
-              <FlatList
-                data={chats}
-                keyExtractor={(item) => item.id}
-                renderItem={renderItem}
-                extraData={extraData}
-                showsVerticalScrollIndicator={false}
-                onEndReachedThreshold={0.2}
-                onEndReached={handleEndReached}
-                initialNumToRender={12}
-                maxToRenderPerBatch={8}
-                windowSize={5}
-                removeClippedSubviews
-                ListFooterComponent={
-                  isFetchingNextPage ? (
-                    <View style={styles.footerLoader}>
-                      <Spinner size="small" color={palette.primary} />
-                    </View>
-                  ) : null
-                }
-                refreshControl={
-                  <RefreshControl
-                    refreshing={isRefetching && !isLoading}
-                    onRefresh={refetch}
-                    tintColor={palette.primary}
-                    colors={[palette.primary]}
-                  />
-                }
-                contentContainerStyle={styles.listContent}
-              />
-            )}
-          </View>
-
-          {/* Search overlay — focus veya dolu query varken açık kalır */}
-          {searchOverlayVisible && (
-            <SearchOverlay
-              queryState={queryState}
-              queryText={debouncedQuery}
-              isSearching={isSearching}
-              isFetchingNext={isSearchFetchingNext}
-              hasNext={searchHasNext ?? false}
-              searchResults={filteredSearchResults}
-              focusInitialSessions={focusInitialSessions}
-              topOffset={fixedAreaHeight}
-              onLoadMore={searchFetchNext}
-              onSelectResult={handleSelectSearchResult}
-              onSelectSession={(item) => {
-                if (onSelectChat) {
-                  onSelectChat(item);
-                } else {
-                  dispatch(setSessionId(item.id));
-                  onClose();
-                }
-                setSearchFocused(false);
-                searchInputRef.current?.blur();
-              }}
-              textColor={colors.text}
-              textSecondary={colors.textSecondary}
-              borderColor={colors.border}
-              backgroundColor={colors.background}
-              t={t}
-            />
-          )}
+          {panelContent}
         </Animated.View>
       </GestureDetector>
 
@@ -1010,12 +1038,17 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: '#000000',
   },
+  webBackdrop: {
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    zIndex: 0,
+  },
   panel: {
     position: 'absolute',
     left: 0,
     top: 0,
     bottom: 0,
     overflow: 'hidden',
+    zIndex: 1,
     ...shadow.lg,
   },
   // Toolbar

@@ -450,9 +450,16 @@ const MessageListInner: React.FC<Props> = ({
           onScroll={handleScroll}
           scrollEventThrottle={16}
           onContentSizeChange={() => {
-            // Auto-scroll to bottom when new content arrives and user hasn't scrolled up
+            // Markdown gibi içerikler ilk paint'te küçük, sonra expand oluyor.
+            // İki rAF bekle: ilk rAF layout commit'i, ikinci rAF markdown'ın gerçek height'ını yakalar.
             if (isAtLatestRef.current) {
-              webScrollRef.current?.scrollToEnd({ animated: false });
+              requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                  if (isAtLatestRef.current) {
+                    webScrollRef.current?.scrollToEnd({ animated: false });
+                  }
+                });
+              });
             }
           }}
         >

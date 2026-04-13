@@ -192,7 +192,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sideSlot: {
-    minWidth: scale(60),
+    minWidth: Platform.OS === 'web' ? 44 : scale(60),
     height: HEADER_ROW_HEIGHT,
     justifyContent: 'center',
   },
