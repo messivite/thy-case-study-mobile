@@ -137,10 +137,9 @@ export const LiquidBottomSheet: React.FC<Props> = ({
       </Animated.View>
 
       <Animated.View
-        style={[styles.sheetWrap, sheetStyle]}
-        pointerEvents="box-none"
+        style={[styles.sheetWrap, sheetStyle, { pointerEvents: 'box-none' as const }]}
       >
-        <View style={styles.sheetMaxWidth} pointerEvents="box-none">
+        <View style={[styles.sheetMaxWidth, { pointerEvents: 'box-none' as const }]}>
           <View style={[styles.sheetCard, IS_WEB && { overflow: 'visible' }]}>
             {showHandle && (
               <View style={[styles.handle, { backgroundColor: colors.textSecondary }]} />

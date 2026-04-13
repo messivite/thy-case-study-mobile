@@ -15,7 +15,7 @@ import { Text } from '@/atoms/Text';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import { palette } from '@/constants/colors';
-import { radius, spacing } from '@/constants/spacing';
+import { radius, spacing, nativeShadow } from '@/constants/spacing';
 import { fontFamily } from '@/constants/typography';
 type Props = {
   dailyUsed: number;
@@ -166,11 +166,7 @@ const styles = StyleSheet.create({
     padding: spacing[4],
     gap: spacing[3],
     marginBottom: spacing[5],
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.14,
-    shadowRadius: 14,
-    elevation: 5,
+    ...nativeShadow({ color: '#000', offsetY: 6, opacity: 0.14, radius: 14, elevation: 5 }),
   },
   titleRow: {
     flexDirection: 'row',
@@ -245,11 +241,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     overflow: 'hidden',
     backgroundColor: palette.white,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
-    elevation: 1,
+    ...nativeShadow({ color: '#000', offsetY: 1, opacity: 0.08, radius: 3, elevation: 1 }),
   },
   fillWrap: {
     height: '100%',

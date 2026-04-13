@@ -313,10 +313,10 @@ const ContextMenuOverlay = React.memo(({
 
       {/* Sadece row blur — pageY/pageH koordinatlarına göre konumlu */}
       <View
-        pointerEvents="none"
         style={{
           position: 'absolute',
           left: 0,
+          pointerEvents: 'none' as const,
           right: 0,
           top: contextMenu.pageY,
           height: contextMenu.pageH,
@@ -864,11 +864,10 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
 
   return (
     <View
-      style={StyleSheet.absoluteFill}
-      pointerEvents={containerPointerEvents}
+      style={[StyleSheet.absoluteFill, { pointerEvents: containerPointerEvents }]}
     >
       {/* Dimmed overlay */}
-      <Animated.View style={[styles.overlay, overlayAnimatedStyle]} pointerEvents={isOpen ? 'box-none' : 'none'}>
+      <Animated.View style={[styles.overlay, overlayAnimatedStyle, { pointerEvents: isOpen ? 'box-none' : 'none' as const }]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
       </Animated.View>
 

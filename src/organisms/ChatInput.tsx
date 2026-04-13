@@ -36,7 +36,7 @@ import { BlurView } from 'expo-blur';
 import { THYIcon } from '@/atoms/thy-icon';
 import { AI_MODELS, AIModelId } from '@/constants/models';
 import { Attachment } from '@/types/chat.types';
-import { radius, spacing } from '@/constants/spacing';
+import { radius, spacing, nativeShadow } from '@/constants/spacing';
 import { fontFamily, fontSize } from '@/constants/typography';
 import { palette } from '@/constants/colors';
 import { scale as scaleSize } from '@/lib/responsive';
@@ -122,15 +122,13 @@ const SendButton = memo<SendButtonProps>(({ canSend, isStreaming, onSend, onStop
       <View
         style={[
           StyleSheet.absoluteFill,
-          { backgroundColor: palette.primary, borderRadius: SIZE / 2 },
+          { backgroundColor: palette.primary, borderRadius: SIZE / 2, pointerEvents: 'none' as const },
         ]}
-        pointerEvents="none"
       />
 
       {/* Stop layer — gradient + stop icon, send'in altında */}
       <Animated.View
-        style={[StyleSheet.absoluteFill, stopLayerStyle]}
-        pointerEvents="none"
+        style={[StyleSheet.absoluteFill, stopLayerStyle, { pointerEvents: 'none' as const }]}
       >
         <LinearGradient
           colors={[palette.primaryLight, palette.primary]}
@@ -146,8 +144,7 @@ const SendButton = memo<SendButtonProps>(({ canSend, isStreaming, onSend, onStop
 
       {/* Send layer — THY icon, üstte */}
       <Animated.View
-        style={[StyleSheet.absoluteFill, centerStyle, sendLayerStyle]}
-        pointerEvents="none"
+        style={[StyleSheet.absoluteFill, centerStyle, sendLayerStyle, { pointerEvents: 'none' as const }]}
       >
         <THYIcon
           name="thy-loading"
@@ -273,13 +270,7 @@ const chipStyles = StyleSheet.create({
 
 
 // Gemini-style soft shadow — no harsh border, depth comes from shadow
-const cardShadow = {
-  shadowColor: '#000',
-  shadowOffset: { width: 0, height: -2 },
-  shadowOpacity: 0.08,
-  shadowRadius: 20,
-  elevation: 12,
-};
+const cardShadow = nativeShadow({ color: '#000', offsetY: -2, opacity: 0.08, radius: 20, elevation: 12 });
 
 // ---------------------------------------------------------------------------
 // ExpandedInputModal — memo ile izole edildi

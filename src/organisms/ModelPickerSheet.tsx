@@ -491,8 +491,7 @@ export const ModelPickerSheet: React.FC<ModelPickerSheetProps> = ({
     >
       {/* Backdrop */}
       <Animated.View
-        style={[StyleSheet.absoluteFill, backdropStyle]}
-        pointerEvents="box-none"
+        style={[StyleSheet.absoluteFill, backdropStyle, { pointerEvents: 'box-none' as const }]}
       >
         <Pressable
           style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)' }]}

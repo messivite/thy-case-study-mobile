@@ -17,7 +17,7 @@ import { FormField } from '@/molecules/FormField';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { useValidatedForm } from '@/hooks/useValidatedForm';
 import { palette } from '@/constants/colors';
-import { spacing, radius } from '@/constants/spacing';
+import { spacing, radius, nativeShadow } from '@/constants/spacing';
 import { AUTH_NO_CREDENTIAL_EMAIL_PROPS } from '@/constants/authCredentialAutofill';
 import { WELCOME_GUEST_AUTH_FLOW } from '@/constants/welcomeGuestAuthFlow';
 import { WELCOME_LOGIN_BUTTON_DISABLED_OPACITY } from '@/constants/welcomeScreen';
@@ -83,8 +83,7 @@ export function ForgotPasswordAuthForm({ webScaled, footer }: Props) {
 
   return (
     <Animated.View
-      style={[styles.formRoot, formRootAnimatedStyle]}
-      pointerEvents={isSubmitting ? 'none' : 'auto'}
+      style={[styles.formRoot, formRootAnimatedStyle, { pointerEvents: isSubmitting ? 'none' : 'auto' }]}
     >
       <View style={styles.heroFormGap} />
       <View style={styles.formSection}>
@@ -167,15 +166,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: spacing[4],
-    shadowColor: palette.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.28,
-    shadowRadius: 10,
-    elevation: 4,
+    ...nativeShadow({ color: palette.primary, offsetY: 4, opacity: 0.28, radius: 10, elevation: 4 }),
   },
   submitBtnDisabled: {
-    shadowOpacity: 0,
-    elevation: 0,
+    ...nativeShadow({ color: 'transparent', offsetY: 0, opacity: 0, radius: 0, elevation: 0 }),
   },
   submitBtnText: {
     fontFamily: fontFamily.semiBold,

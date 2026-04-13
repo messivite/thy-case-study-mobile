@@ -28,7 +28,7 @@ import { LanguagePickerSheet } from '@/organisms/LanguagePickerSheet';
 import { ThemePickerSheet } from '@/organisms/ThemePickerSheet';
 import { useUploadAvatar } from '@/hooks/api/useUploadAvatar';
 import { useGetUsageQuery } from '@/hooks/api/useUsage';
-import { spacing, radius } from '@/constants/spacing';
+import { spacing, radius, nativeShadow } from '@/constants/spacing';
 import { palette } from '@/constants/colors';
 import { fontFamily } from '@/constants/typography';
 import { openExternalLink } from '@/lib/openExternalLink';
@@ -568,11 +568,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     marginBottom: spacing[5],
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
+    ...nativeShadow({ color: '#000', offsetY: 2, opacity: 0.08, radius: 8, elevation: 3 }),
   },
   profileAvatarWrap: {
     position: 'relative',

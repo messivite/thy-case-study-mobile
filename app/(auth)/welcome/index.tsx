@@ -165,7 +165,6 @@ export default function WelcomeScreen() {
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 1 }}
           style={styles.gradientFill}
-          pointerEvents="none"
         />
       </View>
     );
@@ -180,7 +179,6 @@ export default function WelcomeScreen() {
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
         style={styles.gradientFill}
-        pointerEvents="none"
       />
       <SafeAreaView style={safeOverlayStyle} edges={safeAreaEdges}>
         <RNAnimated.View style={fadeStyle}>
@@ -188,8 +186,7 @@ export default function WelcomeScreen() {
             <View style={pageGradientStyle}>
               <View style={pageGradientInnerStyle}>
                 <Animated.View
-                  style={infoSiteAnchorStyle}
-                  pointerEvents={anyBlocked ? 'none' : 'auto'}
+                  style={[infoSiteAnchorStyle, { pointerEvents: anyBlocked ? 'none' : 'auto' }]}
                 >
                   <SurfaceIconPressable
                     shape="circle"
@@ -248,6 +245,7 @@ const styles = StyleSheet.create({
   },
   gradientFill: {
     ...StyleSheet.absoluteFillObject,
+    pointerEvents: 'none' as const,
   },
   safeOverlay: {
     flex: 1,

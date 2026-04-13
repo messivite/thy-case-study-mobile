@@ -107,8 +107,7 @@ export const TabBarItem: React.FC<Props> = ({
       <View style={styles.inner}>
         {Platform.OS === 'ios' && (
           <Animated.View
-            pointerEvents="none"
-            style={[styles.ripple, { backgroundColor: rippleColor }, rippleStyle]}
+            style={[styles.ripple, { backgroundColor: rippleColor, pointerEvents: 'none' as const }, rippleStyle]}
           />
         )}
         <View style={styles.content}>
