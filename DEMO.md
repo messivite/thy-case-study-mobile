@@ -6,7 +6,7 @@
 |----------|------|
 | 🌐 Web | https://thy-case-study-mobile.vercel.app/ |
 | 🤖 Android Release APK | https://github.com/messivite/thy-case-study-mobile/releases/tag/v0.0.6 |
-| 🍎 iOS Demo (Video) | https://www.youtube.com/watch?v=FstNY3vFQJ0 |
+| 🍎 iOS TestFlight | https://testflight.apple.com/join/qsXSAc4P |
 | 🔌 Production Base Api URL | https://go-thy-case-study-backend-production.up.railway.app |
 | 🔌 Production API | https://go-thy-case-study-backend-production.up.railway.app/api |
 | 📖 API Swagger | https://go-thy-case-study-backend-production.up.railway.app/docs-thy-case-study-backend/ |
