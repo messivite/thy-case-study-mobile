@@ -124,6 +124,7 @@ const MessageListInner: React.FC<Props> = ({
 
   // Unmount'ta sesi durdur
   useEffect(() => () => {
+    speakGenerationRef.current++;
     void Speech.stop();
     speakingMessageIdStateRef.current = null;
   }, []);
@@ -133,6 +134,7 @@ const MessageListInner: React.FC<Props> = ({
     if (Platform.OS === 'web') return;
     const sub = AppState.addEventListener('change', (state: AppStateStatus) => {
       if (state !== 'active') {
+        speakGenerationRef.current++;
         void Speech.stop();
         speakingMessageIdStateRef.current = null;
         setSpeakingMessageId(null);
@@ -154,6 +156,7 @@ const MessageListInner: React.FC<Props> = ({
     if (prev === null && chatId != null && isStreamingActive) return;
 
     // Chat değişince sesi durdur — önceki sohbetin sesi yeni sohbette devam etmesin
+    speakGenerationRef.current++;
     void Speech.stop();
     speakingMessageIdStateRef.current = null;
     setSpeakingMessageId(null);
@@ -226,52 +229,64 @@ const MessageListInner: React.FC<Props> = ({
 
   // Aktif konuşma ID'sini ref'te tut — Speech callback'lerinde stale closure sorunu yaşanmasın
   const speakingMessageIdStateRef = useRef<string | null>(null);
+  // Kaç kez stop çağrıldı — eski callback'lerin yeni speak'i iptal etmesini önler
+  const speakGenerationRef = useRef(0);
+
+  const stopSpeech = useCallback(() => {
+    speakingMessageIdStateRef.current = null;
+    setSpeakingMessageId(null);
+    void Speech.stop();
+  }, []);
 
   const handleSpeakToggle = useCallback((messageId: string, text: string) => {
     // Aynı mesaja tekrar basıldıysa durdur
     if (speakingMessageIdStateRef.current === messageId) {
-      void Speech.stop();
-      speakingMessageIdStateRef.current = null;
-      setSpeakingMessageId(null);
+      stopSpeech();
       return;
     }
 
     const plain = stripTextForSpeech(text);
     if (!plain.trim()) return;
 
-    // Önce yeni ID'yi kaydet — stop() onStopped callback'i gelince yeni ID'yi sıfırlamasın
+    // Generation sayacını artır — önceki speak'in callback'leri bu generation'a ait değil
+    const generation = ++speakGenerationRef.current;
+
+    // Önce durdur, state'i yeni ID'ye çek
+    void Speech.stop();
     speakingMessageIdStateRef.current = messageId;
     setSpeakingMessageId(messageId);
 
-    void Speech.stop();
-    Speech.speak(plain, {
-      language: 'tr-TR',
-      rate: 0.96,
-      onDone: () => {
-        if (speakingMessageIdStateRef.current === messageId) {
-          speakingMessageIdStateRef.current = null;
-          setSpeakingMessageId(null);
-        }
-      },
-      onStopped: () => {
-        if (speakingMessageIdStateRef.current === messageId) {
-          speakingMessageIdStateRef.current = null;
-          setSpeakingMessageId(null);
-        }
-      },
-      onError: (err) => {
-        // Programatik stop (chat değişimi, background) onError tetikleyebilir — toast atma
-        const isIntentional = speakingMessageIdStateRef.current !== messageId;
-        if (speakingMessageIdStateRef.current === messageId) {
-          speakingMessageIdStateRef.current = null;
-          setSpeakingMessageId(null);
-        }
-        if (!isIntentional) {
-          toast.error('Ses çalınamadı');
-        }
-      },
-    });
-  }, []);
+    // Bir tick bekle — platform önceki konuşmayı durdursun, race condition önle
+    setTimeout(() => {
+      // Bu arada başka bir toggle geldiyse iptal
+      if (speakGenerationRef.current !== generation) return;
+
+      Speech.speak(plain, {
+        language: 'tr-TR',
+        rate: 0.96,
+        onDone: () => {
+          if (speakGenerationRef.current === generation) {
+            speakingMessageIdStateRef.current = null;
+            setSpeakingMessageId(null);
+          }
+        },
+        onStopped: () => {
+          if (speakGenerationRef.current === generation) {
+            speakingMessageIdStateRef.current = null;
+            setSpeakingMessageId(null);
+          }
+        },
+        onError: () => {
+          // Programatik stop (chat değişimi, background) — generation değişmişse sessizce geç
+          if (speakGenerationRef.current === generation) {
+            speakingMessageIdStateRef.current = null;
+            setSpeakingMessageId(null);
+            toast.error('Ses çalınamadı');
+          }
+        },
+      });
+    }, 50);
+  }, [stopSpeech]);
 
   // Streaming biterken gerçek ID'yi state'e kaydet — placeholder için kullanılır
   // streamingMessageId 'streaming' sentinel ise ID bilinmiyor (stop/cancel) — kaydetme
