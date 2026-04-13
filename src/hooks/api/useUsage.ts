@@ -20,5 +20,5 @@ export const useGetUsageQuery = () =>
     queryKey: USAGE_QUERY_KEYS.usage,
     queryFn: getUsage,
     staleTime: THIRTY_SECONDS_MS,
-    gcTime: THIRTY_SECONDS_MS * 2,
+    gcTime: 5 * 60_000,
   });

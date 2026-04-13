@@ -4,8 +4,10 @@ import { ActivityThyLoading } from '@/atoms/ActivityThyLoading';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   Easing,
+  FadeIn,
   useAnimatedStyle,
   useSharedValue,
+  withDelay,
   withTiming,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,8 +17,6 @@ import { useI18n } from '@/hooks/useI18n';
 import { palette } from '@/constants/colors';
 import { radius, spacing } from '@/constants/spacing';
 import { fontFamily } from '@/constants/typography';
-import { scale } from '@/lib/responsive';
-
 type Props = {
   dailyUsed: number;
   dailyLimit: number;
@@ -48,11 +48,13 @@ const ProgressRow: React.FC<ProgressRowProps> = ({ label, used, limit, remaining
   const remaining = Math.max(limit - used, 0);
 
   useEffect(() => {
-    progress.value = 0;
-    progress.value = withTiming(ratio, {
-      duration: 850 + delayMs,
-      easing: Easing.out(Easing.cubic),
-    });
+    progress.value = withDelay(
+      delayMs,
+      withTiming(ratio, {
+        duration: 800,
+        easing: Easing.out(Easing.cubic),
+      }),
+    );
   }, [delayMs, progress, ratio]);
 
   const fillStyle = useAnimatedStyle(() => ({
@@ -132,14 +134,16 @@ export const UsageStatsCard: React.FC<Props> = ({
           </View>
         </View>
 
-        <View style={styles.remainingBadge}>
-          <Text variant="micro" color={palette.white} style={styles.remainingLabel}>
-            {t('settings.usageRemaining')}
-          </Text>
-          <Text variant="label" color={palette.white} style={styles.remainingValue}>
-            {formatK(totalRemaining)}
-          </Text>
-        </View>
+        {!isLoading && (
+          <View style={styles.remainingBadge}>
+            <Text variant="micro" color={palette.white} style={styles.remainingLabel}>
+              {t('settings.usageRemaining')}
+            </Text>
+            <Text variant="label" color={palette.white} style={styles.remainingValue}>
+              {formatK(totalRemaining)}
+            </Text>
+          </View>
+        )}
       </View>
 
       {isLoading ? (
@@ -147,10 +151,10 @@ export const UsageStatsCard: React.FC<Props> = ({
           <ActivityThyLoading mode="float" size={44} />
         </View>
       ) : (
-        <>
+        <Animated.View entering={FadeIn.duration(300)} style={styles.rowsContainer}>
           <ProgressRow label={t('settings.usageDaily')} used={dailyUsed} limit={dailyLimit} remainingLabel={t('settings.usageRemainingLabel')} delayMs={0} />
           <ProgressRow label={t('settings.usageWeekly')} used={weeklyUsed} limit={weeklyLimit} remainingLabel={t('settings.usageRemainingLabel')} delayMs={120} />
-        </>
+        </Animated.View>
       )}
     </LinearGradient>
   );
@@ -216,6 +220,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: spacing[2],
+  },
+  rowsContainer: {
+    gap: spacing[3],
   },
   rowWrap: {
     gap: spacing[2],
