@@ -19,10 +19,11 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   useSharedValue,
+  useDerivedValue,
   useAnimatedStyle,
   useAnimatedScrollHandler,
   withRepeat,
@@ -132,11 +133,10 @@ const SlideCard = memo<{
 }>(({ slide, index, scrollX, slideWidth, inactiveTranslateY }) => {
   const { t } = useI18n();
 
-  /** Web: ilk layout'ta slideWidth 0 → scrollX/0 NaN, kart görünmez/bozuk */
-  const slideW = useSharedValue(Math.max(slideWidth, 1));
-  useEffect(() => {
-    slideW.value = Math.max(slideWidth, 1);
-  }, [slideWidth, slideW]);
+  /** Web: ilk layout'ta slideWidth 0 → scrollX/0 NaN, kart görünmez/bozuk.
+   *  useDerivedValue ile slideWidth JS değişkenini worklet'e güvenli aktarır,
+   *  fazladan SharedValue + useEffect olmadan. */
+  const slideW = useDerivedValue(() => Math.max(slideWidth, 1), [slideWidth]);
 
   const animStyle = useAnimatedStyle(() => {
     const w = slideW.value;
@@ -274,7 +274,7 @@ const BgCircles = memo<{ deckScale: (n: number) => number }>(({ deckScale }) => 
   );
 
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+    <View style={[StyleSheet.absoluteFill, { pointerEvents: 'none' as const }]}>
       <Animated.View style={[circleStyles.base, c1, s1]} />
       <Animated.View style={[circleStyles.base, c2, s2]} />
       <Animated.View style={[circleStyles.base, c3, s3]} />
@@ -632,7 +632,7 @@ export const OnboardingDeckV2: React.FC<OnboardingDeckV2Props> = ({
         {/* Header: logo absolute ortada, skip sağda */}
         <View style={mainStyles.header}>
           {/* Logo tam ortada — absolute */}
-          <View style={[mainStyles.logoAbsolute, Platform.OS === 'android' && { marginTop: insets.top * 0.67 }]} pointerEvents="none">
+          <View style={[mainStyles.logoAbsolute, Platform.OS === 'android' && { marginTop: insets.top * 0.67 }, { pointerEvents: 'none' as const }]}>
             <View style={mainStyles.logoBox}>
               <Logo width={deckScale(100)} />
             </View>
@@ -670,7 +670,7 @@ export const OnboardingDeckV2: React.FC<OnboardingDeckV2Props> = ({
                   pagingEnabled
                   showsHorizontalScrollIndicator={false}
                   bounces={false}
-                  scrollEventThrottle={1}
+                  scrollEventThrottle={16}
                   onScroll={scrollHandler}
                   onMomentumScrollEnd={handleMomentumEnd}
                   style={[mainStyles.scrollView, Platform.OS === 'web' && mainStyles.scrollViewWeb]}
