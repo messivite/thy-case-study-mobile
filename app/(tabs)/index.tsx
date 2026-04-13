@@ -278,7 +278,7 @@ const styles = StyleSheet.create({
     height: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: Platform.OS === 'web' ? 4 : 16,
   },
   avatarBtn: {
     borderRadius: 999,
