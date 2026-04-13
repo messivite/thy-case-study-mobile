@@ -1,5 +1,5 @@
 import React, { useRef, useCallback, useState, useEffect, useLayoutEffect, useMemo } from 'react';
-import { View, StyleSheet, ActivityIndicator, FlatList, ScrollView, Platform, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
+import { View, StyleSheet, ActivityIndicator, FlatList, ScrollView, Platform, AppState, AppStateStatus, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { SharedValue } from 'react-native-reanimated';
 import * as Speech from 'expo-speech';
@@ -122,7 +122,24 @@ const MessageListInner: React.FC<Props> = ({
     setIsWelcomeExiting(false);
   }, []);
 
-  useEffect(() => () => { void Speech.stop(); }, []);
+  // Unmount'ta sesi durdur
+  useEffect(() => () => {
+    void Speech.stop();
+    speakingMessageIdStateRef.current = null;
+  }, []);
+
+  // Background'a gidince sesi durdur — sadece native (web'de tarayıcı zaten yönetiyor)
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    const sub = AppState.addEventListener('change', (state: AppStateStatus) => {
+      if (state !== 'active') {
+        void Speech.stop();
+        speakingMessageIdStateRef.current = null;
+        setSpeakingMessageId(null);
+      }
+    });
+    return () => sub.remove();
+  }, []);
 
   useLayoutEffect(() => {
     const prev = prevChatIdRef.current;
@@ -135,6 +152,11 @@ const MessageListInner: React.FC<Props> = ({
     // so prevCountRef stays intact mid-stream.
     // Reset only happens for real session switches (id → differentId).
     if (prev === null && chatId != null && isStreamingActive) return;
+
+    // Chat değişince sesi durdur — önceki sohbetin sesi yeni sohbette devam etmesin
+    void Speech.stop();
+    speakingMessageIdStateRef.current = null;
+    setSpeakingMessageId(null);
 
     prevCountRef.current = 0;
     unreadCountRef.current = 0;
@@ -202,28 +224,54 @@ const MessageListInner: React.FC<Props> = ({
     }
   }, [onScrollToLatestRef, handleScrollToLatest]);
 
+  // Aktif konuşma ID'sini ref'te tut — Speech callback'lerinde stale closure sorunu yaşanmasın
+  const speakingMessageIdStateRef = useRef<string | null>(null);
+
   const handleSpeakToggle = useCallback((messageId: string, text: string) => {
-    if (speakingMessageId === messageId) {
+    // Aynı mesaja tekrar basıldıysa durdur
+    if (speakingMessageIdStateRef.current === messageId) {
       void Speech.stop();
+      speakingMessageIdStateRef.current = null;
       setSpeakingMessageId(null);
       return;
     }
-    void Speech.stop();
+
     const plain = stripTextForSpeech(text);
     if (!plain.trim()) return;
-    const locale = 'tr-TR';
+
+    // Önce yeni ID'yi kaydet — stop() onStopped callback'i gelince yeni ID'yi sıfırlamasın
+    speakingMessageIdStateRef.current = messageId;
     setSpeakingMessageId(messageId);
+
+    void Speech.stop();
     Speech.speak(plain, {
-      language: locale,
+      language: 'tr-TR',
       rate: 0.96,
-      onDone: () => setSpeakingMessageId((cur) => (cur === messageId ? null : cur)),
-      onStopped: () => setSpeakingMessageId((cur) => (cur === messageId ? null : cur)),
-      onError: () => {
-        setSpeakingMessageId((cur) => (cur === messageId ? null : cur));
-        toast.error('Ses çalınamadı');
+      onDone: () => {
+        if (speakingMessageIdStateRef.current === messageId) {
+          speakingMessageIdStateRef.current = null;
+          setSpeakingMessageId(null);
+        }
+      },
+      onStopped: () => {
+        if (speakingMessageIdStateRef.current === messageId) {
+          speakingMessageIdStateRef.current = null;
+          setSpeakingMessageId(null);
+        }
+      },
+      onError: (err) => {
+        // Programatik stop (chat değişimi, background) onError tetikleyebilir — toast atma
+        const isIntentional = speakingMessageIdStateRef.current !== messageId;
+        if (speakingMessageIdStateRef.current === messageId) {
+          speakingMessageIdStateRef.current = null;
+          setSpeakingMessageId(null);
+        }
+        if (!isIntentional) {
+          toast.error('Ses çalınamadı');
+        }
       },
     });
-  }, [speakingMessageId]);
+  }, []);
 
   // Streaming biterken gerçek ID'yi state'e kaydet — placeholder için kullanılır
   // streamingMessageId 'streaming' sentinel ise ID bilinmiyor (stop/cancel) — kaydetme
