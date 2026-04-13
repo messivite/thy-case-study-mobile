@@ -125,19 +125,20 @@ const StreamingBubbleWeb: React.FC<Props> = ({ pendingSV, isStreamingDoneSV, str
   const [displayText, setDisplayText] = useState('');
   const [done, setDone] = useState(false);
   const completedRef = useRef(false);
-  const lastResetRef = useRef(streamResetCountSV.value);
+  // Initialize with 0 — useEffect sync loop handles reset detection on first frame.
+  // Avoid reading .value during render (Reanimated strict-mode warning).
+  const lastResetRef = useRef(0);
   const rafRef = useRef<number | null>(null);
   const onCompleteRef = useRef(onComplete);
   useEffect(() => { onCompleteRef.current = onComplete; }, [onComplete]);
 
   useEffect(() => {
     completedRef.current = false;
-    lastResetRef.current = streamResetCountSV.value;
     setDisplayText('');
     setDone(false);
 
     const poll = () => {
-      // Reset detected
+      // First frame or reset detected: sync lastResetRef to current count
       const resetCount = streamResetCountSV.value;
       if (resetCount !== lastResetRef.current) {
         lastResetRef.current = resetCount;

@@ -44,3 +44,28 @@ export const shadow = {
     elevation: 8,
   },
 } as const;
+
+import { Platform } from 'react-native';
+
+/**
+ * Web'de shadow* style props deprecated — bu helper native-only shadow objesini döndürür.
+ * StyleSheet.create içinde spread ile kullan:
+ *   ...nativeShadow({ color: '#000', offsetY: 4, opacity: 0.12, radius: 16, elevation: 8 })
+ */
+export function nativeShadow(opts: {
+  color: string;
+  offsetX?: number;
+  offsetY: number;
+  opacity: number;
+  radius: number;
+  elevation: number;
+}): Record<string, unknown> {
+  if (Platform.OS === 'web') return {};
+  return {
+    shadowColor: opts.color,
+    shadowOffset: { width: opts.offsetX ?? 0, height: opts.offsetY },
+    shadowOpacity: opts.opacity,
+    shadowRadius: opts.radius,
+    elevation: opts.elevation,
+  };
+}

@@ -340,10 +340,12 @@ const styles = StyleSheet.create({
   rowRight: {
     justifyContent: 'flex-end',
     marginHorizontal: spacing[2],
-    // Web: overflow-hidden parent içinde sağ kenara taşmasın
+    // Web: row flex-row olduğunda width:auto olur — justifyContent:'flex-end' çalışmaz.
+    // width:'100%' ile row tam genişliğe oturur, bubble sağa yaslanır.
     ...(Platform.OS === 'web' && {
       marginRight: spacing[4],
       marginLeft: spacing[2],
+      width: '100%',
     }),
   },
   bubbleRow: {

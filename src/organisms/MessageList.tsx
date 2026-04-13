@@ -567,6 +567,9 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingVertical: spacing[3],
+    // Web: content container'ın genişliği scroll alanına sabitlenmeli —
+    // yoksa maxWidth:'75%' viewport yerine içerik genişliğini baz alıp taşıyor.
+    ...(Platform.OS === 'web' && { flexGrow: 1, width: '100%' }),
   },
   loadingMore: {
     paddingVertical: spacing[4],

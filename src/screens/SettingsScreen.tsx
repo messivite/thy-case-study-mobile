@@ -1,6 +1,5 @@
 import React, { useCallback, useMemo, useState, type ComponentProps } from 'react';
 import { ScrollView, View, StyleSheet, Alert, Platform, Pressable, Linking, ActivityIndicator } from 'react-native';
-import * as Notifications from 'expo-notifications';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
@@ -66,6 +65,7 @@ export default function SettingsScreen() {
       if (Platform.OS === 'web') return;
 
       if (turnOn) {
+        const Notifications = await import('expo-notifications');
         let perm = await Notifications.getPermissionsAsync();
         if (!canDeliverPushNotifications(perm)) {
           perm = await Notifications.requestPermissionsAsync();
