@@ -205,9 +205,8 @@ const ChatHistoryItem = React.memo<ChatHistoryItemProps>(
           delayLongPress={400}
           activeOpacity={0.7}
         >
-          <View style={[styles.providerAvatar, { backgroundColor: providerColor + '1A' }]}>
-            <Ionicons name={providerIcon} size={moderateScale(18)} color={providerColor} />
-          </View>
+          {/* Sağ taraftaki ince accent bar — provider rengini gösterir, yer kaplamaz */}
+          <View style={[styles.accentBar, { backgroundColor: providerColor }]} />
           <View style={styles.itemContent}>
             <View style={styles.itemTitleRow}>
               <Text style={[styles.itemTitle, { color: textColor }]} numberOfLines={1}>
@@ -398,9 +397,7 @@ const SearchOverlay = React.memo(({
       onPress={() => onSelectResult(item)}
       activeOpacity={0.7}
     >
-      <View style={[styles.providerAvatar, { backgroundColor: palette.primary + '1A' }]}>
-        <Ionicons name="search" size={moderateScale(18)} color={palette.primary} />
-      </View>
+      <View style={[styles.accentBar, { backgroundColor: palette.primary }]} />
       <View style={styles.itemContent}>
         <View style={styles.itemTitleRow}>
           <Text style={[styles.itemTitle, { color: textColor }]} numberOfLines={1}>
@@ -427,9 +424,7 @@ const SearchOverlay = React.memo(({
         onPress={() => onSelectSession(item)}
         activeOpacity={0.7}
       >
-        <View style={[styles.providerAvatar, { backgroundColor: providerColor + '1A' }]}>
-          <Ionicons name={getProviderIcon(item.provider)} size={moderateScale(18)} color={providerColor} />
-        </View>
+        <View style={[styles.accentBar, { backgroundColor: providerColor }]} />
         <View style={styles.itemContent}>
           <View style={styles.itemTitleRow}>
             <Text style={[styles.itemTitle, { color: textColor }]} numberOfLines={1}>
@@ -1066,22 +1061,20 @@ const styles = StyleSheet.create({
   // Item
   item: {
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing[4],
+    alignItems: 'stretch',
+    paddingRight: spacing[4],
     paddingVertical: spacing[2],
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  providerAvatar: {
-    width: moderateScale(40),
-    height: moderateScale(40),
-    borderRadius: radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
+  accentBar: {
+    width: 3,
+    borderRadius: 2,
+    marginRight: spacing[3],
     flexShrink: 0,
+    alignSelf: 'stretch',
   },
   itemContent: {
     flex: 1,
-    marginLeft: spacing[2],
     gap: 3,
   },
   itemTitleRow: {
