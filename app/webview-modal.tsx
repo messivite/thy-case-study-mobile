@@ -203,6 +203,15 @@ export default function WebViewModal() {
   const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [currentUrl, setCurrentUrl] = useState(url ?? '');
 
+  // Modal açılış animasyonu bitmeden WebView mount edilirse JS thread ikisini birden
+  // işlemek zorunda kalır → kasma. Kısa bir gecikmeyle WebView'ı defer et.
+  // isLoading başlangıçta true kalır → loader modal açılışından itibaren görünür.
+  const [webViewReady, setWebViewReady] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setWebViewReady(true), Platform.OS === 'ios' ? 250 : 380);
+    return () => clearTimeout(t);
+  }, []);
+
   const safeUrl = url ?? '';
   const headerTitle = title ?? extractHost(safeUrl);
   const webScale = Platform.OS === 'web'
@@ -275,44 +284,46 @@ export default function WebViewModal() {
 
       {/* WebView + tam yükseklikte beyaz yükleme katmanı */}
       <View style={styles.webviewContainer}>
-        <WebView
-          ref={webViewRef}
-          source={{ uri: safeUrl }}
-          style={[styles.webview, showLoadingOverlay && styles.webviewWhileLoading]}
-          onLoadStart={() => {
-            setIsLoading(true);
-            setHasError(false);
-            setLoadProgress(0);
-            if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
-            loadingTimeoutRef.current = setTimeout(() => setIsLoading(false), 8000);
-          }}
-          onLoadEnd={() => {
-            if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
-            setIsLoading(false);
-          }}
-          onError={() => {
-            if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
-            setHasError(true);
-            setIsLoading(false);
-          }}
-          onLoadProgress={({ nativeEvent }) => {
-            setLoadProgress(nativeEvent.progress);
-            if (nativeEvent.progress >= 1) {
+        {webViewReady && (
+          <WebView
+            ref={webViewRef}
+            source={{ uri: safeUrl }}
+            style={[styles.webview, showLoadingOverlay && styles.webviewWhileLoading]}
+            onLoadStart={() => {
+              setIsLoading(true);
+              setHasError(false);
+              setLoadProgress(0);
+              if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
+              loadingTimeoutRef.current = setTimeout(() => setIsLoading(false), 8000);
+            }}
+            onLoadEnd={() => {
               if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
               setIsLoading(false);
-            }
-          }}
-          onNavigationStateChange={handleNavigationChange}
-          allowsBackForwardNavigationGestures={Platform.OS === 'ios'}
-          allowsInlineMediaPlayback
-          startInLoadingState={false}
-          javaScriptEnabled
-          domStorageEnabled
-          sharedCookiesEnabled
-        />
+            }}
+            onError={() => {
+              if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
+              setHasError(true);
+              setIsLoading(false);
+            }}
+            onLoadProgress={({ nativeEvent }) => {
+              setLoadProgress(nativeEvent.progress);
+              if (nativeEvent.progress >= 1) {
+                if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
+                setIsLoading(false);
+              }
+            }}
+            onNavigationStateChange={handleNavigationChange}
+            allowsBackForwardNavigationGestures={Platform.OS === 'ios'}
+            allowsInlineMediaPlayback
+            startInLoadingState={false}
+            javaScriptEnabled
+            domStorageEnabled
+            sharedCookiesEnabled
+          />
+        )}
 
         {showLoadingOverlay ? (
-          <View style={styles.loadingOverlay} pointerEvents="none">
+          <View style={[styles.loadingOverlay, { pointerEvents: 'none' as const }]}>
             <LogoLoader uiScale={Platform.OS === 'web' ? uiScale : undefined} />
           </View>
         ) : null}

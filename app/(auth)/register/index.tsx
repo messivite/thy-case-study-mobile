@@ -2,12 +2,11 @@
  * Kayıt ekranı — Welcome ile aynı gökyüzü gradient + hero; form `RegisterAuthForm` içinde.
  */
 
-import React, { useEffect, useMemo, useRef, type ComponentType } from 'react';
+import React, { useMemo, type ComponentType } from 'react';
 import {
   View,
   StyleSheet,
   TouchableOpacity,
-  Animated as RNAnimated,
   useWindowDimensions,
   StatusBar,
   Platform,
@@ -21,14 +20,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { Logo } from '@/atoms/Logo';
 import { SurfaceIconPressable } from '@/atoms/SurfaceIconPressable';
 import { Text } from '@/atoms/Text';
-import { useAuth } from '@/hooks/useAuth';
 import { useI18n } from '@/hooks/useI18n';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { palette } from '@/constants/colors';
-import { spacing, radius } from '@/constants/spacing';
+import { spacing, radius, nativeShadow } from '@/constants/spacing';
 import {
   WELCOME_HERO_RATIO,
-  WELCOME_MOUNT_FADE_DURATION_MS,
   WELCOME_SKY_GRADIENT,
   WELCOME_SKY_GRADIENT_LOCATIONS,
 } from '@/constants/welcomeScreen';
@@ -71,17 +68,6 @@ export default function RegisterScreen() {
 
   const { t } = useI18n();
   usePageTitle(`${t('meta.register')} | ${t('meta.suffix')}`);
-  const { status } = useAuth();
-  const fadeAnim = useRef(new RNAnimated.Value(0)).current;
-
-  useEffect(() => {
-    if (status !== 'unauthenticated') return;
-    RNAnimated.timing(fadeAnim, {
-      toValue: 1,
-      duration: WELCOME_MOUNT_FADE_DURATION_MS,
-      useNativeDriver: true,
-    }).start();
-  }, [status, fadeAnim]);
 
   const screenWrapStyle = useMemo<(ViewStyle | false | undefined)[]>(() => {
     const s: (ViewStyle | false | undefined)[] = [styles.screenWrap];
@@ -120,30 +106,9 @@ export default function RegisterScreen() {
     [],
   );
 
-  const fadeStyle = useMemo(() => [styles.fill, { opacity: fadeAnim }], [fadeAnim]);
-
-  if (status === 'authenticated' || status === 'guest') {
-    return null;
-  }
-
-  if (status === 'idle') {
-    return (
-      <View style={styles.screenWrap}>
-        <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
-        <LinearGradient
-          colors={gradientColors}
-          locations={gradientLocations}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-          style={styles.gradientFill}
-        />
-      </View>
-    );
-  }
-
   return (
     <View style={screenWrapStyle}>
-<StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
+      <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
       <LinearGradient
         colors={gradientColors}
         locations={gradientLocations}
@@ -152,66 +117,64 @@ export default function RegisterScreen() {
         style={styles.gradientFill}
       />
       <SafeAreaView style={safeOverlayStyle} edges={safeAreaEdges}>
-        <RNAnimated.View style={fadeStyle}>
-          <KeyboardContainer style={styles.fill} {...keyboardContainerProps}>
-            <View style={pageGradientStyle}>
-              <View style={pageGradientInnerStyle}>
-                <View style={backAnchorStyle}>
-                  <SurfaceIconPressable
-                    shape="circle"
-                    width={contentScale(44)}
-                    height={contentScale(44)}
-                    onPress={() => router.back()}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    accessibilityLabel={t('common.back')}
-                  >
-                    <Ionicons
-                      name="arrow-back"
-                      size={contentScale(24)}
-                      color={palette.primary}
-                    />
-                  </SurfaceIconPressable>
-                </View>
-
-                <View style={heroStyle}>
-                  <View style={styles.heroLogoBox}>
-                    <Logo width={contentScale(100)} />
-                  </View>
-                  <View style={styles.heroTitleWrap}>
-                    <Text style={[styles.heroTitle, webScaled?.heroTitle]}>
-                      {t('auth.registerHeroLine1')}
-                      {'\n'}
-                      <Text style={[styles.heroTitleAccent, webScaled?.heroTitleAccent]}>
-                        {t('auth.registerHeroLine2')}
-                      </Text>
-                    </Text>
-                  </View>
-                  <Text style={[styles.heroSub, webScaled?.heroSub]}>{t('auth.registerSubtitle')}</Text>
-                </View>
-
-                <RegisterAuthForm
-                  contentScale={contentScale}
-                  webScaled={webScaled}
-                  footer={
-                    <View style={styles.footer}>
-                      <Text style={[styles.footerHint, webScaled?.footerLink]}>
-                        {t('auth.haveAccount')}{' '}
-                      </Text>
-                      <TouchableOpacity
-                        onPress={() => router.back()}
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                        accessibilityRole="button"
-                        accessibilityLabel={t('auth.login')}
-                      >
-                        <Text style={[styles.footerLink, webScaled?.footerLink]}>{t('auth.login')}</Text>
-                      </TouchableOpacity>
-                    </View>
-                  }
-                />
+        <KeyboardContainer style={styles.fill} {...keyboardContainerProps}>
+          <View style={pageGradientStyle}>
+            <View style={pageGradientInnerStyle}>
+              <View style={backAnchorStyle}>
+                <SurfaceIconPressable
+                  shape="circle"
+                  width={contentScale(44)}
+                  height={contentScale(44)}
+                  onPress={() => router.back()}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityLabel={t('common.back')}
+                >
+                  <Ionicons
+                    name="arrow-back"
+                    size={contentScale(24)}
+                    color={palette.primary}
+                  />
+                </SurfaceIconPressable>
               </View>
+
+              <View style={heroStyle}>
+                <View style={styles.heroLogoBox}>
+                  <Logo width={contentScale(100)} />
+                </View>
+                <View style={styles.heroTitleWrap}>
+                  <Text style={[styles.heroTitle, webScaled?.heroTitle]}>
+                    {t('auth.registerHeroLine1')}
+                    {'\n'}
+                    <Text style={[styles.heroTitleAccent, webScaled?.heroTitleAccent]}>
+                      {t('auth.registerHeroLine2')}
+                    </Text>
+                  </Text>
+                </View>
+                <Text style={[styles.heroSub, webScaled?.heroSub]}>{t('auth.registerSubtitle')}</Text>
+              </View>
+
+              <RegisterAuthForm
+                contentScale={contentScale}
+                webScaled={webScaled}
+                footer={
+                  <View style={styles.footer}>
+                    <Text style={[styles.footerHint, webScaled?.footerLink]}>
+                      {t('auth.haveAccount')}{' '}
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => router.back()}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('auth.login')}
+                    >
+                      <Text style={[styles.footerLink, webScaled?.footerLink]}>{t('auth.login')}</Text>
+                    </TouchableOpacity>
+                  </View>
+                }
+              />
             </View>
-          </KeyboardContainer>
-        </RNAnimated.View>
+          </View>
+        </KeyboardContainer>
       </SafeAreaView>
     </View>
   );
@@ -276,11 +239,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[2],
     marginBottom: spacing[1],
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
+    ...nativeShadow({ color: '#000', offsetY: 2, opacity: 0.08, radius: 8, elevation: 3 }),
   },
   heroTitleWrap: {
     width: '100%',

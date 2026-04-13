@@ -22,7 +22,10 @@ export default function AuthLayout() {
         animation: 'slide_from_right',
         contentStyle: [styles.content, Platform.OS === 'web' && styles.contentWeb],
       }}
-    />
+    >
+      <Stack.Screen name="forgotpassword/index" options={{ animation: 'fade' }} />
+      <Stack.Screen name="register/index" options={{ animation: 'fade' }} />
+    </Stack>
   );
 }
 
