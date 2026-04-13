@@ -22,7 +22,9 @@ import { realmService } from '@/services/realm.web';
 beforeEach(() => {
   localStorageMock.clear();
   jest.clearAllMocks();
+  realmService.setUserId('test-user');
 });
+
 
 describe('realm.web — saveSessions / getSessions', () => {
   it('getSessions returns empty when nothing stored', () => {
