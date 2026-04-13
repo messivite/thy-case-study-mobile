@@ -272,6 +272,13 @@ export const realmService = {
           const msg = messages[i];
           const msgCreatedAt = msg.createdAt ?? new Date(now + i).toISOString();
           const msgId = msg.id ?? `${sessionId}__${msgCreatedAt}__${msg.role}`;
+
+          // Mevcut liked değerini koru — API'den null/undefined gelince üzerine yazma
+          const existing = realm.objectForPrimaryKey<RealmMessage>('RealmMessage', msgId);
+          const likedValue = msg.liked !== undefined && msg.liked !== null
+            ? msg.liked
+            : (existing?.liked ?? null);
+
           realm.create<RealmMessage>(
             'RealmMessage',
             {
@@ -283,7 +290,7 @@ export const realmService = {
               syncedAt: now,
               provider: msg.provider ?? undefined,
               model: msg.model ?? undefined,
-              liked: msg.liked ?? null,
+              liked: likedValue,
             },
             Realm.UpdateMode.Modified,
           );
@@ -302,51 +309,56 @@ export const realmService = {
 
   /**
    * Session'i ve tum mesajlarini Realm'den siler. Async.
-   * saveSessions ile ayni queue'da serialize edilir — delete'in uzerine yazilmasi onlenir.
+   * Önce sessionId queue'sunu bekler (devam eden saveMessages tamamlansın),
+   * sonra __sessions__ queue'suna girer — çakışma olmaz.
    */
   deleteSession(sessionId: string): Promise<void> {
-    return enqueue('__sessions__', async () => {
+    // sessionId queue'suna boş bir operasyon ekleyerek devam eden mesaj write'larının
+    // bitmesini bekle, ardından gerçek silmeyi __sessions__ queue'sunda çalıştır.
+    return enqueue(sessionId, () =>
+      enqueue('__sessions__', async () => {
+        const realm = await openRealm();
+        realm.write(() => {
+          const session = realm.objectForPrimaryKey<RealmSession>('RealmSession', sessionId);
+          if (session) realm.delete(session);
+          const msgs = realm
+            .objects<RealmMessage>('RealmMessage')
+            .filtered('sessionId == $0', sessionId);
+          realm.delete(msgs);
+        });
+      }),
+    );
+  },
+
+  /**
+   * Tek bir mesajın liked alanını günceller. Async.
+   * saveMessages() ile aynı sessionId queue'suna alınır — race condition olmaz.
+   */
+  updateMessageLiked(messageId: string, liked: boolean | null): Promise<void> {
+    // messageId'yi key olarak kullan — farklı mesajlar paralel güncellenebilir,
+    // aynı mesaj için ardışık tıklamalar serialize edilir.
+    return enqueue(`liked:${messageId}`, async () => {
       const realm = await openRealm();
       realm.write(() => {
-        const session = realm.objectForPrimaryKey<RealmSession>('RealmSession', sessionId);
-        if (session) realm.delete(session);
+        const msg = realm.objectForPrimaryKey<RealmMessage>('RealmMessage', messageId);
+        if (msg) msg.liked = liked;
+      });
+    });
+  },
+
+  /**
+   * Session mesajlarini siler. Async.
+   * sessionId queue'suna girer — eş zamanlı saveMessages ile çakışmaz.
+   */
+  clearSessionMessages(sessionId: string): Promise<void> {
+    return enqueue(sessionId, async () => {
+      const realm = await openRealm();
+      realm.write(() => {
         const msgs = realm
           .objects<RealmMessage>('RealmMessage')
           .filtered('sessionId == $0', sessionId);
         realm.delete(msgs);
       });
     });
-  },
-
-  /**
-   * Tek bir mesajın liked alanını günceller. Async.
-   */
-  async updateMessageLiked(messageId: string, liked: boolean | null): Promise<void> {
-    try {
-      const realm = await openRealm();
-      realm.write(() => {
-        const msg = realm.objectForPrimaryKey<RealmMessage>('RealmMessage', messageId);
-        if (msg) msg.liked = liked;
-      });
-    } catch {
-      // sessizce geç
-    }
-  },
-
-  /**
-   * Session mesajlarini siler. Async.
-   */
-  async clearSessionMessages(sessionId: string): Promise<void> {
-    try {
-      const realm = await openRealm();
-      realm.write(() => {
-        const msgs = realm
-          .objects<RealmMessage>('RealmMessage')
-          .filtered('sessionId == $0', sessionId);
-        realm.delete(msgs);
-      });
-    } catch {
-      // sessizce gec
-    }
   },
 };

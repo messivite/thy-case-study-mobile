@@ -374,10 +374,11 @@ interface GrowingTextInputProps {
   onHasTextChange: (hasText: boolean) => void;
   onFocus: () => void;
   onBlur: () => void;
+  onSubmitEditing?: () => void;
 }
 
 const GrowingTextInput = React.memo(React.forwardRef<GrowingTextInputHandle, GrowingTextInputProps>(
-  ({ placeholder, placeholderTextColor, editable, color, counterColor, onHasTextChange, onFocus, onBlur }, ref) => {
+  ({ placeholder, placeholderTextColor, editable, color, counterColor, onHasTextChange, onFocus, onBlur, onSubmitEditing }, ref) => {
     const inputRef = useRef<TextInput>(null);
     const prevHasText = useRef(false);
     const prevShowCounter = useRef(false);
@@ -448,9 +449,9 @@ const GrowingTextInput = React.memo(React.forwardRef<GrowingTextInputHandle, Gro
           onChangeText={handleChangeText}
           onFocus={onFocus}
           onBlur={onBlur}
-          returnKeyType="done"
-          blurOnSubmit
-          onSubmitEditing={Keyboard.dismiss}
+          returnKeyType="send"
+          blurOnSubmit={false}
+          onSubmitEditing={onSubmitEditing}
           editable={editable}
           textAlignVertical="top"
           scrollEnabled
@@ -603,6 +604,7 @@ const ChatInputInner: React.FC<Props> = ({
               onHasTextChange={setHasText}
               onFocus={handleFocus}
               onBlur={handleBlur}
+              onSubmitEditing={handleSend}
             />
           </View>
 

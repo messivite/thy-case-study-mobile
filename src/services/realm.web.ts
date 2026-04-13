@@ -85,7 +85,12 @@ export const realmService = {
     for (const m of existing) if (m.id) map.set(m.id, m);
     for (const msg of messages) {
       const key = msg.id ?? `${sessionId}__${msg.createdAt ?? now}__${msg.role}`;
-      map.set(key, { ...msg, id: key, syncedAt: now });
+      // Mevcut liked değerini koru — API'den null/undefined gelince üzerine yazma
+      const existingLiked = map.get(key)?.liked;
+      const likedValue = msg.liked !== undefined && msg.liked !== null
+        ? msg.liked
+        : (existingLiked ?? null);
+      map.set(key, { ...msg, id: key, syncedAt: now, liked: likedValue });
     }
 
     const sorted = Array.from(map.values())
@@ -107,11 +112,11 @@ export const realmService = {
   },
 
   async updateMessageLiked(messageId: string, liked: boolean | null): Promise<void> {
-    // Web'de hangi session'a ait olduğunu bilmiyoruz — tüm session key'lerini tara
+    // Web'de hangi session'a ait olduğunu bilmiyoruz — MESSAGES_PREFIX key'lerini tara.
+    // Snapshot al (indeks kayması olmasın), sadece ilgili prefix'i filtrele.
     try {
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (!key?.startsWith(MESSAGES_PREFIX)) continue;
+      const allKeys = Object.keys(localStorage).filter((k) => k.startsWith(MESSAGES_PREFIX));
+      for (const key of allKeys) {
         const stored = readJSON<StoredMessage[]>(key);
         if (!stored) continue;
         const idx = stored.findIndex((m) => m.id === messageId);

@@ -1,6 +1,5 @@
 import axios from 'axios';
 import { privateApi } from '@/services/api';
-import { supabase } from '@/services/supabase';
 import {
   ChatSearchParams,
   ChatSearchResponse,
@@ -66,9 +65,6 @@ export const streamChat = async (
   callbacks: StreamChatCallbacks,
   signal?: AbortSignal,
 ): Promise<void> => {
-  const { data: { session } } = await supabase.auth.getSession();
-  const token = session?.access_token;
-
   return new Promise<void>((resolve) => {
     let buffer = '';
     let processedLength = 0;
@@ -95,7 +91,7 @@ export const streamChat = async (
       `/api/chats/${chatId}/stream`,
       payload,
       {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        headers: {},
         responseType: 'text',
         timeout: 0, // Stream için timeout yok — Gemini cevap süresi değişken
         transformResponse: [(data) => data],

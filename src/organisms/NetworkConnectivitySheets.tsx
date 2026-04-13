@@ -110,6 +110,15 @@ export function NetworkConnectivitySheets({ enabled = true, promptOnMount = fals
     () => items.filter((i) => i.action.actionName === 'LIKE_MESSAGE').length,
     [items],
   );
+  // Kaç farklı chat'ten mesaj/beğeni bekliyor
+  const pendingChatCount = useMemo(() => {
+    const ids = new Set<string>();
+    for (const i of items) {
+      const cid = (i.action.payload as { chatId?: string })?.chatId;
+      if (cid) ids.add(cid);
+    }
+    return ids.size;
+  }, [items]);
 
   const [offlineOpen, setOfflineOpen] = useState(() => enabled && preview === 'offline');
   const [onlineOpen, setOnlineOpen] = useState(() => enabled && preview === 'online');
@@ -128,25 +137,59 @@ export function NetworkConnectivitySheets({ enabled = true, promptOnMount = fals
     }
   }, [isOnline, enabled, preview]);
 
+  // autoSyncRunning: arka planda başlatılan otomatik sync takibi
+  const autoSyncRunningRef = useRef(false);
+
+  const runAutoSync = useCallback(async (msgCount: number, likeCount: number) => {
+    if (autoSyncRunningRef.current) return;
+    autoSyncRunningRef.current = true;
+    syncSnapshotRef.current = { messages: msgCount, likes: likeCount };
+    try {
+      await syncNow();
+      setSyncDone(true);
+      void queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.chatsList });
+      // Başarılı sync toast'ı
+      const parts: string[] = [];
+      if (msgCount > 0) parts.push(`${msgCount} mesaj`);
+      if (likeCount > 0) parts.push(`${likeCount} beğeni`);
+      if (parts.length > 0) {
+        toast.success(`${parts.join(', ')} senkronize edildi`);
+      }
+    } catch {
+      // Otomatik sync başarısız → sheet'i aç, kullanıcı manuel tetikleyebilir
+      setOnlineOpen(true);
+    } finally {
+      autoSyncRunningRef.current = false;
+    }
+  }, [syncNow, queryClient]);
+
   useEffect(() => {
     if (!enabled) return;
     OfflineManager.onOnlineRestore = ({ pendingCount: count }) => {
       if (count > 0 && isOnlineRef.current) {
         setOfflineOpen(false);
-        setOnlineOpen(true);
+        // Pending item'ları say — toast mesajı için
+        const queue = OfflineManager.getQueue();
+        const msgs = queue.filter((a) => a.actionName === 'SEND_MESSAGE').length;
+        const likes = queue.filter((a) => a.actionName === 'LIKE_MESSAGE').length;
+        // Otomatik sync başlat — sheet'i açmak yerine arka planda işle
+        void runAutoSync(msgs, likes);
       }
     };
     return () => {
       OfflineManager.onOnlineRestore = undefined;
     };
-  }, [enabled]);
+  }, [enabled, runAutoSync]);
 
   useEffect(() => {
     if (!promptOnMount || !enabled) return;
     const timer = setTimeout(() => {
       const queue = OfflineManager.getQueue();
       if (queue.length > 0 && OfflineManager.isOnline !== false) {
-        setOnlineOpen(true);
+        const msgs = queue.filter((a) => a.actionName === 'SEND_MESSAGE').length;
+        const likes = queue.filter((a) => a.actionName === 'LIKE_MESSAGE').length;
+        // App başlarken de otomatik sync — sheet açmak yerine
+        void runAutoSync(msgs, likes);
       }
     }, devConfig.promptOnMountDelayMs);
     return () => clearTimeout(timer);
@@ -176,6 +219,7 @@ export function NetworkConnectivitySheets({ enabled = true, promptOnMount = fals
   const onSyncPress = useCallback(async () => {
     haptics.success();
     syncSnapshotRef.current = { messages: pendingMessages, likes: pendingLikes };
+    setSyncDone(false);
     try {
       await syncNow();
       setSyncDone(true);
@@ -185,10 +229,16 @@ export function NetworkConnectivitySheets({ enabled = true, promptOnMount = fals
     }
   }, [haptics, t, syncNow, queryClient, pendingMessages, pendingLikes]);
 
-  // Sync sırasında / sonrasında sayaç değerleri
+  // Sync sırasında / sonrasında sayaç değerleri — action tipine göre doğru say
   const snap = syncSnapshotRef.current;
-  const syncedMessages = Math.min(completedCount, snap.messages);
-  const syncedLikes = Math.max(0, completedCount - snap.messages);
+  const syncedMessages = useMemo(
+    () => items.filter((i) => i.action.actionName === 'SEND_MESSAGE' && i.status === 'success').length,
+    [items],
+  );
+  const syncedLikes = useMemo(
+    () => items.filter((i) => i.action.actionName === 'LIKE_MESSAGE' && i.status === 'success').length,
+    [items],
+  );
 
   // Tipe göre sync tamamlandı metni
   const syncDoneSubtitle = useMemo(() => {
@@ -301,6 +351,12 @@ export function NetworkConnectivitySheets({ enabled = true, promptOnMount = fals
                   label={(isSyncing || syncDone)
                     ? `${syncedLikes} / ${snap.likes} beğeni`
                     : t('network.syncPendingLikes', { count: pendingLikes })}
+                />
+              )}
+              {!isSyncing && !syncDone && pendingChatCount > 1 && (
+                <SyncBreakdownRow
+                  icon="albums-outline"
+                  label={`${pendingChatCount} sohbet`}
                 />
               )}
             </View>

@@ -6,7 +6,8 @@ export const OFFLINE_ACTIONS = {
 } as const;
 
 // 4xx → queue'dan sil (client error, retry'da düzelmez)
-// 5xx / network error → throw et (queue'da kalsın)
+// timeout → queue'dan sil (sunucu meşgul, kullanıcıya hata göster yeter)
+// 5xx / network error → throw et (queue'da kalsın, online olunca retry)
 export async function withNoRetryOn4xx(fn: () => Promise<void>): Promise<void> {
   try {
     await fn();
@@ -21,6 +22,10 @@ export async function withNoRetryOn4xx(fn: () => Promise<void>): Promise<void> {
       const code = parseInt(match[1], 10);
       if (code >= 400 && code < 500) return;
     }
+
+    // Timeout — sunucuya ulaşıldı ama cevap gelmedi; queue'da kalması anlamsız
+    if (err?.code === 'ECONNABORTED' || msg.includes('timeout')) return;
+
     throw err;
   }
 }
