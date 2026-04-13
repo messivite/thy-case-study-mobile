@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AppState, Platform } from 'react-native';
-import * as Notifications from 'expo-notifications';
 import { useFocusEffect } from 'expo-router';
 import { canDeliverPushNotifications } from '@/lib/notificationPermission';
 
@@ -22,6 +21,7 @@ export function useNotificationPermission(): {
       return;
     }
     try {
+      const Notifications = await import('expo-notifications');
       const perm = await Notifications.getPermissionsAsync();
       setGranted(canDeliverPushNotifications(perm));
     } catch {

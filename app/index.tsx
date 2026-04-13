@@ -1,5 +1,4 @@
 import React, { useEffect, useRef } from 'react';
-import { InteractionManager } from 'react-native';
 import { router } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { mmkvStorage, STORAGE_KEYS } from '@/lib/mmkv';
@@ -9,15 +8,11 @@ import { AppSplashScreen } from '@/screens/AppSplashScreen';
 SplashScreen.preventAutoHideAsync();
 
 /**
- * Splash cikisi ile router.replace ayni frame'de olunca onboarding bazen bir kez "zipliyor".
- * runAfterInteractions + cift rAF: native layout / navigator birkaç frame otursun diye.
+ * Splash fade-out animasyonu bitince (Reanimated worklet callback'inden) çağrılır.
+ * Animasyon tamamlandıktan sonra tek bir rAF — navigator'ın o frame'e yerleşmesi için.
  */
 function schedulePostSplashNavigation(action: () => void) {
-  InteractionManager.runAfterInteractions(() => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(action);
-    });
-  });
+  requestAnimationFrame(action);
 }
 
 export default function SplashPage() {

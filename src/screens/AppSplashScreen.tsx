@@ -62,6 +62,7 @@ export function AppSplashScreen({
           <Animated.View style={logoStyle}>
             <Image
               source={require('../../assets/svg/compact-logo.png')}
+              resizeMode="contain"
               style={styles.logoImage}
             />
           </Animated.View>
@@ -85,6 +86,5 @@ const styles = StyleSheet.create({
   logoImage: {
     width: 200,
     height: 200,
-    resizeMode: 'contain',
   },
 });

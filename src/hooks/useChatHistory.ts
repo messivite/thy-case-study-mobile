@@ -85,17 +85,6 @@ export function useChatHistory(searchQuery: string): ChatHistoryData {
     [searchQuery_.data],
   );
 
-  if (__DEV__ && searchQuery.trim().length >= 2) {
-    console.log('[useChatHistory] search:', {
-      q: searchQuery,
-      status: searchQuery_.status,
-      isFetching: searchQuery_.isFetching,
-      isError: searchQuery_.isError,
-      error: searchQuery_.error?.message,
-      resultCount: searchResults.length,
-    });
-  }
-
   return {
     sessions,
     isLoading: chatsQuery.isLoading,

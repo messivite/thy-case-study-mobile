@@ -4,6 +4,7 @@ import {
   StyleSheet,
   Pressable,
   Image,
+  Platform,
 } from 'react-native';
 import Animated, {
   FadeIn,
@@ -290,7 +291,7 @@ const MessageBubbleInner: React.FC<Props> = ({
             </Pressable>
           )}
           {bubbleContent}
-          <UserTail color={colors.primary} />
+          {Platform.OS !== 'web' && <UserTail color={colors.primary} />}
         </View>
       ) : (
         <View style={styles.bubbleRowAi}>
@@ -339,6 +340,13 @@ const styles = StyleSheet.create({
   rowRight: {
     justifyContent: 'flex-end',
     marginHorizontal: spacing[2],
+    // Web: row flex-row olduğunda width:auto olur — justifyContent:'flex-end' çalışmaz.
+    // width:'100%' ile row tam genişliğe oturur, bubble sağa yaslanır.
+    ...(Platform.OS === 'web' && {
+      marginRight: spacing[4],
+      marginLeft: spacing[2],
+      width: '100%',
+    }),
   },
   bubbleRow: {
     flexDirection: 'row',
@@ -369,7 +377,8 @@ const styles = StyleSheet.create({
   },
   userBubble: {
     borderRadius: radius.lg,
-    borderBottomRightRadius: 0,
+    // Web'de tail yok — sağ alt köşeyi de yuvarlat
+    ...(Platform.OS !== 'web' && { borderBottomRightRadius: 0 }),
   },
   aiBubble: {
     borderWidth: 1,

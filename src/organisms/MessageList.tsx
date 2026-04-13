@@ -1,5 +1,5 @@
 import React, { useRef, useCallback, useState, useEffect, useLayoutEffect, useMemo } from 'react';
-import { View, StyleSheet, ActivityIndicator, FlatList, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
+import { View, StyleSheet, ActivityIndicator, FlatList, ScrollView, Platform, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { SharedValue } from 'react-native-reanimated';
 import * as Speech from 'expo-speech';
@@ -78,6 +78,8 @@ const MessageListInner: React.FC<Props> = ({
 }) => {
   const { colors } = useTheme();
   const listRef = useRef<FlatList<Message>>(null);
+  // Web uses a ScrollView — separate ref to avoid FlatList type conflicts
+  const webScrollRef = useRef<ScrollView>(null);
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
   // Son streaming'in gerçek mesaj ID'si — streaming bittikten sonra placeholder için tutulur
   const [lastStreamingMsgId, setLastStreamingMsgId] = useState<string | null>(null);
@@ -162,8 +164,16 @@ const MessageListInner: React.FC<Props> = ({
 
   const handleScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
     userHasScrolledRef.current = true;
-    const offsetY = e.nativeEvent.contentOffset.y;
-    const atLatest = offsetY < AT_TOP_THRESHOLD;
+    const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+    let atLatest: boolean;
+    if (Platform.OS === 'web') {
+      // Web: normal scroll — "at latest" means scrolled to the bottom
+      const distanceFromBottom = contentSize.height - layoutMeasurement.height - contentOffset.y;
+      atLatest = distanceFromBottom < AT_TOP_THRESHOLD;
+    } else {
+      // Native: inverted list — "at latest" means offsetY near 0 (top of inverted = newest)
+      atLatest = contentOffset.y < AT_TOP_THRESHOLD;
+    }
     isAtLatestRef.current = atLatest;
     if (atLatest) {
       unreadCountRef.current = 0;
@@ -177,7 +187,11 @@ const MessageListInner: React.FC<Props> = ({
   }, [hasMore, isLoadingMore, onLoadMore]);
 
   const handleScrollToLatest = useCallback(() => {
-    listRef.current?.scrollToOffset({ offset: 0, animated: true });
+    if (Platform.OS === 'web') {
+      webScrollRef.current?.scrollToEnd({ animated: true });
+    } else {
+      listRef.current?.scrollToOffset({ offset: 0, animated: true });
+    }
     unreadCountRef.current = 0;
     onScrollStateChange?.(false, 0);
   }, [onScrollStateChange]);
@@ -226,7 +240,11 @@ const MessageListInner: React.FC<Props> = ({
   const prevIsStreamingRef = useRef(isStreamingActive);
   useEffect(() => {
     if (prevIsStreamingRef.current && !isStreamingActive) {
-      listRef.current?.scrollToOffset({ offset: 0, animated: false });
+      if (Platform.OS === 'web') {
+        webScrollRef.current?.scrollToEnd({ animated: false });
+      } else {
+        listRef.current?.scrollToOffset({ offset: 0, animated: false });
+      }
       // Stop ile iptal edildiyse (ID hiç set edilmedi veya sentinel'e döndü)
       if (!streamingMessageId || streamingMessageId === 'streaming') {
         setLastStreamingMsgId(null);
@@ -398,6 +416,72 @@ const MessageListInner: React.FC<Props> = ({
     );
   }
 
+  // Web: use a regular ScrollView with oldest-first order to avoid react-native-web
+  // inverted FlatList clipping/transform issues.
+  if (Platform.OS === 'web') {
+    // displayMessages is newest-first; reverse for top-to-bottom display
+    const webMessages = [...displayMessages].reverse();
+    return (
+      <View style={styles.fill}>
+        <ScrollView
+          ref={webScrollRef}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
+          onContentSizeChange={() => {
+            // Auto-scroll to bottom when new content arrives and user hasn't scrolled up
+            if (isAtLatestRef.current) {
+              webScrollRef.current?.scrollToEnd({ animated: false });
+            }
+          }}
+        >
+          {isLoadingMore && (
+            <View style={styles.loadingMore}>
+              <ActivityIndicator size="small" color={colors.primary} />
+            </View>
+          )}
+          {webMessages.map((item) => (
+            <React.Fragment key={item.id}>
+              {renderItem({ item })}
+            </React.Fragment>
+          ))}
+          {(isTyping && !isStreamingActive) && (
+            <View style={styles.typingIndicator}>
+              <ActivityThyLoading mode="pulse" size={20} />
+              <Text variant="caption" color={colors.textSecondary}>Yanıt bekleniyor...</Text>
+            </View>
+          )}
+        </ScrollView>
+
+        {!hasContent && !showWelcome && !isSessionLoading && !isWelcomeExiting && (
+          <View style={[styles.center, styles.welcomeOverlay]} pointerEvents="none">
+            <Text variant="h4" align="center" color={colors.text}>Nasıl yardımcı olabilirim?</Text>
+            <Text variant="body" align="center" color={colors.textSecondary} style={styles.emptySubtitle}>
+              Bir şeyler sormaya başlayın
+            </Text>
+          </View>
+        )}
+
+        {welcomeOverlay && (
+          <View style={styles.welcomeOverlay}>
+            <HomeWelcomePanel
+              greetingPrefix={welcomeOverlay.greetingPrefix}
+              greetingName={welcomeOverlay.greetingName}
+              greetingReady={welcomeGreetingReady}
+              question={welcomeQuestion!}
+              quickActions={quickActions}
+              onQuickActionPress={onQuickActionPress!}
+              isExiting={isWelcomeExiting}
+              onExitComplete={handleWelcomeExitComplete}
+            />
+          </View>
+        )}
+      </View>
+    );
+  }
+
   return (
     <View style={styles.fill}>
       {/* FlatList always mounted — pre-warmed behind welcome overlay */}
@@ -483,6 +567,9 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingVertical: spacing[3],
+    // Web: content container'ın genişliği scroll alanına sabitlenmeli —
+    // yoksa maxWidth:'75%' viewport yerine içerik genişliğini baz alıp taşıyor.
+    ...(Platform.OS === 'web' && { flexGrow: 1, width: '100%' }),
   },
   loadingMore: {
     paddingVertical: spacing[4],
