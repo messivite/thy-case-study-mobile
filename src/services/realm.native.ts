@@ -10,6 +10,7 @@ const MAX_MESSAGES_PER_SESSION = 40;
 
 export class RealmSession extends Realm.Object<RealmSession> {
   _id!: string;
+  userId!: string;
   title!: string;
   provider!: string;
   model!: string;
@@ -22,6 +23,7 @@ export class RealmSession extends Realm.Object<RealmSession> {
     primaryKey: '_id',
     properties: {
       _id: 'string',
+      userId: { type: 'string', default: '' },
       title: 'string',
       provider: 'string',
       model: 'string',
@@ -35,6 +37,7 @@ export class RealmSession extends Realm.Object<RealmSession> {
 export class RealmMessage extends Realm.Object<RealmMessage> {
   _id!: string;
   sessionId!: string;
+  userId!: string;
   role!: string;
   content!: string;
   createdAt!: string;
@@ -49,6 +52,7 @@ export class RealmMessage extends Realm.Object<RealmMessage> {
     properties: {
       _id: 'string',
       sessionId: 'string',
+      userId: { type: 'string', default: '' },
       role: 'string',
       content: 'string',
       createdAt: 'string',
@@ -81,7 +85,7 @@ export const openRealm = (): Promise<Realm> => {
 
   _realmPromise = Realm.open({
     schema: [RealmSession, RealmMessage],
-    schemaVersion: 9,
+    schemaVersion: 10,
     onMigration: (_oldRealm: Realm, newRealm: Realm) => {
       // v1 → v2: lastMessagePreview alani eklendi, mevcutlara bos string ver
       const sessions = newRealm.objects('RealmSession');
@@ -94,8 +98,10 @@ export const openRealm = (): Promise<Realm> => {
       // v3 → v4: limit 20→100 oldu, eski cache'i temizle
       // v4 → v5: API artık id+createdAt dönüyor, eski composite-key kayıtları temizle
       // v5 → v6: Realm sıralama newest→oldest'ten oldest→newest'e değişti
+      // v6 → v10: userId alanı eklendi — userId bilinmeyen eski kayıtları temizle (cross-user riski)
       const messages = newRealm.objects('RealmMessage');
       newRealm.delete(messages);
+      newRealm.delete(sessions);
     },
   }).then((realm) => {
     _realm = realm;
@@ -145,10 +151,25 @@ const enqueue = (key: string, fn: () => Promise<void>): Promise<void> => {
 };
 
 // ---------------------------------------------------------------------------
+// currentUserId — session kurulunca setUserId() ile set edilir.
+// Tüm read/write işlemleri bu ID ile filtrelenir.
+// ---------------------------------------------------------------------------
+
+let _currentUserId = '';
+
+// ---------------------------------------------------------------------------
 // realmService
 // ---------------------------------------------------------------------------
 
 export const realmService = {
+  /**
+   * Oturum açıldığında çağrılmalı — tüm sonraki read/write bu userId ile çalışır.
+   * Logout'ta setUserId('') çağrılabilir ama clearAll() zaten her şeyi temizler.
+   */
+  setUserId(userId: string): void {
+    _currentUserId = userId;
+  },
+
   /**
    * Realm'i arka planda acar — app init sirasinda (splash / _layout mount)
    * cagirilmali. Boylece ilk getSessions() geldiginde instance hazir olur.
@@ -159,15 +180,17 @@ export const realmService = {
 
   /**
    * Realm'deki sessionlari ChatListItem[] olarak doner.
+   * Sadece mevcut kullanıcıya ait kayıtlar döner.
    * Instance hazir degilse bos doner (React Query staleTime ile tekrar dener).
    */
   getSessions(): { items: ChatListItem[]; syncedAt: number } {
     try {
       const realm = getRealmSync();
-      if (!realm) return { items: [], syncedAt: 0 };
+      if (!realm || !_currentUserId) return { items: [], syncedAt: 0 };
 
       const sessions = realm
         .objects<RealmSession>('RealmSession')
+        .filtered('userId == $0', _currentUserId)
         .sorted('lastMessageAt', true);
 
       if (sessions.length === 0) return { items: [], syncedAt: 0 };
@@ -195,6 +218,8 @@ export const realmService = {
    * Async — JS thread'ini bloklamaz.
    */
   saveSessions(items: ChatListItem[]): Promise<void> {
+    const userId = _currentUserId;
+    if (!userId) return Promise.resolve();
     return enqueue('__sessions__', async () => {
       const realm = await openRealm();
       const now = Date.now();
@@ -204,6 +229,7 @@ export const realmService = {
             'RealmSession',
             {
               _id: item.id,
+              userId,
               title: item.title,
               provider: item.provider,
               model: item.model,
@@ -216,6 +242,7 @@ export const realmService = {
         }
         const all = realm
           .objects<RealmSession>('RealmSession')
+          .filtered('userId == $0', userId)
           .sorted('lastMessageAt', true);
         if (all.length > MAX_SESSIONS) {
           const toDelete = Array.from(all).slice(MAX_SESSIONS);
@@ -231,12 +258,12 @@ export const realmService = {
   getMessages(sessionId: string): { messages: ChatMessage[]; syncedAt: number } {
     try {
       const realm = getRealmSync();
-      if (!realm) return { messages: [], syncedAt: 0 };
+      if (!realm || !_currentUserId) return { messages: [], syncedAt: 0 };
 
       // oldest→newest (ascending createdAt) — API ile aynı sıra
       const msgs = realm
         .objects<RealmMessage>('RealmMessage')
-        .filtered('sessionId == $0', sessionId)
+        .filtered('sessionId == $0 AND userId == $1', sessionId, _currentUserId)
         .sorted('createdAt', false);
 
       if (msgs.length === 0) return { messages: [], syncedAt: 0 };
@@ -260,10 +287,12 @@ export const realmService = {
   },
 
   /**
-   * Mesajlari Realm'e kaydeder (upsert + max 20 kurali).
+   * Mesajlari Realm'e kaydeder (upsert + max 40 kurali).
    * Async — JS thread'ini bloklamaz.
    */
   saveMessages(sessionId: string, messages: ChatMessage[]): Promise<void> {
+    const userId = _currentUserId;
+    if (!userId) return Promise.resolve();
     return enqueue(sessionId, async () => {
       const realm = await openRealm();
       const now = Date.now();
@@ -284,6 +313,7 @@ export const realmService = {
             {
               _id: msgId,
               sessionId,
+              userId,
               role: msg.role,
               content: msg.content,
               createdAt: msgCreatedAt,
@@ -297,7 +327,7 @@ export const realmService = {
         }
         const all = realm
           .objects<RealmMessage>('RealmMessage')
-          .filtered('sessionId == $0', sessionId)
+          .filtered('sessionId == $0 AND userId == $1', sessionId, userId)
           .sorted('createdAt', true);
         if (all.length > MAX_MESSAGES_PER_SESSION) {
           const toDelete = Array.from(all).slice(MAX_MESSAGES_PER_SESSION);
@@ -309,12 +339,8 @@ export const realmService = {
 
   /**
    * Session'i ve tum mesajlarini Realm'den siler. Async.
-   * Önce sessionId queue'sunu bekler (devam eden saveMessages tamamlansın),
-   * sonra __sessions__ queue'suna girer — çakışma olmaz.
    */
   deleteSession(sessionId: string): Promise<void> {
-    // sessionId queue'suna boş bir operasyon ekleyerek devam eden mesaj write'larının
-    // bitmesini bekle, ardından gerçek silmeyi __sessions__ queue'sunda çalıştır.
     return enqueue(sessionId, () =>
       enqueue('__sessions__', async () => {
         const realm = await openRealm();
@@ -332,11 +358,8 @@ export const realmService = {
 
   /**
    * Tek bir mesajın liked alanını günceller. Async.
-   * saveMessages() ile aynı sessionId queue'suna alınır — race condition olmaz.
    */
   updateMessageLiked(messageId: string, liked: boolean | null): Promise<void> {
-    // messageId'yi key olarak kullan — farklı mesajlar paralel güncellenebilir,
-    // aynı mesaj için ardışık tıklamalar serialize edilir.
     return enqueue(`liked:${messageId}`, async () => {
       const realm = await openRealm();
       realm.write(() => {
@@ -348,7 +371,6 @@ export const realmService = {
 
   /**
    * Session mesajlarini siler. Async.
-   * sessionId queue'suna girer — eş zamanlı saveMessages ile çakışmaz.
    */
   clearSessionMessages(sessionId: string): Promise<void> {
     return enqueue(sessionId, async () => {
@@ -358,6 +380,18 @@ export const realmService = {
           .objects<RealmMessage>('RealmMessage')
           .filtered('sessionId == $0', sessionId);
         realm.delete(msgs);
+      });
+    });
+  },
+
+  /**
+   * Tüm Realm verisini temizler — logout sırasında çağrılmalı.
+   */
+  clearAll(): Promise<void> {
+    return enqueue('__sessions__', async () => {
+      const realm = await openRealm();
+      realm.write(() => {
+        realm.deleteAll();
       });
     });
   },

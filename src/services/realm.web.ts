@@ -29,55 +29,78 @@ function writeJSON(key: string, value: unknown): void {
   }
 }
 
-type StoredSession = ChatListItem & { syncedAt: number };
-type StoredMessage = ChatMessage & { syncedAt: number };
+type StoredSession = ChatListItem & { userId: string; syncedAt: number };
+type StoredMessage = ChatMessage & { userId: string; syncedAt: number };
+
+let _currentUserId = '';
 
 export const realmService = {
+  setUserId(userId: string): void {
+    _currentUserId = userId;
+  },
+
   prefetch(): void {
     // Web'de async open gerekmez
   },
 
   getSessions(): { items: ChatListItem[]; syncedAt: number } {
+    if (!_currentUserId) return { items: [], syncedAt: 0 };
     const stored = readJSON<StoredSession[]>(SESSIONS_KEY);
     if (!stored || stored.length === 0) return { items: [], syncedAt: 0 };
 
-    const sorted = [...stored].sort(
+    const owned = stored.filter((s) => s.userId === _currentUserId);
+    if (owned.length === 0) return { items: [], syncedAt: 0 };
+
+    const sorted = [...owned].sort(
       (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
     );
 
-    const items: ChatListItem[] = sorted.map(({ syncedAt: _s, ...item }) => item);
-    const syncedAt = Math.max(...stored.map((s) => s.syncedAt));
+    const items: ChatListItem[] = sorted.map(({ syncedAt: _s, userId: _u, ...item }) => item);
+    const syncedAt = Math.max(...owned.map((s) => s.syncedAt));
     return { items, syncedAt };
   },
 
   saveSessions(items: ChatListItem[]): Promise<void> {
+    if (!_currentUserId) return Promise.resolve();
+    const userId = _currentUserId;
     const now = Date.now();
     const existing = readJSON<StoredSession[]>(SESSIONS_KEY) ?? [];
 
     const map = new Map<string, StoredSession>();
     for (const s of existing) map.set(s.id, s);
     for (const item of items) {
-      map.set(item.id, { ...item, syncedAt: now });
+      map.set(item.id, { ...item, userId, syncedAt: now });
     }
 
-    const sorted = Array.from(map.values())
+    // Mevcut kullanıcıya ait olanlar için max SESSION sınırı uygula
+    const allOwned = Array.from(map.values())
+      .filter((s) => s.userId === userId)
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
       .slice(0, MAX_SESSIONS);
 
-    writeJSON(SESSIONS_KEY, sorted);
+    // Diğer kullanıcılara ait kayıtları koru
+    const others = Array.from(map.values()).filter((s) => s.userId !== userId);
+
+    writeJSON(SESSIONS_KEY, [...others, ...allOwned]);
     return Promise.resolve();
   },
 
   getMessages(sessionId: string): { messages: ChatMessage[]; syncedAt: number } {
+    if (!_currentUserId) return { messages: [], syncedAt: 0 };
     const stored = readJSON<StoredMessage[]>(MESSAGES_PREFIX + sessionId);
     if (!stored || stored.length === 0) return { messages: [], syncedAt: 0 };
 
-    const messages: ChatMessage[] = stored.map(({ syncedAt: _s, ...msg }) => msg);
-    const syncedAt = Math.max(...stored.map((m) => m.syncedAt));
+    const owned = stored.filter((m) => m.userId === _currentUserId);
+    if (owned.length === 0) return { messages: [], syncedAt: 0 };
+
+    const messages: ChatMessage[] = owned.map(({ syncedAt: _s, userId: _u, ...msg }) => msg);
+    const syncedAt = Math.max(...owned.map((m) => m.syncedAt));
     return { messages, syncedAt };
   },
 
   saveMessages(sessionId: string, messages: ChatMessage[]): Promise<void> {
+    if (!_currentUserId) return Promise.resolve();
+    const userId = _currentUserId;
     const now = Date.now();
     const existing = readJSON<StoredMessage[]>(MESSAGES_PREFIX + sessionId) ?? [];
 
@@ -85,12 +108,11 @@ export const realmService = {
     for (const m of existing) if (m.id) map.set(m.id, m);
     for (const msg of messages) {
       const key = msg.id ?? `${sessionId}__${msg.createdAt ?? now}__${msg.role}`;
-      // Mevcut liked değerini koru — API'den null/undefined gelince üzerine yazma
       const existingLiked = map.get(key)?.liked;
       const likedValue = msg.liked !== undefined && msg.liked !== null
         ? msg.liked
         : (existingLiked ?? null);
-      map.set(key, { ...msg, id: key, syncedAt: now, liked: likedValue });
+      map.set(key, { ...msg, id: key, userId, syncedAt: now, liked: likedValue });
     }
 
     const sorted = Array.from(map.values())
@@ -111,10 +133,16 @@ export const realmService = {
     localStorage.removeItem(MESSAGES_PREFIX + sessionId);
   },
 
+  async clearAll(): Promise<void> {
+    const keys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && (k === SESSIONS_KEY || k.startsWith(MESSAGES_PREFIX))) keys.push(k);
+    }
+    for (const k of keys) localStorage.removeItem(k);
+  },
+
   async updateMessageLiked(messageId: string, liked: boolean | null): Promise<void> {
-    // Web'de hangi session'a ait olduğunu bilmiyoruz — localStorage.key() ile tara.
-    // Object.keys(localStorage) bazı mock ortamlarda storage key'lerini değil obje
-    // property'lerini döndürebilir; localStorage.length + .key(i) standart Web Storage API'si.
     try {
       const len = localStorage.length;
       for (let i = 0; i < len; i++) {
