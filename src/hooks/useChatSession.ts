@@ -266,31 +266,51 @@ export const useChatSession = () => {
                   resolve();
                 },
                 onError: (err) => {
+                  // onStop() tarafından abort edildiyse — tüm cleanup zaten yapıldı,
+                  // burada sadece promise'i resolve et, UI'ya dokunma.
+                  if (err === 'aborted' && streamCancelledRef.current) {
+                    resolve();
+                    return;
+                  }
+
+                  // Gerçek hata (ağ, timeout, 4xx vb.) — temizlik yap
                   streamCancelledRef.current = true;
                   streamDoneRef.current = false;
-                  if (typewriterIntervalRef.current) { cancelAnimationFrame(typewriterIntervalRef.current as unknown as number); typewriterIntervalRef.current = null; }
+                  if (typewriterIntervalRef.current) {
+                    cancelAnimationFrame(typewriterIntervalRef.current as unknown as number);
+                    typewriterIntervalRef.current = null;
+                  }
                   isStreamingDoneSV.value = false;
                   pendingBufferRef.current = '';
                   writtenLenRef.current = 0;
                   pendingStreamSV.value = '';
-                  setIsStreamingActive(false);
                   abortCtrlRef.current = null;
-                  setOptimisticUserMsg(null);
-                  // 403: bu chat artık bu kullanıcıya ait değil (stale chatId) — sıfırla
+                  // 403: stale chatId — sıfırla
                   if (String(err).includes('403')) {
                     activeChatIdRef.current = null;
                     dispatch(setSessionId(null));
                     toast.error('Bu sohbet artık erişilemez, yeni sohbet başlatılıyor.');
+                    unstable_batchedUpdates(() => {
+                      setIsStreamingActive(false);
+                      setOptimisticUserMsg(null);
+                    });
                     resolve();
                     return;
                   }
                   if (!isOnlineRef.current) {
                     const queuedMsg = { ...payload.optimisticMsg, queued: true };
                     optimisticUserMsgRef.current = queuedMsg;
-                    setOptimisticUserMsg(queuedMsg);
+                    unstable_batchedUpdates(() => {
+                      setIsStreamingActive(false);
+                      setOptimisticUserMsg(queuedMsg);
+                    });
+                  } else {
+                    unstable_batchedUpdates(() => {
+                      setIsStreamingActive(false);
+                      setOptimisticUserMsg(null);
+                    });
                   }
-                  if (err !== 'aborted') reject(new Error(String(err)));
-                  else resolve();
+                  reject(new Error(String(err)));
                 },
               },
               ctrl.signal,
@@ -378,6 +398,8 @@ export const useChatSession = () => {
         // Non-stream: cache handler'da zaten güncellendi, sadece state temizle
         // Stream: handleStreamingComplete cache'e yazdı + bubble'ı temizledi
         //         ama chatsList sync için invalidate gerekli
+        // Stop edilmişse — partial data yok, invalidate gereksiz network isteği olur
+        if (streamCancelledRef.current) return;
         const cid = payload.chatId;
         if (streamingEnabledRef.current) {
           queryClient.invalidateQueries({ queryKey: CHAT_QUERY_KEYS.messages(cid) });
@@ -484,6 +506,11 @@ export const useChatSession = () => {
                 resolve();
               },
               onError: (err) => {
+                // onStop()'tan abort — cleanup zaten yapıldı
+                if (err === 'aborted' && streamCancelledRef.current) {
+                  resolve();
+                  return;
+                }
                 streamCancelledRef.current = true;
                 streamDoneRef.current = false;
                 if (typewriterIntervalRef.current) { cancelAnimationFrame(typewriterIntervalRef.current as unknown as number); typewriterIntervalRef.current = null; }
@@ -491,18 +518,17 @@ export const useChatSession = () => {
                 pendingBufferRef.current = '';
                 writtenLenRef.current = 0;
                 pendingStreamSV.value = '';
-                setIsStreamingActive(false);
-                setOptimisticUserMsg(null);
                 abortCtrlRef.current = null;
                 if (String(err).includes('403')) {
                   activeChatIdRef.current = null;
                   dispatch(setSessionId(null));
                   toast.error('Bu sohbet artık erişilemez, yeni sohbet başlatılıyor.');
+                  unstable_batchedUpdates(() => { setIsStreamingActive(false); setOptimisticUserMsg(null); });
                   resolve();
                   return;
                 }
-                if (err !== 'aborted') reject(new Error(String(err)));
-                else resolve();
+                unstable_batchedUpdates(() => { setIsStreamingActive(false); setOptimisticUserMsg(null); });
+                reject(new Error(String(err)));
               },
             },
             ctrl.signal,
@@ -819,36 +845,45 @@ if (!chatId) return;
   // ---------------------------------------------------------------------------
 
   const onStop = useCallback(() => {
+    // Aktif stream yoksa no-op — double-tap koruması
     if (!abortCtrlRef.current) return;
 
-    // 1. HTTP isteğini iptal et
-    abortCtrlRef.current.abort();
-    abortCtrlRef.current = null;
+    // 1. Flag'leri ÖNCE set et — onDelta/onDone callback'leri bir sonraki tick'te
+    //    çalışabilir, bu flag'ler onları bloke eder (race condition koruması)
+    streamCancelledRef.current = true;
+    streamDoneRef.current = false;
 
-    // 2. Typewriter interval'i durdur — buffer'daki yarım içerik SV'ye yazılmasın
+    // 2. Typewriter RAF loop'u durdur — buffer → SV yazımı kesilsin
     if (typewriterIntervalRef.current) {
       cancelAnimationFrame(typewriterIntervalRef.current as unknown as number);
       typewriterIntervalRef.current = null;
     }
 
-    // 3. Stream state'lerini sıfırla
-    streamCancelledRef.current = true;
-    streamDoneRef.current = false;
-    pendingBufferRef.current = '';
-    writtenLenRef.current = 0;
-    lastStreamTextRef.current = '';
-    // SV sıfırlamadan önce reset counter'ı artır — StreamingBubble frame callback'i
-    // completedSV'yi false'a çeker, onComplete'in sızmasını engeller
+    // 3. SV'leri sıfırla: önce resetCount artır → StreamingBubble bir sonraki
+    //    frame'de completedSV=false yapar, SONRA metin temizlenir.
+    //    Sıra önemli: counter önce → text sonra → done en son
     streamResetCountSV.value = streamResetCountSV.value + 1;
     pendingStreamSV.value = '';
     isStreamingDoneSV.value = false;
 
-    // 4. UI'ı temizle
+    // 4. JS refs temizle
+    pendingBufferRef.current = '';
+    writtenLenRef.current = 0;
+    lastStreamTextRef.current = '';
     streamingMsgIdRef.current = 'streaming';
+
+    // 5. HTTP isteğini iptal et — abort sonrası onError('aborted') gelir.
+    //    onError handler'ı streamCancelledRef=true görünce UI'ya dokunmaz (aşağıda guard var).
+    const ctrl = abortCtrlRef.current;
+    abortCtrlRef.current = null; // önce null yap — onError'da abort guard çalışsın
+    ctrl.abort();
+
+    // 6. React state: tek batch, tek render
     unstable_batchedUpdates(() => {
-      setStreamingMsgIdState('streaming');
       setIsStreamingActive(false);
       setOptimisticUserMsg(null);
+      // setStreamingMsgIdState('streaming') — gereksiz, ref zaten set edildi.
+      // Bu state sadece FlatList key için kullanılıyor, stop'ta render tetiklemeye gerek yok.
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
