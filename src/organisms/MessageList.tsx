@@ -233,6 +233,7 @@ const MessageListInner: React.FC<Props> = ({
   const speakGenerationRef = useRef(0);
 
   const stopSpeech = useCallback(() => {
+    speakGenerationRef.current++; // eski callback'lerin onError toast atmasını önle
     speakingMessageIdStateRef.current = null;
     setSpeakingMessageId(null);
     void Speech.stop();
@@ -276,13 +277,13 @@ const MessageListInner: React.FC<Props> = ({
             setSpeakingMessageId(null);
           }
         },
-        onError: () => {
-          // Programatik stop (chat değişimi, background) — generation değişmişse sessizce geç
-          if (speakGenerationRef.current === generation) {
-            speakingMessageIdStateRef.current = null;
-            setSpeakingMessageId(null);
-            toast.error('Ses çalınamadı');
-          }
+        onError: (err) => {
+          // generation değişmişse programatik stop (kullanıcı durdurdu, chat değişti) — sessizce geç
+          if (speakGenerationRef.current !== generation) return;
+          speakingMessageIdStateRef.current = null;
+          setSpeakingMessageId(null);
+          const msg = err instanceof Error ? err.message : String(err);
+          toast.error(msg ? `Ses çalınamadı: ${msg}` : 'Ses çalınamadı');
         },
       });
     }, 50);
@@ -318,7 +319,9 @@ const MessageListInner: React.FC<Props> = ({
   }, [isStreamingActive, streamingMessageId]);
 
   // speakingMessageId'yi ref'te tut — renderItem dep array'inden çıkar
+  // Render sırasında da güncelle — useEffect bir render geç kalır, icon state karışır
   const speakingMessageIdRef = useRef(speakingMessageId);
+  speakingMessageIdRef.current = speakingMessageId;
   useEffect(() => { speakingMessageIdRef.current = speakingMessageId; }, [speakingMessageId]);
   const handleSpeakToggleRef = useRef(handleSpeakToggle);
   useEffect(() => { handleSpeakToggleRef.current = handleSpeakToggle; }, [handleSpeakToggle]);
