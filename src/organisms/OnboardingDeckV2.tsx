@@ -206,37 +206,32 @@ const BgCircles = memo<{ deckScale: (n: number) => number }>(({ deckScale }) => 
   const p3 = useSharedValue(1);
 
   useEffect(() => {
-    const t1 = setTimeout(() => {
-      p1.value = withRepeat(
-        withSequence(
-          withTiming(1.28, { duration: 3600, easing: Easing.inOut(Easing.sin) }),
-          withTiming(1.0, { duration: 3600, easing: Easing.inOut(Easing.sin) }),
-        ),
-        -1, false,
-      );
-    }, 50);
-    const t2 = setTimeout(() => {
-      p2.value = withRepeat(
-        withSequence(
-          withTiming(1.28, { duration: 5000, easing: Easing.inOut(Easing.sin) }),
-          withTiming(1.0, { duration: 5000, easing: Easing.inOut(Easing.sin) }),
-        ),
-        -1, false,
-      );
-    }, 950);
-    const t3 = setTimeout(() => {
-      p3.value = withRepeat(
-        withSequence(
-          withTiming(1.28, { duration: 4200, easing: Easing.inOut(Easing.sin) }),
-          withTiming(1.0, { duration: 4200, easing: Easing.inOut(Easing.sin) }),
-        ),
-        -1, false,
-      );
-    }, 450);
+    // Faz farkı: ilk segment uzunlukları farklı → daireler hiç senkronize dönmez,
+    // setTimeout gecikmeleri olmadan da organik görünür.
+    p1.value = withRepeat(
+      withSequence(
+        withTiming(1.28, { duration: 3600, easing: Easing.inOut(Easing.sin) }),
+        withTiming(1.0, { duration: 3600, easing: Easing.inOut(Easing.sin) }),
+      ),
+      -1, false,
+    );
+    p2.value = withRepeat(
+      withSequence(
+        withTiming(1.0, { duration: 1800, easing: Easing.inOut(Easing.sin) }),
+        withTiming(1.28, { duration: 5000, easing: Easing.inOut(Easing.sin) }),
+        withTiming(1.0, { duration: 5000, easing: Easing.inOut(Easing.sin) }),
+      ),
+      -1, false,
+    );
+    p3.value = withRepeat(
+      withSequence(
+        withTiming(1.0, { duration: 2800, easing: Easing.inOut(Easing.sin) }),
+        withTiming(1.28, { duration: 4200, easing: Easing.inOut(Easing.sin) }),
+        withTiming(1.0, { duration: 4200, easing: Easing.inOut(Easing.sin) }),
+      ),
+      -1, false,
+    );
     return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      clearTimeout(t3);
       cancelAnimation(p1);
       cancelAnimation(p2);
       cancelAnimation(p3);
