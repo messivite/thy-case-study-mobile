@@ -1,5 +1,6 @@
 import React, { useRef, useCallback, useState, useEffect, useLayoutEffect, useMemo } from 'react';
 import { View, StyleSheet, ActivityIndicator, FlatList, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { SharedValue } from 'react-native-reanimated';
 import * as Speech from 'expo-speech';
 import { Message } from '@/types/chat.types';
@@ -241,7 +242,11 @@ const MessageListInner: React.FC<Props> = ({
   const handleSpeakToggleRef = useRef(handleSpeakToggle);
   useEffect(() => { handleSpeakToggleRef.current = handleSpeakToggle; }, [handleSpeakToggle]);
 
-  const renderItem = useCallback(({ item, index }: { item: Message; index: number }) => {
+  // displayMessages'ın en üstündeki (index 0) assistant mesajının ID'si —
+  // model label sadece bu mesajda gizlenir. Ref üzerinden geçilir, renderItem dep'e girmez.
+  const lastAssistantIdRef = useRef<string | null>(null);
+
+  const renderItem = useCallback(({ item }: { item: Message }) => {
     const isStreamingItem = item.id === STREAMING_KEY;
 
     if (isStreamingItem && isStreamingActive && pendingStreamSV && isStreamingDoneSV && streamResetCountSV && onStreamingComplete) {
@@ -255,9 +260,10 @@ const MessageListInner: React.FC<Props> = ({
       );
     }
 
-    const isLastMessage = index === 0;
+    // En üstteki assistant mesajında model label gizlenir (streaming bubble aktifse o zaten STREAMING_KEY)
+    const hideModelLabel = item.id === lastAssistantIdRef.current;
 
-    return (
+    const bubble = (
       <MessageBubble
         message={item}
         colors={colors}
@@ -265,7 +271,7 @@ const MessageListInner: React.FC<Props> = ({
         onRegenerate={onRegenerate}
         isSpeaking={speakingMessageIdRef.current === item.id}
         hideFooter={isStreamingItem}
-        hideModelLabel={isLastMessage}
+        hideModelLabel={hideModelLabel}
         onQueuedPress={item.queued ? onQueuedPress : undefined}
         onSpeakToggle={
           item.role === 'assistant' && item.content.trim().length > 0
@@ -274,6 +280,12 @@ const MessageListInner: React.FC<Props> = ({
         }
       />
     );
+
+    // Streaming placeholder'dan gerçek mesaja geçişte FadeIn — keskin atlama yerine yumuşak
+    if (item.role === 'assistant' && !isStreamingItem) {
+      return <Animated.View entering={FadeIn.duration(180)}>{bubble}</Animated.View>;
+    }
+    return bubble;
   }, [
     isStreamingActive,
     pendingStreamSV,
@@ -349,12 +361,18 @@ const MessageListInner: React.FC<Props> = ({
       ? messages.filter((m) => m.id !== activeOrLastId)
       : messages;
 
-    return [
+    const list = [
       ...(streamingItem ? [streamingItem] : []),
       ...(streamingPlaceholder ? [streamingPlaceholder] : []),
       ...(optimisticUserMsg ? [optimisticUserMsg] : []),
       ...cachedMessages.slice().reverse(),
     ];
+
+    // En üstteki (index 0) gerçek assistant mesajının ID'sini hesapla — model label için
+    const topAssistant = list.find((m) => m.id !== STREAMING_KEY && m.role === 'assistant');
+    lastAssistantIdRef.current = topAssistant?.id ?? null;
+
+    return list;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages, optimisticUserMsg, isStreamingActive, shouldShowPlaceholder, activeOrLastId]);
 

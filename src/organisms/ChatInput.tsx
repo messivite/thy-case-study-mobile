@@ -31,7 +31,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
-import { useI18n } from '@/hooks/useI18n';
 import { useHaptics } from '@/hooks/useHaptics';
 import { BlurView } from 'expo-blur';
 import { THYIcon } from '@/atoms/thy-icon';
@@ -41,7 +40,6 @@ import { radius, spacing } from '@/constants/spacing';
 import { fontFamily, fontSize } from '@/constants/typography';
 import { palette } from '@/constants/colors';
 import { scale as scaleSize } from '@/lib/responsive';
-import { Text } from '@/atoms/Text';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -166,7 +164,7 @@ const SendButton = memo<SendButtonProps>(({ canSend, isStreaming, onSend, onStop
 const centerStyle = { alignItems: 'center' as const, justifyContent: 'center' as const };
 
 // ---------------------------------------------------------------------------
-// ModelChip — liquid glass chip, model adını gösterir
+// ModelChip — tıklanabilir model seçici chip
 // ---------------------------------------------------------------------------
 
 interface ModelChipProps {
@@ -176,36 +174,72 @@ interface ModelChipProps {
   isDark: boolean;
 }
 
-const ModelChip = memo<ModelChipProps>(({ modelName, modelColor, onPress, isDark }) => (
-  <TouchableOpacity
-    onPress={onPress}
-    activeOpacity={0.7}
-    hitSlop={{ top: 10, bottom: 10, left: 4, right: 10 }}
-    style={chipStyles.wrap}
-  >
-    {Platform.OS === 'ios' ? (
-      <BlurView
-        intensity={isDark ? 28 : 18}
-        tint={isDark ? 'dark' : 'light'}
-        style={chipStyles.chip}
+const ModelChip = memo<ModelChipProps>(({ modelName, modelColor, onPress, isDark }) => {
+  const haptics = useHaptics();
+  const scale = useSharedValue(1);
+
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  const handlePressIn = useCallback(() => {
+    scale.value = withSpring(0.94, { damping: 20, stiffness: 400, mass: 0.4 });
+  }, [scale]);
+
+  const handlePressOut = useCallback(() => {
+    scale.value = withSpring(1, { damping: 20, stiffness: 400, mass: 0.4 });
+  }, [scale]);
+
+  const handlePress = useCallback(() => {
+    haptics.light();
+    onPress();
+  }, [haptics, onPress]);
+
+  // Model renginden hafif tinted arka plan
+  const chipBg = isDark
+    ? modelColor + '28'   // ~16% opacity dark'ta
+    : modelColor + '18';  // ~10% opacity light'ta
+  const borderColor = modelColor + '55'; // ~33% opacity border
+  const textColor = isDark ? '#fff' : '#111';
+  const chevronColor = isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.4)';
+
+  const innerContent = (
+    <>
+      {/* Model rengi göstergesi — dolu daire */}
+      <View style={[chipStyles.colorDot, { backgroundColor: modelColor }]} />
+      <Animated.Text numberOfLines={1} style={[chipStyles.label, { color: textColor }]}>
+        {modelName}
+      </Animated.Text>
+      <Ionicons name="chevron-up-circle-outline" size={cs(14)} color={chevronColor} />
+    </>
+  );
+
+  return (
+    <Animated.View style={[chipStyles.wrap, animStyle, { borderColor }]}>
+      <TouchableOpacity
+        onPress={handlePress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        activeOpacity={1}
+        hitSlop={{ top: 10, bottom: 10, left: 6, right: 10 }}
       >
-        <View style={[chipStyles.colorDot, { backgroundColor: modelColor }]} />
-        <Animated.Text numberOfLines={1} style={[chipStyles.label, { color: isDark ? '#fff' : '#111' }]}>
-          {modelName}
-        </Animated.Text>
-        <Ionicons name="chevron-down" size={cs(11)} color={isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.3)'} />
-      </BlurView>
-    ) : (
-      <View style={[chipStyles.chip, { backgroundColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.06)' }]}>
-        <View style={[chipStyles.colorDot, { backgroundColor: modelColor }]} />
-        <Animated.Text numberOfLines={1} style={[chipStyles.label, { color: isDark ? '#fff' : '#111' }]}>
-          {modelName}
-        </Animated.Text>
-        <Ionicons name="chevron-down" size={cs(11)} color={isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.3)'} />
-      </View>
-    )}
-  </TouchableOpacity>
-));
+        {Platform.OS === 'ios' ? (
+          <BlurView
+            intensity={isDark ? 32 : 22}
+            tint={isDark ? 'dark' : 'light'}
+            style={[chipStyles.chip, { backgroundColor: chipBg }]}
+          >
+            {innerContent}
+          </BlurView>
+        ) : (
+          <View style={[chipStyles.chip, { backgroundColor: chipBg }]}>
+            {innerContent}
+          </View>
+        )}
+      </TouchableOpacity>
+    </Animated.View>
+  );
+});
 
 const cs = scaleSize;
 
@@ -213,26 +247,25 @@ const chipStyles = StyleSheet.create({
   wrap: {
     borderRadius: cs(20),
     overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(128,128,128,0.25)',
+    borderWidth: 1,
   },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: cs(5),
-    paddingHorizontal: cs(10),
-    paddingVertical: cs(5),
-    maxWidth: cs(130),
+    paddingHorizontal: cs(11),
+    paddingVertical: cs(6),
+    maxWidth: cs(150),
   },
   colorDot: {
-    width: cs(7),
-    height: cs(7),
+    width: cs(8),
+    height: cs(8),
     borderRadius: cs(4),
     flexShrink: 0,
   },
   label: {
-    fontFamily: fontFamily.medium,
-    fontSize: cs(11),
+    fontFamily: fontFamily.semiBold,
+    fontSize: cs(12),
     letterSpacing: 0.1,
     flexShrink: 1,
   },
@@ -511,7 +544,6 @@ const ChatInputInner: React.FC<Props> = ({
   placeholder = 'Mesajınızı yazın...',
 }) => {
   const { colors, isDark } = useTheme();
-  const { t } = useI18n();
   const haptics = useHaptics();
   const insets = useSafeAreaInsets();
   // insets.bottom keyboard açılınca değişmez — bir kez ref'e al, style recompute tetiklemesin
@@ -622,9 +654,6 @@ const ChatInputInner: React.FC<Props> = ({
         {/* Bottom toolbar */}
         <View style={styles.toolbar}>
           <View style={styles.toolbarLeft}>
-            <Text variant="caption" color={colors.textSecondary} style={styles.modelLabel}>
-              {t('assistant.modelPreference')}:
-            </Text>
             <ModelChip
               modelName={selectedAIModelName ?? model?.description ?? 'Model'}
               modelColor={model?.color ?? colors.primary}
@@ -703,9 +732,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[2],
-  },
-  modelLabel: {
-    fontFamily: fontFamily.medium,
   },
   toolbarRight: {
     flexDirection: 'row',
