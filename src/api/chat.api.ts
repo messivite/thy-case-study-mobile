@@ -84,7 +84,8 @@ export const streamChat = async (
         resolve();
         return;
       }
-      signal.addEventListener('abort', () => controller.abort());
+      const onAbort = () => controller.abort();
+      signal.addEventListener('abort', onAbort, { once: true });
     }
 
     privateApi.post(
